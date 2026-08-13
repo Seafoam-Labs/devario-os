@@ -1,0 +1,37 @@
+pkgname=ckbcomp
+pkgver=1.248
+pkgrel=1
+pkgdesc='Compile an XKB keyboard description into a console keymap'
+arch=('any')
+url='https://salsa.debian.org/installer-team/console-setup'
+license=('GPL-2.0-or-later')
+depends=(
+  'perl'
+  'xkeyboard-config'
+)
+source=("console-setup_${pkgver}.tar.xz::https://deb.debian.org/debian/pool/main/c/console-setup/console-setup_${pkgver}.tar.xz")
+sha256sums=('933b7ffd86676a76ca934fe217739ef0dbf9f785d7b87b38f1f32752efb238ae')
+
+check() {
+  local source_root="$srcdir/console-setup-${pkgver}"
+  local compiled_map="$srcdir/ckbcomp-us.map"
+
+  perl -c "$source_root/Keyboard/ckbcomp"
+  perl "$source_root/Keyboard/ckbcomp" \
+    -model pc105 \
+    -layout us \
+    > "$compiled_map"
+  grep -Fqx 'keymaps 0-127' "$compiled_map"
+  grep -Eq '^keycode 30 = ' "$compiled_map"
+}
+
+package() {
+  local source_root="$srcdir/console-setup-${pkgver}"
+
+  install -Dm755 \
+    "$source_root/Keyboard/ckbcomp" \
+    "$pkgdir/usr/bin/ckbcomp"
+  install -Dm644 \
+    "$source_root/debian/copyright" \
+    "$pkgdir/usr/share/licenses/$pkgname/copyright"
+}

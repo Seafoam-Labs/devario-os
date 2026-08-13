@@ -1,0 +1,351 @@
+From: Devario maintainers
+Subject: [PATCH] use native key and database helpers at runtime
+
+Devario intentionally does not install the pacman or pacman-key executables.
+Use Shelly's own key helper for supported keyring operations, invoke GnuPG
+directly for network key operations, and resolve pacfile ownership from the
+local ALPM database instead of spawning pacman -Qoq.
+
+--- a/Shelly.Cli.Zig/src/cli/catalog.zig
++++ b/Shelly.Cli.Zig/src/cli/catalog.zig
+@@ -574,7 +574,7 @@
+         .type_code = 'i',
+         .help = .{
+             .description = "Initialize the pacman keyring.",
+-            .implementation = "pacman-key --init",
++            .implementation = "/usr/bin/shelly-key --init",
+         },
+     },
+     .{
+@@ -584,7 +584,7 @@
+         .type_code = 'l',
+         .help = .{
+             .description = "List keys in the pacman keyring.",
+-            .implementation = "pacman-key --list-keys",
++            .implementation = "/usr/bin/shelly-key --list-keys",
+         },
+     },
+     .{
+@@ -594,7 +594,7 @@
+         .type_code = 'r',
+         .help = .{
+             .description = "Refresh pacman keyring keys from the configured keyserver.",
+-            .implementation = "pacman-key --refresh-keys",
++            .implementation = "/usr/bin/gpg --homedir /etc/pacman.d/gnupg --refresh-keys",
+         },
+     },
+     .{
+@@ -604,7 +604,7 @@
+         .type_code = 's',
+         .help = .{
+             .description = "Locally sign one or more keys in the pacman keyring.",
+-            .implementation = "pacman-key --lsign-key for each requested key",
++            .implementation = "/usr/bin/shelly-key --lsign-key for each requested key",
+         },
+     },
+     .{
+@@ -614,7 +614,7 @@
+         .type_code = 'p',
+         .help = .{
+             .description = "Populate the pacman keyring with default or named distribution keys.",
+-            .implementation = "pacman-key --populate",
++            .implementation = "/usr/bin/shelly-key --populate",
+         },
+     },
+     .{
+@@ -624,7 +624,7 @@
+         .type_code = 'v',
+         .help = .{
+             .description = "Receive one or more keys from the configured or requested keyserver.",
+-            .implementation = "pacman-key --recv-keys [keys...] [--keyserver server]",
++            .implementation = "/usr/bin/gpg --homedir /etc/pacman.d/gnupg [--keyserver server] --recv-keys [keys...]",
+         },
+     },
+     .{
+--- a/Shelly.Cli.Zig/src/commands/keyring.zig
++++ b/Shelly.Cli.Zig/src/commands/keyring.zig
+@@ -7,6 +7,7 @@
+ const spec = @import("../cli/spec.zig");
+ 
+ const command_prefix = "shelly keyring ";
++const keyring_directory = "/etc/pacman.d/gnupg";
+ 
+ const Action = enum {
+     init,
+@@ -31,7 +32,7 @@
+     ) anyerror!u8,
+ };
+ 
+-const real_runner: Runner = .{ .call = runPacmanKey };
++const real_runner: Runner = .{ .call = runKeyTool };
+ 
+ pub fn dispatch(
+     context: *runtime.RuntimeContext,
+@@ -64,7 +65,7 @@
+     const result = runAction(context, invocation, action, runner) catch |err| {
+         const message = try std.fmt.allocPrint(
+             context.allocator,
+-            "Failed to run pacman-key: {t}",
++            "Failed to run keyring helper: {t}",
+             .{err},
+         );
+         defer context.allocator.free(message);
+@@ -96,15 +97,19 @@
+     runner: Runner,
+ ) !RunOutcome {
+     switch (action) {
+-        .init => return .{ .exit_code = try runner.call(runner.data, context, &.{ "pacman-key", "--init" }) },
+-        .list => return .{ .exit_code = try runner.call(runner.data, context, &.{ "pacman-key", "--list-keys" }) },
+-        .refresh => return .{ .exit_code = try runner.call(runner.data, context, &.{ "pacman-key", "--refresh-keys" }) },
++        .init => return .{ .exit_code = try runner.call(runner.data, context, &.{ "/usr/bin/shelly-key", "--init" }) },
++        .list => return .{ .exit_code = try runner.call(runner.data, context, &.{ "/usr/bin/shelly-key", "--list-keys" }) },
++        .refresh => return .{ .exit_code = try runner.call(
++            runner.data,
++            context,
++            &.{ "/usr/bin/gpg", "--homedir", keyring_directory, "--refresh-keys" },
++        ) },
+         .lsign => {
+             for (invocation.positionals) |key| {
+                 const exit_code = try runner.call(
+                     runner.data,
+                     context,
+-                    &.{ "pacman-key", "--lsign-key", key },
++                    &.{ "/usr/bin/shelly-key", "--lsign-key", key },
+                 );
+                 if (exit_code != 0) return .{ .exit_code = exit_code, .failed_key = key };
+             }
+@@ -113,7 +118,7 @@
+         .populate => {
+             const arguments = try context.allocator.alloc([]const u8, invocation.positionals.len + 2);
+             defer context.allocator.free(arguments);
+-            arguments[0] = "pacman-key";
++            arguments[0] = "/usr/bin/shelly-key";
+             arguments[1] = "--populate";
+             @memcpy(arguments[2..], invocation.positionals);
+             return .{ .exit_code = try runner.call(runner.data, context, arguments) };
+@@ -122,22 +127,26 @@
+             const keyserver = optionValue(invocation, "--keyserver");
+             const arguments = try context.allocator.alloc(
+                 []const u8,
+-                invocation.positionals.len + 2 + @as(usize, if (keyserver == null) 0 else 2),
++                invocation.positionals.len + 4 + @as(usize, if (keyserver == null) 0 else 2),
+             );
+             defer context.allocator.free(arguments);
+-            arguments[0] = "pacman-key";
+-            arguments[1] = "--recv-keys";
+-            @memcpy(arguments[2 .. invocation.positionals.len + 2], invocation.positionals);
++            arguments[0] = "/usr/bin/gpg";
++            arguments[1] = "--homedir";
++            arguments[2] = keyring_directory;
++            var next: usize = 3;
+             if (keyserver) |server| {
+-                arguments[invocation.positionals.len + 2] = "--keyserver";
+-                arguments[invocation.positionals.len + 3] = server;
++                arguments[next] = "--keyserver";
++                arguments[next + 1] = server;
++                next += 2;
+             }
++            arguments[next] = "--recv-keys";
++            @memcpy(arguments[next + 1 ..], invocation.positionals);
+             return .{ .exit_code = try runner.call(runner.data, context, arguments) };
+         },
+     }
+ }
+ 
+-fn runPacmanKey(
++fn runKeyTool(
+     _: ?*anyopaque,
+     context: *runtime.RuntimeContext,
+     arguments: []const []const u8,
+@@ -300,19 +309,19 @@
+     try std.testing.expect(missing_key == .failure);
+ }
+ 
+-test "keyring maps every action to structured pacman-key arguments" {
++test "keyring maps every action to native helper arguments" {
+     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+     defer arena.deinit();
+     const manifest = try spec.Manifest.load(arena.allocator());
+ 
+     const expected_calls = [_][]const []const u8{
+-        &.{ "pacman-key", "--init" },
+-        &.{ "pacman-key", "--list-keys" },
+-        &.{ "pacman-key", "--refresh-keys" },
+-        &.{ "pacman-key", "--lsign-key", "AAAA" },
+-        &.{ "pacman-key", "--lsign-key", "BBBB" },
+-        &.{ "pacman-key", "--populate", "archlinux", "cachyos" },
+-        &.{ "pacman-key", "--recv-keys", "CCCC", "DDDD", "--keyserver", "hkps://keys.example" },
++        &.{ "/usr/bin/shelly-key", "--init" },
++        &.{ "/usr/bin/shelly-key", "--list-keys" },
++        &.{ "/usr/bin/gpg", "--homedir", keyring_directory, "--refresh-keys" },
++        &.{ "/usr/bin/shelly-key", "--lsign-key", "AAAA" },
++        &.{ "/usr/bin/shelly-key", "--lsign-key", "BBBB" },
++        &.{ "/usr/bin/shelly-key", "--populate", "archlinux", "cachyos" },
++        &.{ "/usr/bin/gpg", "--homedir", keyring_directory, "--keyserver", "hkps://keys.example", "--recv-keys", "CCCC", "DDDD" },
+     };
+     const Capture = struct {
+         expected: []const []const []const u8,
+--- a/Shelly.PackageManager/src/alpm/pacfile_manager.zig
++++ b/Shelly.PackageManager/src/alpm/pacfile_manager.zig
+@@ -124,7 +124,6 @@
+     find_paths: []const []const u8 = &default_find_paths,
+     temporary_directory: []const u8 = "/tmp",
+     locate_command: []const u8 = "locate",
+-    pacman_command: []const u8 = "pacman",
+     bsdtar_command: []const u8 = "bsdtar",
+     diff_program: []const []const u8 = &default_diff_program,
+     merge_program: []const []const u8 = &default_merge_program,
+@@ -553,32 +552,54 @@
+     fn packageOwner(self: *PacfileManager, original_path: []const u8) Error![]u8 {
+         const logical_path = try self.logicalPath(original_path);
+         defer self.allocator.free(logical_path);
+-        var argv: std.ArrayList([]const u8) = .empty;
+-        defer argv.deinit(self.allocator);
+-        argv.append(self.allocator, self.options.pacman_command) catch return Error.OutOfMemory;
+-        if (!std.mem.eql(u8, self.options.root_directory, "/")) {
+-            argv.appendSlice(self.allocator, &.{ "--root", self.options.root_directory, "--dbpath", self.options.database_path }) catch
+-                return Error.OutOfMemory;
+-        }
+-        argv.appendSlice(self.allocator, &.{ "-Qoq", logical_path }) catch return Error.OutOfMemory;
+-        const result = std.process.run(self.allocator, self.io, .{
+-            .argv = argv.items,
+-            .stdout_limit = .limited(self.options.max_process_output),
+-            .stderr_limit = .limited(self.options.max_process_output),
+-        }) catch |err| switch (err) {
+-            error.StreamTooLong => return Error.ProcessOutputTooLarge,
+-            else => return Error.PackageOwnerNotFound,
++        const member_path = std.mem.trimStart(u8, logical_path, "/");
++        if (!safeRelativePath(member_path)) return Error.InvalidConfiguredPath;
++
++        const local_path = std.fs.path.join(self.allocator, &.{ self.options.database_path, "local" }) catch
++            return Error.OutOfMemory;
++        defer self.allocator.free(local_path);
++        var local = std.Io.Dir.cwd().openDir(self.io, local_path, .{ .iterate = true }) catch |err| switch (err) {
++            error.FileNotFound => return Error.PackageOwnerNotFound,
++            else => return Error.DatabaseReadFailed,
+         };
+-        defer self.allocator.free(result.stdout);
+-        defer self.allocator.free(result.stderr);
+-        switch (result.term) {
+-            .exited => |code| if (code != 0) return Error.PackageOwnerNotFound,
+-            else => return Error.PackageOwnerNotFound,
++        defer local.close(self.io);
++        var iterator = local.iterate();
++        while (iterator.next(self.io) catch return Error.DatabaseReadFailed) |package| {
++            if (package.kind != .directory) continue;
++            const files_path = std.fs.path.join(self.allocator, &.{ local_path, package.name, "files" }) catch
++                return Error.OutOfMemory;
++            defer self.allocator.free(files_path);
++            const files = std.Io.Dir.cwd().readFileAlloc(
++                self.io,
++                files_path,
++                self.allocator,
++                .limited(max_backup_database_file_size),
++            ) catch |err| switch (err) {
++                error.FileNotFound => continue,
++                error.StreamTooLong => return Error.DatabaseReadFailed,
++                else => return Error.DatabaseReadFailed,
++            };
++            defer self.allocator.free(files);
++            if (!sectionContains(files, "%FILES%", member_path)) continue;
++
++            const desc_path = std.fs.path.join(self.allocator, &.{ local_path, package.name, "desc" }) catch
++                return Error.OutOfMemory;
++            defer self.allocator.free(desc_path);
++            const desc = std.Io.Dir.cwd().readFileAlloc(
++                self.io,
++                desc_path,
++                self.allocator,
++                .limited(max_backup_database_file_size),
++            ) catch |err| switch (err) {
++                error.StreamTooLong => return Error.DatabaseReadFailed,
++                else => return Error.DatabaseReadFailed,
++            };
++            defer self.allocator.free(desc);
++            const owner = sectionFirstValue(desc, "%NAME%") orelse return Error.DatabaseReadFailed;
++            if (std.mem.indexOfAny(u8, owner, " \t\r\n") != null) return Error.DatabaseReadFailed;
++            return self.allocator.dupe(u8, owner) catch return Error.OutOfMemory;
+         }
+-        const owner = std.mem.trim(u8, result.stdout, " \t\r\n");
+-        if (owner.len == 0 or std.mem.indexOfAny(u8, owner, " \t\r\n") != null)
+-            return Error.PackageOwnerNotFound;
+-        return self.allocator.dupe(u8, owner) catch return Error.OutOfMemory;
++        return Error.PackageOwnerNotFound;
+     }
+ 
+     fn collectCacheEntries(
+@@ -758,6 +779,32 @@
+     return true;
+ }
+ 
++fn sectionContains(contents: []const u8, section: []const u8, expected: []const u8) bool {
++    var lines = std.mem.splitScalar(u8, contents, '\n');
++    var in_section = false;
++    while (lines.next()) |raw_line| {
++        const line = std.mem.trimEnd(u8, raw_line, "\r");
++        if (!in_section) {
++            if (std.mem.eql(u8, line, section)) in_section = true;
++            continue;
++        }
++        if (line.len == 0) return false;
++        if (std.mem.eql(u8, line, expected)) return true;
++    }
++    return false;
++}
++
++fn sectionFirstValue(contents: []const u8, section: []const u8) ?[]const u8 {
++    var lines = std.mem.splitScalar(u8, contents, '\n');
++    var found = false;
++    while (lines.next()) |raw_line| {
++        const line = std.mem.trimEnd(u8, raw_line, "\r");
++        if (found) return if (line.len == 0) null else line;
++        if (std.mem.eql(u8, line, section)) found = true;
++    }
++    return null;
++}
++
+ fn isDecimal(text: []const u8) bool {
+     if (text.len == 0) return false;
+     for (text) |character| if (!std.ascii.isDigit(character)) return false;
+@@ -907,6 +954,17 @@
+     const work = try std.fs.path.join(testing.allocator, &.{ root, "work" });
+     defer testing.allocator.free(work);
+     try std.Io.Dir.cwd().createDirPath(testing.io, cache);
++    const database = try std.fs.path.join(testing.allocator, &.{ root, "database" });
++    defer testing.allocator.free(database);
++    const package_dir = try std.fs.path.join(testing.allocator, &.{ database, "local/example-2.0-1" });
++    defer testing.allocator.free(package_dir);
++    try std.Io.Dir.cwd().createDirPath(testing.io, package_dir);
++    const files_db = try std.fs.path.join(testing.allocator, &.{ package_dir, "files" });
++    defer testing.allocator.free(files_db);
++    const desc_db = try std.fs.path.join(testing.allocator, &.{ package_dir, "desc" });
++    defer testing.allocator.free(desc_db);
++    try std.Io.Dir.cwd().writeFile(testing.io, .{ .sub_path = files_db, .data = "%FILES%\nexample.conf\n\n" });
++    try std.Io.Dir.cwd().writeFile(testing.io, .{ .sub_path = desc_db, .data = "%NAME%\nexample\n\n" });
+ 
+     inline for (.{ "example-1.0-1-x86_64.pkg.tar.zst", "example-2.0-1-x86_64.pkg.tar.zst" }) |name| {
+         const archive = try std.fs.path.join(testing.allocator, &.{ cache, name });
+@@ -921,21 +979,19 @@
+     try std.Io.Dir.cwd().writeFile(testing.io, .{ .sub_path = original, .data = "local\n" });
+     try std.Io.Dir.cwd().writeFile(testing.io, .{ .sub_path = pacnew, .data = "package\n" });
+ 
+-    const owner_tool = try std.fs.path.join(testing.allocator, &.{ root, "owner-tool" });
+-    defer testing.allocator.free(owner_tool);
+     const extract_tool = try std.fs.path.join(testing.allocator, &.{ root, "extract-tool" });
+     defer testing.allocator.free(extract_tool);
+     const merge_tool = try std.fs.path.join(testing.allocator, &.{ root, "merge-tool" });
+     defer testing.allocator.free(merge_tool);
+-    try writeExecutable(owner_tool, "#!/bin/sh\nprintf 'example\\n'\n");
+     try writeExecutable(extract_tool, "#!/bin/sh\nprintf 'base\\n'\n");
+     try writeExecutable(merge_tool, "#!/bin/sh\nprintf 'merged\\n'\nexit 1\n");
+     var merge_program = [_][]const u8{merge_tool};
+     var diff_program = [_][]const u8{"/usr/bin/true"};
+     var manager = PacfileManager.init(testing.allocator, testing.io, .{
++        .root_directory = root,
++        .database_path = database,
+         .cache_directory = cache,
+         .temporary_directory = work,
+-        .pacman_command = owner_tool,
+         .bsdtar_command = extract_tool,
+         .merge_program = &merge_program,
+         .diff_program = &diff_program,

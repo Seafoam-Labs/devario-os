@@ -1,0 +1,13 @@
+#!/usr/bin/bash
+
+set -u
+
+printf '%s\n' "$*" >> "$DEVARIO_TEST_MODPROBE_LOG"
+
+if [[ "$1" == nvidia_drm && "$DEVARIO_TEST_DRIVER_MODE" == nvidia ]]; then
+    /usr/bin/ln -sfn "$DEVARIO_TEST_DRIVER_ROOT/nvidia" \
+        "$DEVARIO_TEST_NVIDIA_DEVICE/driver"
+    exit 0
+fi
+
+exit 1

@@ -1,0 +1,52 @@
+# Maintainer: Devario maintainers
+
+pkgname=devario-base
+pkgver=3
+pkgrel=2
+pkgdesc="Minimal package set defining a base Devario installation"
+arch=('any')
+url="https://github.com/Seafoam-Labs/devario-os"
+license=('GPL-3.0-or-later')
+
+# This tracks Arch's base 3 dependency set, replacing only its pacman edge with
+# the Shelly/libalpm stack.  Keep this list synchronized with Arch's base
+# package when that package changes.
+depends=(
+  'filesystem'
+  'gcc-libs'
+  'glibc'
+  'bash'
+  'coreutils'
+  'file'
+  'findutils'
+  'gawk'
+  'grep'
+  'procps-ng'
+  'sed'
+  'tar'
+  'gettext'
+  'pciutils'
+  'psmisc'
+  'shadow'
+  'util-linux'
+  'bzip2'
+  'gzip'
+  'xz'
+  'licenses'
+  'devario-alpm-runtime>=7.1.0'
+  'shelly'
+  'archlinux-keyring'
+  'systemd'
+  'systemd-sysvcompat'
+  'iputils'
+  'iproute2'
+)
+optdepends=('linux-cachyos-lts: bare-metal support')
+provides=("base=${pkgver}")
+conflicts=('base')
+replaces=('base')
+
+package() {
+  # Dependency-only metapackage.
+  return 0
+}

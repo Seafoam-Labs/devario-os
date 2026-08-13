@@ -1,0 +1,252 @@
+# Maintainer: Devario maintainers
+
+pkgbase=aqueous
+pkgname=('aqueous' 'aqueous-session' 'aqueous-noctalia')
+pkgver=0.4.6.r0.g001beb7
+pkgrel=1
+arch=('x86_64')
+url="https://github.com/Seafoam-Labs/Aqueous"
+license=('GPL-3.0-only' 'MIT' 'CC-BY-SA-4.0')
+makedepends=(
+  'clang'
+  'lld'
+  'llvm'
+  'curl'
+  'patch'
+  'scdoc'
+  'wayland-protocols>=1.47'
+  'pkgconf'
+  'meson'
+  'ninja'
+  'glslang'
+  'vulkan-headers'
+  'hwdata'
+  'zig>=0.16.0'
+)
+checkdepends=('jq' 'ripgrep' 'noctalia')
+_commit='001beb7d08ecb8e5b428b869dbb9351f8d97820c'
+source=(
+  "aqueous-${_commit}.tar.gz"
+  'aqueous-zig-cache-001beb7d.tar.zst'
+  'wlroots-0.20.2.tar.gz'
+  '0001-devario-default-applications.patch'
+)
+sha256sums=(
+  '0f17fa6457b966354ed22c724777961f853d99dc68bf255f27b1fd02f0667c84'
+  'b2495e18a20391446189f44d3eff762845c4883da78b7042ba99fdd10189b310'
+  '972c7ac44b17828f4702bfae7cd8347346a3fb5b2c1076cfa2c3fcedac5ec343'
+  '096170a6d8fdd2e582b6a0a0b95ee26988094934d1a622ea1f04321bf341027d'
+)
+
+prepare() {
+  patch -d "$srcdir/aqueous-0.4.6" -Np1 \
+    -i "$srcdir/0001-devario-default-applications.patch"
+}
+
+build() {
+  local zig_version zig_base
+  zig_version="$(zig version)"
+  zig_base="${zig_version%%-*}"
+  if ! printf '0.16.0\n%s\n' "$zig_base" | sort -V -C; then
+    error "Aqueous requires Zig >= 0.16.0; found $zig_version"
+    return 1
+  fi
+
+  export CFLAGS="$CFLAGS -march=x86-64 -mtune=generic"
+  export CXXFLAGS="$CXXFLAGS -march=x86-64 -mtune=generic"
+
+  cd "$srcdir/aqueous-0.4.6/compositor"
+  # Both the patched wlroots archive and every Zig dependency are already in
+  # the checksummed source set. A package build therefore performs no fetches.
+  AQUEOUS_WLROOTS_CACHE_DIR="$srcdir" \
+    scripts/build-wlroots-render-hook.sh
+  PKG_CONFIG_PATH="$PWD/.deps/wlroots-render-hook/lib/pkgconfig" \
+  ZIG_GLOBAL_CACHE_DIR="$srcdir" \
+  ZIG_LOCAL_CACHE_DIR="$srcdir/aqueous-zig-local" \
+  DESTDIR="$srcdir/aqueous-dist" \
+    zig build \
+      -Dcpu=baseline \
+      -Doptimize=ReleaseSafe \
+      -Dxwayland \
+      -Dllvm \
+      -Dman-pages=true \
+      --prefix /usr \
+      install
+
+  cd "$srcdir/aqueous-0.4.6/plugin/helper"
+  ZIG_GLOBAL_CACHE_DIR="$srcdir/aqueous-plugin-zig-global" \
+  ZIG_LOCAL_CACHE_DIR="$srcdir/aqueous-plugin-zig-local" \
+  DESTDIR="$srcdir/aqueous-plugin-dist" \
+    zig build \
+      -Dcpu=baseline \
+      -Doptimize=ReleaseSafe \
+      --prefix /usr \
+      install
+}
+
+check() {
+  local required=(
+    usr/bin/aqueous
+    usr/bin/aqueousctl
+    usr/lib/aqueous/libwlroots-0.20.so
+    usr/share/man/man1/aqueous.1
+    usr/share/man/man1/aqueousctl.1
+    usr/share/aqueous-protocols/stable/aqueous-window-info-v1.xml
+  )
+  local path
+  for path in "${required[@]}"; do
+    test -e "$srcdir/aqueous-dist/$path" || {
+      error "Aqueous build output is missing $path"
+      return 1
+    }
+  done
+
+  cmp "$srcdir/aqueous-dist/usr/lib/aqueous/libwlroots-0.20.so" \
+    "$srcdir/aqueous-0.4.6/compositor/.deps/wlroots-render-hook/lib/libwlroots-0.20.so"
+  readelf -d "$srcdir/aqueous-dist/usr/bin/aqueous" \
+    | grep -F '$ORIGIN/../lib/aqueous' >/dev/null
+  if readelf -d "$srcdir/aqueous-dist/usr/bin/aqueous" | grep -Fq "$srcdir"; then
+    error "Aqueous runpath contains its build directory"
+    return 1
+  fi
+  if readelf -d "$srcdir/aqueous-dist/usr/bin/aqueous" | grep -qi scenefx; then
+    error "Aqueous still links SceneFX"
+    return 1
+  fi
+  grep -Fqx 'prefix=/usr' \
+    "$srcdir/aqueous-dist/usr/share/pkgconfig/aqueous-protocols.pc"
+
+  test -x "$srcdir/aqueous-plugin-dist/usr/bin/aqueous-config"
+  "$srcdir/aqueous-0.4.6/plugin/tests/test-helper.sh" \
+    "$srcdir/aqueous-plugin-dist/usr/bin/aqueous-config"
+  noctalia plugins lint "$srcdir/aqueous-0.4.6/plugin/settings"
+}
+
+_install_aqueous_licenses() {
+  local destination="$1"
+  install -d "$destination"
+  cp -dr --no-preserve=ownership \
+    "$srcdir/aqueous-0.4.6/compositor/LICENSES/." "$destination/"
+}
+
+package_aqueous() {
+  pkgdesc="Aqueous single-process Wayland compositor"
+  depends=(
+    'wayland'
+    'libxkbcommon'
+    'libinput'
+    'pixman'
+    'libdrm'
+    'libevdev'
+    'mesa'
+    'systemd-libs'
+    'seatd'
+    'libdisplay-info'
+    'libliftoff'
+    'lcms2'
+    'vulkan-icd-loader'
+    'libxcb'
+    'xcb-util-errors'
+    'xcb-util-wm'
+    'xcb-util-renderutil'
+  )
+  provides=("aqueous-wm=${pkgver}")
+  conflicts=('aqueous-git' 'aqueous-bin')
+
+  install -Dm755 "$srcdir/aqueous-dist/usr/bin/aqueous" "$pkgdir/usr/bin/aqueous"
+  install -Dm755 "$srcdir/aqueous-dist/usr/bin/aqueousctl" "$pkgdir/usr/bin/aqueousctl"
+  install -Dm755 "$srcdir/aqueous-dist/usr/lib/aqueous/libwlroots-0.20.so" \
+    "$pkgdir/usr/lib/aqueous/libwlroots-0.20.so"
+  install -d "$pkgdir/usr/share"
+  cp -dr --no-preserve=ownership "$srcdir/aqueous-dist/usr/share/." "$pkgdir/usr/share/"
+  install -Dm644 \
+    "$srcdir/aqueous-0.4.6/packaging/udev/70-aqueous-uaccess.rules" \
+    "$pkgdir/usr/lib/udev/rules.d/70-aqueous-uaccess.rules"
+  install -Dm644 "$srcdir/aqueous-0.4.6/README.md" \
+    "$pkgdir/usr/share/doc/$pkgname/README.md"
+  _install_aqueous_licenses "$pkgdir/usr/share/licenses/$pkgname"
+}
+
+package_aqueous-session() {
+  pkgdesc="UWSM session and desktop integration for Aqueous"
+  depends=(
+    "aqueous=${pkgver}-${pkgrel}"
+    'uwsm'
+    'systemd'
+    'dbus'
+    'xorg-xwayland'
+    'xdg-desktop-portal'
+    'xdg-desktop-portal-wlr'
+    'xdg-desktop-portal-gtk'
+    'wl-clipboard'
+    'grim'
+    'slurp'
+    'libnotify'
+    'adwaita-cursors'
+  )
+
+  install -Dm755 "$srcdir/aqueous-0.4.6/packaging/aqueous-init" \
+    "$pkgdir/usr/bin/aqueous-init"
+  install -Dm755 "$srcdir/aqueous-0.4.6/packaging/aqueous-wm.sh" \
+    "$pkgdir/usr/bin/aqueous-wm"
+  install -Dm644 "$srcdir/aqueous-0.4.6/aqueous.desktop" \
+    "$pkgdir/usr/share/wayland-sessions/aqueous.desktop"
+  install -Dm644 "$srcdir/aqueous-0.4.6/packaging/uwsm/env-aqueous" \
+    "$pkgdir/etc/uwsm/env-aqueous"
+  install -Dm644 "$srcdir/aqueous-0.4.6/packaging/aqueous-portals.conf" \
+    "$pkgdir/usr/share/xdg-desktop-portal/aqueous-portals.conf"
+  install -Dm644 "$srcdir/aqueous-0.4.6/wm.toml" \
+    "$pkgdir/etc/xdg/aqueous/wm.toml"
+  install -Dm644 "$srcdir/aqueous-0.4.6/wm.toml" \
+    "$pkgdir/usr/share/aqueous/wm.toml"
+  install -Dm644 "$srcdir/aqueous-0.4.6/outputs.toml" \
+    "$pkgdir/etc/xdg/aqueous/outputs.toml"
+  install -Dm644 "$srcdir/aqueous-0.4.6/outputs.toml" \
+    "$pkgdir/usr/share/aqueous/outputs.toml"
+  install -Dm644 "$srcdir/aqueous-0.4.6/packaging/aqueous-session.target" \
+    "$pkgdir/usr/lib/systemd/user/aqueous-session.target"
+  install -Dm644 "$srcdir/aqueous-0.4.6/packaging/aqueous.tmpfiles" \
+    "$pkgdir/usr/lib/tmpfiles.d/aqueous.conf"
+  _install_aqueous_licenses "$pkgdir/usr/share/licenses/$pkgname"
+}
+
+package_aqueous-noctalia() {
+  pkgdesc="Noctalia shell integration and defaults for Aqueous"
+  depends=(
+    "aqueous-session=${pkgver}-${pkgrel}"
+    'noctalia>=5.0.0'
+  )
+
+  install -Dm755 "$srcdir/aqueous-plugin-dist/usr/bin/aqueous-config" \
+    "$pkgdir/usr/bin/aqueous-config"
+  install -Dm644 "$srcdir/aqueous-0.4.6/packaging/noctalia.service" \
+    "$pkgdir/usr/lib/systemd/user/noctalia.service"
+  install -Dm755 "$srcdir/aqueous-0.4.6/packaging/enable-noctalia-plugin.sh" \
+    "$pkgdir/usr/lib/aqueous/enable-noctalia-plugin"
+  install -d "$pkgdir/usr/lib/systemd/user/graphical-session.target.wants"
+  ln -s ../noctalia.service \
+    "$pkgdir/usr/lib/systemd/user/graphical-session.target.wants/noctalia.service"
+
+  install -Dm644 "$srcdir/aqueous-0.4.6/packaging/noctalia/config.toml" \
+    "$pkgdir/usr/share/aqueous/noctalia/config.toml"
+  local plugin_source="$pkgdir/usr/share/aqueous/noctalia-plugins"
+  local plugin_runtime="$plugin_source/settings"
+  install -dm755 "$plugin_runtime/translations"
+  install -m644 "$srcdir/aqueous-0.4.6/plugin/catalog.toml" \
+    "$plugin_source/catalog.toml"
+  install -m644 "$srcdir/aqueous-0.4.6/plugin/settings/plugin.toml" \
+    "$plugin_runtime/plugin.toml"
+  install -m644 "$srcdir/aqueous-0.4.6/plugin/settings/widget.luau" \
+    "$plugin_runtime/widget.luau"
+  install -m644 "$srcdir/aqueous-0.4.6/plugin/settings/panel.luau" \
+    "$plugin_runtime/panel.luau"
+  install -m644 "$srcdir/aqueous-0.4.6/plugin/settings/aqueous.png" \
+    "$plugin_runtime/aqueous.png"
+  install -m644 "$srcdir/aqueous-0.4.6/plugin/settings/translations/en.json" \
+    "$plugin_runtime/translations/en.json"
+
+  install -d "$pkgdir/usr/share/aqueous/wallpapers"
+  install -m644 "$srcdir/aqueous-0.4.6/packaging/wallpapers/"*.avif \
+    "$pkgdir/usr/share/aqueous/wallpapers/"
+  _install_aqueous_licenses "$pkgdir/usr/share/licenses/$pkgname"
+}

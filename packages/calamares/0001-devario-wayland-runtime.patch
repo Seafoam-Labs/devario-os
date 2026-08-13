@@ -1,0 +1,41 @@
+diff --git a/src/modules/keyboard/Config.cpp b/src/modules/keyboard/Config.cpp
+index 6c36c920..5d217a7c 100644
+--- a/src/modules/keyboard/Config.cpp
++++ b/src/modules/keyboard/Config.cpp
+@@ -883,6 +883,10 @@ Config::setConfigurationMap( const QVariantMap& configurationMap )
+     using namespace Calamares;
+     bool isX11 = QGuiApplication::platformName() == "xcb";
+ 
++    // setxkbmap is an X11-only live-session helper. On Wayland, locale1
++    // applies the selection without requiring the elevated installer to
++    // inherit the live user's Xauthority cookie.
++    m_configureXkb = isX11;
+     const auto xorgConfDefault = QStringLiteral( "00-keyboard.conf" );
+     m_xOrgConfFileName = getString( configurationMap, "xOrgConfFileName", xorgConfDefault );
+     if ( m_xOrgConfFileName.isEmpty() )
+diff --git a/src/modules/partition/core/PartUtils.cpp b/src/modules/partition/core/PartUtils.cpp
+index a4d85845..b8191aab 100644
+--- a/src/modules/partition/core/PartUtils.cpp
++++ b/src/modules/partition/core/PartUtils.cpp
+@@ -27,6 +27,7 @@
+ #include <kpmcore/core/partition.h>
+ 
+ #include <QProcess>
++#include <QStandardPaths>
+ #include <QTemporaryDir>
+ 
+ using Calamares::Partition::isPartitionFreeSpace;
+@@ -353,6 +354,13 @@ runOsprober( DeviceModel* dm )
+ {
+     Logger::Once o;
+ 
++    if ( QStandardPaths::findExecutable( "os-prober" ).isEmpty() )
++    {
++        cDebug() << o << "os-prober is not installed; skipping optional operating-system discovery.";
++        Calamares::JobQueue::instance()->globalStorage()->insert( "osproberLines", QStringList() );
++        return {};
++    }
++
+     QString osproberOutput;
+     QProcess osprober;
+     osprober.setProgram( "os-prober" );

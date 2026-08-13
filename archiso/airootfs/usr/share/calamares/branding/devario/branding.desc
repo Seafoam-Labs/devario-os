@@ -1,0 +1,33 @@
+---
+componentName: devario
+welcomeStyleCalamares: false
+welcomeExpandingLogo: false
+windowExpanding: normal
+windowSize: 960px,600px
+windowPlacement: center
+sidebar: widget
+navigation: widget
+
+strings:
+  productName: "Devario"
+  shortProductName: "Devario"
+  version: "Development"
+  shortVersion: "Development"
+  versionedName: "Devario Development"
+  shortVersionedName: "Devario"
+  bootloaderEntryName: "Devario"
+
+images: {}
+
+style:
+  SidebarBackground: "#14252B"
+  SidebarText: "#E8FFFF"
+  SidebarTextCurrent: "#071013"
+  SidebarBackgroundCurrent: "#20BEB4"
+
+slideshow: []
+
+uploadServer:
+  type: "none"
+  url: ""
+  sizeLimit: 0

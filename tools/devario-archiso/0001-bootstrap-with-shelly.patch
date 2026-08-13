@@ -1,0 +1,322 @@
+--- a/archiso/mkarchiso
++++ b/archiso/mkarchiso
+@@ -31,6 +31,7 @@
+ install_dir=""
+ arch=""
+ pacman_conf=""
++devario_shelly="${DEVARIO_SHELLY:-shelly}"
+ packages=""
+ bootstrap_packages=""
+ bootstrap_parent=""
+@@ -91,7 +92,7 @@
+   options:
+      -A <application> Set an application name for the ISO
+                       Default: '${iso_application}'
+-     -C <file>        pacman configuration file.
++     -C <file>        ALPM configuration file.
+                       Default: '${pacman_conf}'
+      -D <install_dir> Set an install_dir. All files will be located here.
+                       Default: '${install_dir}'
+@@ -144,7 +145,7 @@
+     _msg_info "               GPG signer:   ${gpg_sender:-None}"
+     _msg_info "Code signing certificates:   ${cert_list[*]:-None}"
+     _msg_info "                  Profile:   ${profile}"
+-    _msg_info "Pacman configuration file:   ${pacman_conf}"
++    _msg_info "          ALPM configuration:   ${pacman_conf}"
+     _msg_info "          Image file name:   ${image_name:-None}"
+     _msg_info "         ISO volume label:   ${iso_label}"
+     _msg_info "            ISO publisher:   ${iso_publisher}"
+@@ -156,21 +157,21 @@
+ 
+ # Cleanup airootfs
+ _cleanup_pacstrap_dir() {
+-    _msg_info "Cleaning up in pacstrap location..."
++    _msg_info "Cleaning up in target root..."
+ 
+     # Delete all files in /boot
+     [[ -d "${pacstrap_dir}/boot" ]] && _unshare find "${pacstrap_dir}/boot" -mindepth 1 -delete
+-    # Delete pacman database sync cache files (*.tar.gz)
++    # Delete ALPM database sync cache files (*.tar.gz)
+     [[ -d "${pacstrap_dir}/var/lib/pacman" ]] && _unshare find "${pacstrap_dir}/var/lib/pacman" -maxdepth 1 -type f -delete
+-    # Delete pacman database sync cache
++    # Delete ALPM database sync cache
+     [[ -d "${pacstrap_dir}/var/lib/pacman/sync" ]] && _unshare find "${pacstrap_dir}/var/lib/pacman/sync" -delete
+-    # Delete pacman package cache
++    # Delete the package cache
+     [[ -d "${pacstrap_dir}/var/cache/pacman/pkg" ]] && _unshare find "${pacstrap_dir}/var/cache/pacman/pkg" -type f -delete
+     # Delete all log files, keeps empty dirs.
+     [[ -d "${pacstrap_dir}/var/log" ]] && _unshare find "${pacstrap_dir}/var/log" -type f -delete
+     # Delete all temporary files and dirs
+     [[ -d "${pacstrap_dir}/var/tmp" ]] && _unshare find "${pacstrap_dir}/var/tmp" -mindepth 1 -delete
+-    # Delete package pacman related files.
++    # Delete package transaction backup files.
+     _unshare find "${work_dir}" \( -name '*.pacnew' -o -name '*.pacsave' -o -name '*.pacorig' \) -delete
+     # Create /etc/machine-id with special value 'uninitialized': the final id is
+     # generated on first boot, systemd's first-boot mechanism applies (see machine-id(5))
+@@ -282,29 +283,69 @@
+     fi
+ }
+ 
+-# Set up custom pacman.conf with custom cache and pacman hook directories.
+-_make_pacman_conf() {
+-    local _cache_dirs _system_cache_dirs _profile_cache_dirs
+-    _system_cache_dirs="$(pacman-conf CacheDir | tr '\n' ' ')"
+-    _profile_cache_dirs="$(pacman-conf --config "${pacman_conf}" CacheDir | tr '\n' ' ')"
+-
+-    # Only use the profile's CacheDir, if it is not the default and not the same as the system cache dir.
+-    if [[ "${_profile_cache_dirs}" != "/var/cache/pacman/pkg" ]] \
+-        && [[ "${_system_cache_dirs}" != "${_profile_cache_dirs}" ]]; then
+-        _cache_dirs="${_profile_cache_dirs}"
+-    else
+-        _cache_dirs="${_system_cache_dirs}"
++# Mount the API filesystems package hooks and install scripts expect in the
++# target root. The mount list is built in reverse teardown order.
++_devario_chroot_add_mount() {
++    mount "$@" && _devario_active_mounts=("$2" "${_devario_active_mounts[@]}")
++}
++
++_devario_chroot_teardown() {
++    if (( ${#_devario_active_mounts[@]} )); then
++        umount "${_devario_active_mounts[@]}" || true
++    fi
++    _devario_active_mounts=()
++}
++
++_devario_chroot_setup() {
++    local root="$1"
++
++    install -d -m 0755 -- \
++        "${root}/var/lib/pacman" \
++        "${root}/var/cache/pacman/pkg" \
++        "${root}/var/log" \
++        "${root}/etc/pacman.d"
++    install -d -m 0555 -- "${root}/run" "${root}/dev" "${root}/sys" "${root}/proc"
++    install -d -m 1777 -- "${root}/tmp"
++
++    _devario_chroot_add_mount proc "${root}/proc" -t proc -o nosuid,noexec,nodev
++    _devario_chroot_add_mount sys "${root}/sys" -t sysfs -o nosuid,noexec,nodev,ro
++    if [[ -d "${root}/sys/firmware/efi/efivars" ]]; then
++        _devario_chroot_add_mount efivarfs "${root}/sys/firmware/efi/efivars" \
++            -t efivarfs -o nosuid,noexec,nodev || true
+     fi
++    _devario_chroot_add_mount udev "${root}/dev" -t devtmpfs -o mode=0755,nosuid
++    install -d -m 0755 -- "${root}/dev/pts" "${root}/dev/shm"
++    _devario_chroot_add_mount devpts "${root}/dev/pts" -t devpts -o mode=0620,gid=5,nosuid,noexec
++    _devario_chroot_add_mount shm "${root}/dev/shm" -t tmpfs -o mode=1777,nosuid,nodev
++    _devario_chroot_add_mount /run "${root}/run" --bind --make-private
++    _devario_chroot_add_mount tmp "${root}/tmp" -t tmpfs -o mode=1777,strictatime,nodev,nosuid
++}
++
++# Set up a custom ALPM configuration for Shelly's isolated target transaction.
++_make_pacman_conf() {
++    local generated_config="${work_dir}/${buildmode}.pacman.conf"
+ 
+-    _msg_info "Copying custom pacman.conf to work directory..."
+-    _msg_info "Using pacman CacheDir: ${_cache_dirs}"
+-    # take the profile pacman.conf and strip all settings that would break in chroot when using pacman -r
+-    # append CacheDir and HookDir to [options] section
+-    # HookDir is *always* set to the airootfs' override directory
+-    # see `man 8 pacman` for further info
+-    pacman-conf --config "${pacman_conf}" \
+-        | sed "/CacheDir/d;/DBPath/d;/HookDir/d;/LogFile/d;/RootDir/d;/\[options\]/a CacheDir = ${_cache_dirs}
+-        /\[options\]/a HookDir = ${pacstrap_dir}/etc/pacman.d/hooks/" >"${work_dir}/${buildmode}.pacman.conf"
++    _msg_info "Preparing an isolated Shelly ALPM configuration..."
++    awk \
++        -v root="${pacstrap_dir}" \
++        -v database="${pacstrap_dir}/var/lib/pacman" \
++        -v hooks="${pacstrap_dir}/etc/pacman.d/hooks" \
++        -v logfile="${pacstrap_dir}/var/log/shelly.log" \
++        -v gpgdir="${DEVARIO_BUILD_GPGDIR:-/etc/pacman.d/gnupg}" \
++        '
++        tolower($0) ~ /^[[:space:]]*(rootdir|dbpath|cachedir|hookdir|logfile|gpgdir)[[:space:]]*=/ { next }
++        { print }
++        tolower($0) ~ /^\[options\][[:space:]]*$/ {
++            print "RootDir = " root
++            print "DBPath = " database
++            print "CacheDir = /var/cache/pacman/pkg"
++            print "HookDir = " hooks
++            print "HookDir = " root "/usr/share/libalpm/hooks"
++            print "LogFile = " logfile
++            print "GPGDir = " gpgdir
++        }
++        ' "${pacman_conf}" >"${generated_config}"
++    _msg_info "Using Shelly target root: ${pacstrap_dir}"
+ }
+ 
+ # Prepare working directory and copy custom root file system files.
+@@ -342,12 +382,7 @@
+ 
+ # Install desired packages to the root file system
+ _make_packages() {
+-    local -a _pacstrap_options
+-
+-    _pacstrap_options=(-C "${work_dir}/${buildmode}.pacman.conf" -c -G -M -- "${pacstrap_dir}" "${buildmode_pkg_list[@]}")
+-    if (( EUID != 0 )); then
+-        _pacstrap_options=(-N "${_pacstrap_options[@]}")
+-    fi
++    local generated_config="${work_dir}/${buildmode}.pacman.conf"
+ 
+     _msg_info "Installing packages to '${pacstrap_dir}/'..."
+ 
+@@ -364,11 +399,27 @@
+         export ARCHISO_TLSCA_FD
+     fi
+ 
+-    # Unset TMPDIR to work around https://bugs.archlinux.org/task/70580
+-    if [[ "${quiet}" = "y" ]]; then
+-        env -u TMPDIR pacstrap "${_pacstrap_options[@]}" >/dev/null
+-    else
+-        env -u TMPDIR pacstrap "${_pacstrap_options[@]}"
++    # Run mount setup and the transaction in a subshell so every failure path
++    # tears down target API filesystems before returning to the image build.
++    if ! (
++        set -e
++        _devario_active_mounts=()
++        trap _devario_chroot_teardown EXIT
++        _devario_chroot_setup "${pacstrap_dir}"
++
++        env -u TMPDIR SHELLY_ALPM_CONFIG="${generated_config}" \
++            "${devario_shelly}" sync standard --no-confirm
++        if [[ "${quiet}" = "y" ]]; then
++            env -u TMPDIR SHELLY_ALPM_CONFIG="${generated_config}" \
++                "${devario_shelly}" install standard --no-confirm \
++                "${buildmode_pkg_list[@]}" >/dev/null
++        else
++            env -u TMPDIR SHELLY_ALPM_CONFIG="${generated_config}" \
++                "${devario_shelly}" install standard --no-confirm \
++                "${buildmode_pkg_list[@]}"
++        fi
++    ); then
++        _msg_error "Shelly failed to install packages into '${pacstrap_dir}/'." 1
+     fi
+ 
+     if [[ -v cert_list[0] ]]; then
+@@ -1219,9 +1270,17 @@
+ }
+ 
+ _validate_common_requirements_buildmode_all() {
+-    if ! command -v pacman &>/dev/null; then
++    if ! command -v "${devario_shelly}" &>/dev/null; then
+         (( validation_error=validation_error+1 ))
+-        _msg_error "Validating build mode '${_buildmode}': pacman is not available on this host. Install 'pacman'!" 0
++        _msg_error "Validating build mode '${_buildmode}': Shelly is not available at '${devario_shelly}'." 0
++    fi
++    if ! command -v python3 &>/dev/null; then
++        (( validation_error=validation_error+1 ))
++        _msg_error "Validating build mode '${_buildmode}': python3 is not available on this host." 0
++    fi
++    if ! command -v mount &>/dev/null || ! command -v umount &>/dev/null; then
++        (( validation_error=validation_error+1 ))
++        _msg_error "Validating build mode '${_buildmode}': mount and umount are required." 0
+     fi
+     if ! command -v find &>/dev/null; then
+         (( validation_error=validation_error+1 ))
+@@ -1464,10 +1523,10 @@
+ 
+ # Build ISO
+ _build_iso_image() {
+-    # Remove the pacstrap directory early to lower the maximum size of the working directory.
++    # Remove the target root early to lower the maximum size of the working directory.
+     # The creation of the airootfs image has already been completed.
+     if (( rm_work_dir )); then
+-        _msg_info 'Removing pacstrap directory...'
++        _msg_info 'Removing target root...'
+         _unshare rm -rf -- "${work_dir:?}/${arch}/airootfs"
+     fi
+ 
+@@ -1557,7 +1616,7 @@
+ 
+     _msg_info "Validating options..."
+ 
+-    # Check if pacman configuration file exists
++    # Check if the ALPM configuration file exists
+     if [[ ! -e "${pacman_conf}" ]]; then
+         (( validation_error=validation_error+1 ))
+         _msg_error "File '${pacman_conf}' does not exist." 0
+@@ -1718,17 +1777,36 @@
+ }
+ 
+ _make_pkglist() {
++    local inventory_json package_list
++
+     _msg_info "Creating a list of installed packages on live-enviroment..."
++    inventory_json="$(
++        SHELLY_ALPM_CONFIG="${work_dir}/${buildmode}.pacman.conf" \
++            "${devario_shelly}" list standard --show-hidden --json
++    )"
+     case "${buildmode}" in
+         "bootstrap")
+-            pacman -Q --sysroot "${pacstrap_dir}" \
+-                | _unshare install -m 0644 /dev/stdin "${bootstrap_parent}/pkglist.${arch}.txt"
++            package_list="${bootstrap_parent}/pkglist.${arch}.txt"
+             ;;
+         "iso"|"netboot")
+             install -d -m 0755 -- "${isofs_dir}/${install_dir}"
+-            pacman -Q --sysroot "${pacstrap_dir}" >"${isofs_dir}/${install_dir}/pkglist.${arch}.txt"
++            package_list="${isofs_dir}/${install_dir}/pkglist.${arch}.txt"
+             ;;
+     esac
++    python3 -c '
++import json
++import sys
++
++packages = json.load(sys.stdin)
++if not isinstance(packages, list):
++    packages = [packages]
++for package in sorted(packages, key=lambda value: value.get("Name", "")):
++    name = package.get("Name")
++    version = package.get("Version")
++    if name and version:
++        print("{} {}".format(name, version))
++' <<<"${inventory_json}" >"${package_list}"
++    chmod 0644 "${package_list}"
+     _msg_info "Done!"
+ }
+ 
+--- a/.gitlab-ci.yml
++++ b/.gitlab-ci.yml
+@@ -15,2 +15,4 @@
+-    - pacman -Sy --needed --noconfirm archlinux-keyring
+-    - pacman --noconfirm -Syu --needed make shellcheck
++    - shelly sync standard --no-confirm
++    - shelly install standard --no-confirm archlinux-keyring
++    - shelly upgrade standard --no-confirm
++    - shelly install standard --no-confirm make shellcheck
+@@ -22,12 +24,14 @@
+ .build:
+   artifacts:
+     reports:
+       metrics: output/metrics.txt
+   before_script:
+-    - pacman -Sy --needed --noconfirm archlinux-keyring
+-    - pacman -Syu --needed --noconfirm arch-install-scripts bash dosfstools e2fsprogs erofs-utils gnupg grub jq libarchive libisoburn mtools openssl python-docutils squashfs-tools zsync
++    - shelly sync standard --no-confirm
++    - shelly install standard --no-confirm archlinux-keyring
++    - shelly upgrade standard --no-confirm
++    - shelly install standard --no-confirm arch-install-scripts bash dosfstools e2fsprogs erofs-utils gnupg grub jq libarchive libisoburn mtools openssl python-docutils squashfs-tools zsync
+   script:
+     - ./.gitlab/ci/build_archiso.sh ${BUILD_SCRIPT_ARGS}
+   stage: build
+   tags:
+     - vm
+--- a/configs/releng/airootfs/etc/systemd/system/pacman-init.service
++++ b/configs/releng/airootfs/etc/systemd/system/pacman-init.service
+@@ -1,15 +1,15 @@
+ [Unit]
+-Description=Initializes Pacman keyring
++Description=Initializes the package signing keyring with Shelly
+ Requires=etc-pacman.d-gnupg.mount
+ After=etc-pacman.d-gnupg.mount time-sync.target
+ BindsTo=etc-pacman.d-gnupg.mount
+ Before=archlinux-keyring-wkd-sync.service
+ 
+ [Service]
+ Type=oneshot
+ RemainAfterExit=yes
+-ExecStart=/usr/bin/pacman-key --init
+-ExecStart=/usr/bin/pacman-key --populate
++ExecStart=/usr/bin/shelly keyring init
++ExecStart=/usr/bin/shelly keyring populate archlinux
+ 
+ [Install]
+ WantedBy=multi-user.target

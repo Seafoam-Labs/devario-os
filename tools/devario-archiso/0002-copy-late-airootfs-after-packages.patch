@@ -1,0 +1,38 @@
+--- a/archiso/mkarchiso
++++ b/archiso/mkarchiso
+@@ -439,6 +439,27 @@ _make_packages() {
+     _msg_info "Done! Packages installed successfully."
+ }
+ 
++# Copy profile files which must be present in the finished image but hidden
++# from package install scripts and post-transaction hooks.
++_make_late_airootfs() {
++    if [[ ! -d "${profile}/late-airootfs" ]]; then
++        return
++    fi
++
++    # The Devario live account must be materialized only in the writable live
++    # boot overlay, never in the immutable root copied by the installer.
++    if [[ -e "${profile}/late-airootfs/usr/lib/sysusers.d/devario-live.conf" ]] \
++        && { grep -q '^liveuser:' "${pacstrap_dir}/etc/passwd" \
++            || [[ -e "${pacstrap_dir}/home/liveuser" ]]; }; then
++        _msg_error "The live user was materialized before the late airootfs overlay." 1
++    fi
++
++    _msg_info "Copying late airootfs files..."
++    _unshare cp -af --no-preserve=ownership,mode -- \
++        "${profile}/late-airootfs/." "${pacstrap_dir}"
++    _msg_info "Done!"
++}
++
+ # Customize installation.
+ _make_customize_airootfs() {
+     local passwd=()
+@@ -1841,6 +1862,7 @@ _build_iso_base() {
+     [[ -z "${gpg_key}" ]] || _run_once _export_gpg_publickey
+     _run_once _make_custom_airootfs
+     _run_once _make_packages
++    _run_once _make_late_airootfs
+     _run_once _make_version
+     _run_once _make_customize_airootfs
+     _run_once _make_pkglist

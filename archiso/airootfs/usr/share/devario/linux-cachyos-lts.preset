@@ -1,0 +1,5 @@
+PRESETS=('default' 'fallback')
+ALL_kver='/boot/vmlinuz-linux-cachyos-lts'
+default_image='/boot/initramfs-linux-cachyos-lts.img'
+fallback_image='/boot/initramfs-linux-cachyos-lts-fallback.img'
+fallback_options='-S autodetect'

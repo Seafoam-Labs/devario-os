@@ -1,0 +1,11 @@
+pkgname=devario-makepkg-shelly-probe
+pkgver=1
+pkgrel=1
+pkgdesc='Minimal archive used to trace the strict makepkg Shelly adapter'
+arch=('any')
+license=('CC0-1.0')
+
+package() {
+  install -Dm644 /dev/null \
+    "$pkgdir/usr/share/devario/makepkg-shelly-probe"
+}

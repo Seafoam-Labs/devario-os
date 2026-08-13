@@ -1,0 +1,67 @@
+# Maintainer: Devario maintainers
+
+pkgname=devario-aqueous-desktop
+pkgver=1
+pkgrel=4
+pkgdesc="Complete Aqueous and Noctalia desktop environment for Devario"
+arch=('any')
+url="https://github.com/Seafoam-Labs/devario-os"
+license=('GPL-3.0-or-later')
+depends=(
+  'aqueous=0.4.6.r0.g001beb7-1'
+  'aqueous-session=0.4.6.r0.g001beb7-1'
+  'aqueous-noctalia=0.4.6.r0.g001beb7-1'
+  'noctalia=5.0.0.r0.g50f0f09-1'
+  'noctalia-greeter=1.0.0.r0.g4aa960d-3'
+  'greetd'
+  'ghostty'
+  'nemo'
+  'firefox'
+  'networkmanager'
+  'pipewire'
+  'pipewire-alsa'
+  'pipewire-pulse'
+  'wireplumber'
+  'polkit'
+  'gnome-keyring'
+  'accountsservice'
+  'gvfs'
+  'udisks2'
+  'upower'
+  'brightnessctl'
+  'playerctl'
+  'bluez-utils'
+  'xdg-user-dirs'
+  'xdg-utils'
+  'noto-fonts'
+  'ttf-dejavu'
+  'linux-cachyos-lts-headers'
+  'nvidia-open-dkms'
+  'nvidia-utils'
+  'vulkan-intel'
+  'vulkan-radeon'
+  'vulkan-swrast'
+)
+source=(
+  'greetd-config.toml'
+  'gpu-driver-setup'
+  'devario-gpu-driver.service'
+  'greetd-gpu-driver.conf'
+)
+sha256sums=(
+  '16afecd6b0f64351c92ed780d1cdb5d3efa1e793b679da5dde98bb39a124e7d7'
+  '0bdca27486e6dfb88a650cb2e7f70e4c6e2d813901c8d8274f4bc087de630634'
+  '5eaa5d9565feaf0b0447b0ff91bf1c1082c56740edd37968d25b09c518294470'
+  'a997663d00e362e780c6d29989bcb9dfdb50d5b00142322bee207d68be8c3801'
+)
+
+package() {
+  install -Dm644 "$srcdir/greetd-config.toml" \
+    "$pkgdir/usr/share/devario/greetd/config.toml"
+  install -Dm755 "$srcdir/gpu-driver-setup" \
+    "$pkgdir/usr/lib/devario/gpu-driver-setup"
+  install -Dm644 "$srcdir/devario-gpu-driver.service" \
+    "$pkgdir/usr/lib/systemd/system/devario-gpu-driver.service"
+  install -Dm644 "$srcdir/greetd-gpu-driver.conf" \
+    "$pkgdir/usr/lib/systemd/system/greetd.service.d/20-devario-gpu-driver.conf"
+}

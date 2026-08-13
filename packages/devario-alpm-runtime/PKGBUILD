@@ -1,0 +1,123 @@
+# Maintainer: Devario maintainers
+
+pkgname=devario-alpm-runtime
+pkgver=7.1.0.r9.g54d9411
+pkgrel=1
+pkgdesc="The libalpm runtime and configuration used by Shelly (without Pacman executables)"
+arch=('x86_64')
+url="https://gitlab.archlinux.org/pacman/pacman"
+license=('GPL-2.0-or-later')
+depends=(
+  'bash'
+  'curl' 'libcurl.so'
+  'glibc'
+  'gnupg'
+  'gpgme' 'libgpgme.so'
+  'libarchive' 'libarchive.so'
+  'openssl' 'libcrypto.so'
+  'pacman-mirrorlist'
+  'systemd'
+)
+makedepends=('meson')
+_upstream_commit='54d94116164b0b2202c6061c4a59c6f3e70820d8'
+_source_dir="pacman-${_upstream_commit}"
+
+# archlinux-keyring currently depends on the package name "pacman", although
+# its install script skips pacman-key when that executable is absent.  This
+# versioned compatibility provide prevents the real pacman package from being
+# pulled into the image.  No pacman or pacman-key executable is shipped here.
+provides=("pacman=${pkgver}" 'libalpm.so')
+conflicts=('pacman')
+replaces=('pacman')
+backup=('etc/pacman.conf')
+
+source=(
+  "pacman-${pkgver}.tar.gz::https://gitlab.archlinux.org/pacman/pacman/-/archive/${_upstream_commit}/pacman-${_upstream_commit}.tar.gz"
+  '0001-libalpm-invalidate-curl-data-in-child.patch'
+  'pacman.conf'
+)
+sha256sums=(
+  '871a9616e5c82e265e4b2ff9eb4d1b4ae4e37bcc1387a48d04992a7b10af7336'
+  '9a734e5d75be603d58aa92e8d29a15466b3ac2af6b7d6f6728dd5c3e5ed8758d'
+  'f5e1532f0cd037a7b249ce53b0c678dfc5760afc2b72f41ecb10cbee4d35dd30'
+)
+
+prepare() {
+  cd "$srcdir/${_source_dir}"
+  patch -Np1 < "$srcdir/0001-libalpm-invalidate-curl-data-in-child.patch"
+}
+
+build() {
+  meson setup \
+    --prefix=/usr \
+    --buildtype=plain \
+    -Ddoc=disabled \
+    -Ddoxygen=disabled \
+    -Dscriptlet-shell=/usr/bin/bash \
+    -Dldconfig=/usr/bin/ldconfig \
+    -Dcurl=enabled \
+    -Dcrypto=openssl \
+    -Dgpgme=enabled \
+    build \
+    "$srcdir/${_source_dir}"
+
+  meson compile -C build
+}
+
+package() {
+  local stagedir="$srcdir/stage"
+
+  DESTDIR="$stagedir" meson install -C build
+
+  # Install only libalpm and its development metadata.  In particular, do not
+  # copy anything from stage/usr/bin or the Pacman/libmakepkg documentation.
+  install -Dm755 \
+    "$stagedir/usr/lib/libalpm.so.16.0.1" \
+    "$pkgdir/usr/lib/libalpm.so.16.0.1"
+  ln -s 'libalpm.so.16.0.1' "$pkgdir/usr/lib/libalpm.so.16"
+  ln -s 'libalpm.so.16' "$pkgdir/usr/lib/libalpm.so"
+
+  install -Dm644 \
+    "$stagedir/usr/include/alpm.h" \
+    "$pkgdir/usr/include/alpm.h"
+  install -Dm644 \
+    "$stagedir/usr/include/alpm_list.h" \
+    "$pkgdir/usr/include/alpm_list.h"
+  install -Dm644 \
+    "$stagedir/usr/lib/pkgconfig/libalpm.pc" \
+    "$pkgdir/usr/lib/pkgconfig/libalpm.pc"
+
+  local catalog language
+  for catalog in "$stagedir"/usr/share/locale/*/LC_MESSAGES/libalpm.mo; do
+    language="${catalog#"$stagedir/usr/share/locale/"}"
+    language="${language%%/*}"
+    install -Dm644 \
+      "$catalog" \
+      "$pkgdir/usr/share/locale/$language/LC_MESSAGES/libalpm.mo"
+  done
+
+  install -Dm644 \
+    "$srcdir/pacman.conf" \
+    "$pkgdir/etc/pacman.conf"
+  install -Dm644 \
+    "$srcdir/${_source_dir}/COPYING" \
+    "$pkgdir/usr/share/licenses/$pkgname/COPYING"
+
+  install -dm755 \
+    "$pkgdir/etc/pacman.d/gnupg" \
+    "$pkgdir/etc/pacman.d/hooks" \
+    "$pkgdir/usr/share/libalpm/hooks" \
+    "$pkgdir/var/cache/pacman/pkg" \
+    "$pkgdir/var/lib/pacman"
+
+  printf '%s\n' 'u alpm - "Arch Linux Package Management" -' | \
+    install -Dm644 /dev/stdin "$pkgdir/usr/lib/sysusers.d/alpm.conf"
+
+  local wantsdir="$pkgdir/usr/lib/systemd/system/sockets.target.wants"
+  local unit
+  install -dm755 "$wantsdir"
+  for unit in dirmngr gpg-agent gpg-agent-browser gpg-agent-extra gpg-agent-ssh keyboxd; do
+    ln -s "../${unit}@.socket" \
+      "$wantsdir/${unit}@etc-pacman.d-gnupg.socket"
+  done
+}

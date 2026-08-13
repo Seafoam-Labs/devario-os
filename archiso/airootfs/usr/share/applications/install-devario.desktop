@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Install Devario
+Comment=Install Devario on this computer
+Exec=/usr/bin/pkexec /usr/bin/calamares
+Icon=calamares
+Terminal=false
+Categories=System;

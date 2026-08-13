@@ -1,0 +1,22 @@
+pkgname=devario-keyring
+pkgver=20260803
+pkgrel=1
+pkgdesc="Devario repository signing keys"
+arch=('any')
+url="https://github.com/Seafoam-Labs/devario-os"
+license=('CC0-1.0')
+source=(
+  'devario.gpg'
+  'devario-trusted'
+  'devario-revoked'
+)
+sha256sums=('SKIP' 'SKIP' 'SKIP')
+
+package() {
+  install -Dm644 "$srcdir/devario.gpg" \
+    "$pkgdir/usr/share/pacman/keyrings/devario.gpg"
+  install -Dm644 "$srcdir/devario-trusted" \
+    "$pkgdir/usr/share/pacman/keyrings/devario-trusted"
+  install -Dm644 "$srcdir/devario-revoked" \
+    "$pkgdir/usr/share/pacman/keyrings/devario-revoked"
+}

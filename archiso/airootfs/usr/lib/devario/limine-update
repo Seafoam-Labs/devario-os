@@ -1,0 +1,197 @@
+#!/usr/bin/bash
+set -euo pipefail
+
+boot_dir=/boot
+limine_dir="$boot_dir/limine"
+limine_share=/usr/share/limine
+bios_boot_type=21686148-6449-6e6f-744e-656564454649
+install_mode=false
+installed_marker=/var/lib/devario/limine-installed
+
+if [[ "${1:-}" == --install ]]; then
+  install_mode=true
+  shift
+fi
+if (( $# != 0 )); then
+  echo "Usage: ${0##*/} [--install]" >&2
+  exit 64
+fi
+
+fail() {
+  echo "devario-limine: $*" >&2
+  exit 1
+}
+
+note() {
+  echo "devario-limine: $*"
+}
+
+# The hook is already present while Archiso assembles the live root. Only an
+# explicit Calamares install, or a system marked by one, is a deployable target.
+if [[ "$install_mode" != true && ! -e "$installed_marker" ]]; then
+  note "target installation marker is absent; skipping live-image transaction"
+  exit 0
+fi
+
+for command_name in awk chmod findmnt grep install limine lsblk mktemp mv readlink rm; do
+  command -v "$command_name" >/dev/null 2>&1 \
+    || fail "required command is unavailable: $command_name"
+done
+
+[[ -f "$boot_dir/vmlinuz-linux-cachyos-lts" ]] \
+  || fail "$boot_dir/vmlinuz-linux-cachyos-lts is missing"
+[[ -f "$boot_dir/initramfs-linux-cachyos-lts.img" ]] \
+  || fail "$boot_dir/initramfs-linux-cachyos-lts.img is missing"
+[[ -f "$limine_share/BOOTX64.EFI" ]] \
+  || fail "the Limine x86-64 EFI executable is missing"
+[[ -f "$limine_share/limine-bios.sys" ]] \
+  || fail "the Limine BIOS stage is missing"
+
+boot_source="$(findmnt -nro SOURCE --target "$boot_dir")"
+boot_fstype="$(findmnt -nro FSTYPE --target "$boot_dir")"
+case "${boot_fstype,,}" in
+  vfat|fat|fat12|fat16|fat32|msdos)
+    ;;
+  *)
+    fail "$boot_dir must be a FAT filesystem for Limine (found $boot_fstype)"
+    ;;
+esac
+
+boot_device="$(readlink -f -- "$boot_source")"
+[[ -b "$boot_device" ]] \
+  || fail "$boot_dir is not backed by a block-device partition: $boot_source"
+boot_part_number="$(lsblk -dnro PARTN "$boot_device")"
+[[ "$boot_part_number" =~ ^[0-9]+$ ]] \
+  || fail "cannot determine the partition number for $boot_device"
+
+disk_device="$boot_device"
+while [[ "$(lsblk -dnro TYPE "$disk_device")" != disk ]]; do
+  parent_name="$(lsblk -dnro PKNAME "$disk_device")"
+  [[ -n "$parent_name" ]] \
+    || fail "cannot determine the parent disk for $disk_device"
+  disk_device="/dev/$parent_name"
+done
+
+root_spec="$(awk '$1 !~ /^#/ && $2 == "/" { print $1; exit }' /etc/fstab)"
+root_options="$(awk '$1 !~ /^#/ && $2 == "/" { print $4; exit }' /etc/fstab)"
+[[ -n "$root_spec" ]] || fail "the root filesystem is missing from /etc/fstab"
+case "$root_spec" in
+  UUID=*|PARTUUID=*|LABEL=*|/dev/*)
+    ;;
+  *)
+    fail "unsupported root filesystem specification: $root_spec"
+    ;;
+esac
+
+kernel_cmdline="root=$root_spec rw quiet"
+if [[ "$root_spec" == /dev/mapper/* && -f /etc/crypttab ]]; then
+  mapper_name="${root_spec#/dev/mapper/}"
+  crypt_source="$(awk -v name="$mapper_name" \
+    '$1 !~ /^#/ && $1 == name { print $2; exit }' /etc/crypttab)"
+  case "$crypt_source" in
+    UUID=*)
+      kernel_cmdline+=" rd.luks.name=${crypt_source#UUID=}=$mapper_name"
+      ;;
+    /dev/disk/by-uuid/*)
+      kernel_cmdline+=" rd.luks.name=${crypt_source#/dev/disk/by-uuid/}=$mapper_name"
+      ;;
+  esac
+fi
+
+IFS=, read -r -a root_option_list <<< "$root_options"
+for root_option in "${root_option_list[@]}"; do
+  case "$root_option" in
+    subvol=*|subvolid=*)
+      kernel_cmdline+=" rootflags=$root_option"
+      break
+      ;;
+  esac
+done
+
+microcode_path=""
+if grep -q AuthenticAMD /proc/cpuinfo && [[ -f "$boot_dir/amd-ucode.img" ]]; then
+  microcode_path=amd-ucode.img
+elif grep -q GenuineIntel /proc/cpuinfo && [[ -f "$boot_dir/intel-ucode.img" ]]; then
+  microcode_path=intel-ucode.img
+fi
+
+install -d -m 0755 "$limine_dir"
+temporary_config="$(mktemp "$limine_dir/.limine.conf.XXXXXX")"
+cleanup() {
+  [[ ! -e "$temporary_config" ]] || rm -f -- "$temporary_config"
+}
+trap cleanup EXIT
+
+{
+  echo 'timeout: 5'
+  echo 'remember_last_entry: yes'
+  echo 'interface_branding: Devario'
+  echo
+  echo '/Devario Linux (CachyOS LTS)'
+  echo 'protocol: linux'
+  echo 'path: boot():/vmlinuz-linux-cachyos-lts'
+  if [[ -n "$microcode_path" ]]; then
+    echo "module_path: boot():/$microcode_path"
+  fi
+  echo 'module_path: boot():/initramfs-linux-cachyos-lts.img'
+  echo "cmdline: $kernel_cmdline"
+
+  if [[ -f "$boot_dir/initramfs-linux-cachyos-lts-fallback.img" ]]; then
+    echo
+    echo '/Devario Linux (CachyOS LTS, fallback initramfs)'
+    echo 'protocol: linux'
+    echo 'path: boot():/vmlinuz-linux-cachyos-lts'
+    if [[ -n "$microcode_path" ]]; then
+      echo "module_path: boot():/$microcode_path"
+    fi
+    echo 'module_path: boot():/initramfs-linux-cachyos-lts-fallback.img'
+    echo "cmdline: $kernel_cmdline"
+  fi
+} > "$temporary_config"
+chmod 0644 "$temporary_config"
+mv -f -- "$temporary_config" "$limine_dir/limine.conf"
+trap - EXIT
+
+install -Dm0644 "$limine_share/BOOTX64.EFI" \
+  "$boot_dir/EFI/BOOT/BOOTX64.EFI"
+install -Dm0644 "$limine_share/BOOTX64.EFI" \
+  "$boot_dir/EFI/Devario/limine_x64.efi"
+install -Dm0644 "$limine_share/limine-bios.sys" \
+  "$limine_dir/limine-bios.sys"
+
+firmware=bios
+if [[ -d /sys/firmware/efi/efivars ]]; then
+  firmware=uefi
+fi
+
+if [[ "$firmware" == uefi && "$install_mode" == true ]] \
+  && command -v efibootmgr >/dev/null 2>&1; then
+  if ! efibootmgr --create --disk "$disk_device" --part "$boot_part_number" \
+    --label Devario --loader '\EFI\Devario\limine_x64.efi'; then
+    note "firmware boot-entry creation failed; the standard UEFI fallback remains installed"
+  fi
+fi
+
+partition_table="$(lsblk -dnro PTTYPE "$disk_device")"
+bios_partition_number=""
+if [[ "$partition_table" == gpt ]]; then
+  while read -r candidate_device candidate_type; do
+    if [[ "${candidate_type,,}" == "$bios_boot_type" ]]; then
+      bios_partition_number="$(lsblk -dnro PARTN "$candidate_device")"
+      break
+    fi
+  done < <(lsblk -lnpo NAME,PARTTYPE "$disk_device")
+fi
+
+if [[ "$partition_table" == dos ]]; then
+  limine bios-install "$disk_device"
+elif [[ "$partition_table" == gpt && -n "$bios_partition_number" ]]; then
+  limine bios-install "$disk_device" "$bios_partition_number"
+elif [[ "$firmware" == bios ]]; then
+  fail "legacy BIOS on GPT requires a BIOS boot partition"
+else
+  note "no BIOS boot partition found; installed UEFI Limine only"
+fi
+
+install -Dm0644 /dev/null "$installed_marker"
+note "Limine configuration and boot files are up to date"

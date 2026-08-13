@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Seafoam-Labs/devario-os/raw/main/release/source-manifest.schema.json",
+  "title": "Devario vendored source manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "repository", "sourceRevision", "artifacts"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "repository": { "type": "string", "format": "uri" },
+    "sourceRevision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id", "path", "kind", "size", "sha256", "upstream",
+          "declaredLicenses", "correspondingSource"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+          "path": { "type": "string", "minLength": 1 },
+          "kind": {
+            "enum": ["upstream-source", "dependency-cache", "build-tool-source"]
+          },
+          "size": { "type": "integer", "minimum": 1 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "upstream": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["url", "revision"],
+            "properties": {
+              "url": { "type": "string", "minLength": 1 },
+              "revision": { "type": "string", "minLength": 1 }
+            }
+          },
+          "declaredLicenses": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "correspondingSource": { "type": "boolean" },
+          "components": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "url", "revision", "declaredLicenses"],
+              "properties": {
+                "name": { "type": "string", "minLength": 1 },
+                "url": { "type": "string", "minLength": 1 },
+                "revision": { "type": "string", "minLength": 1 },
+                "declaredLicenses": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": { "type": "string", "minLength": 1 }
+                }
+              }
+            }
+          },
+          "notes": { "type": "string" }
+        }
+      }
+    }
+  }
+}

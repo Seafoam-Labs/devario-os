@@ -1,0 +1,47 @@
+diff --git a/compositor/aqueous/wlroots_log_wrapper.c b/compositor/aqueous/wlroots_log_wrapper.c
+--- a/compositor/aqueous/wlroots_log_wrapper.c
++++ b/compositor/aqueous/wlroots_log_wrapper.c
+@@ -1,6 +1,8 @@
+ // SPDX-FileCopyrightText: © 2021 The River Developers
+ // SPDX-License-Identifier: GPL-3.0-only
+ 
++#line 1 "aqueous/wlroots_log_wrapper.c"
++
+ #include <assert.h>
+ #include <stdarg.h>
+ #include <stdlib.h>
+diff --git a/compositor/build.zig b/compositor/build.zig
+--- a/compositor/build.zig
++++ b/compositor/build.zig
+@@ -214,6 +214,7 @@ pub fn build(b: *Build) void {
+             .use_lld = use_llvm,
+         });
+         river.build_id = .sha1;
++        river.each_lib_rpath = false;
+         river.root_module.addOptions("build_options", options);
+ 
+         river.root_module.linkSystemLibrary("libevdev", .{});
+diff --git a/compositor/scripts/build-wlroots-render-hook.sh b/compositor/scripts/build-wlroots-render-hook.sh
+--- a/compositor/scripts/build-wlroots-render-hook.sh
++++ b/compositor/scripts/build-wlroots-render-hook.sh
+@@ -62,5 +62,6 @@ meson setup "$build_dir" "$source_dir" \
+     --prefix="$prefix" \
+     --libdir=lib \
++    -Dicon_directory=/usr/share/icons \
+     -Dexamples=false \
+     -Dxwayland=enabled \
+     -Drenderers=vulkan \
+diff --git a/wm.toml b/wm.toml
+index 70a02db..e8fedbd 100644
+--- a/wm.toml
++++ b/wm.toml
+@@ -342,7 +342,8 @@ untrap_pointer        = "Super+grave"          # default; reserved for pointer
+ [keybinds.custom]
+ "Super+E"            = "spawn:nemo"
+ "Super+Shift+S"      = "builtin:screenshot"
+-"Super+B"            = "spawn:zen-browser"
++"Super+B"            = "spawn:firefox"
++"Super+I"            = "spawn:pkexec calamares"
+ "XF86AudioRaiseVolume"  = "spawn:wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+"
+ "XF86AudioLowerVolume"  = "spawn:wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"
+ "XF86AudioMute"         = "spawn:wpctl set-mute   @DEFAULT_AUDIO_SINK@ toggle"

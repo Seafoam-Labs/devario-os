@@ -1,0 +1,5 @@
+#!/bin/sh
+
+# greetd's one-shot live autologin enters the same UWSM lifecycle advertised
+# by the installed Aqueous Wayland session.
+exec /usr/bin/uwsm start -- aqueous-wm

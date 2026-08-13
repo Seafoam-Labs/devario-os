@@ -1,0 +1,13 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = linux-cachyos-lts
+Target = amd-ucode
+Target = intel-ucode
+Target = limine
+
+[Action]
+Description = Updating the Devario Limine bootloader...
+When = PostTransaction
+Exec = /usr/lib/devario/limine-update
