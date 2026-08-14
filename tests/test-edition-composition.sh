@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# This behavior test creates its own ordinary, controlled-release, and action-
+# snapshot identities below. Do not let a parent validator's authenticated
+# action context alter the ordinary fixture cases.
+unset DEVARIO_CORE_COMMIT
+unset DEVARIO_VALIDATED_ACTION_SNAPSHOT
+unset DEVARIO_ACTION_SNAPSHOT_ROOT
+unset DEVARIO_ACTION_SNAPSHOT_SENTINEL
+
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(cd -- "$script_dir/.." && pwd)"
 # shellcheck source=../scripts/lib/edition.sh
