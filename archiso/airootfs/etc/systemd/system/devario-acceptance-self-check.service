@@ -1,0 +1,14 @@
+[Unit]
+Description=Devario release acceptance self-check
+ConditionPathExists=/sys/firmware/qemu_fw_cfg/by_name/opt/org.devario/acceptance/raw
+Requires=shelly-keyring-init.service
+After=local-fs.target shelly-keyring-init.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/devario/acceptance-self-check
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

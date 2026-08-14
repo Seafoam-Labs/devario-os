@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Seafoam-Labs/devario-os/main/release/installation-lock.schema.json",
+  "title": "Devario Calamares installation disk lock",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "candidateSha256", "candidateVersion", "edition", "installer", "sourceImage", "installedDisk", "createdAt"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "candidateSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "candidateVersion": {"type": "string", "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
+    "edition": {"enum": ["community", "managed"]},
+    "installer": {"const": "calamares"},
+    "sourceImage": {"$ref": "#/$defs/file"},
+    "installedDisk": {"$ref": "#/$defs/disk"},
+    "createdAt": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {
+    "file": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "sha256", "size"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//)[^\\r\\n]+$"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "size": {"type": "integer", "minimum": 1}
+      }
+    },
+    "disk": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "sha256", "size", "format"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[^/\\r\\n]+$"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "size": {"type": "integer", "minimum": 1},
+        "format": {"enum": ["raw", "qcow2"]}
+      }
+    }
+  }
+}

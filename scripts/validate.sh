@@ -53,8 +53,12 @@ cleanup_validation_profile() {
   rm -rf -- "$profile_dir"
 }
 trap cleanup_validation_profile EXIT
+composition_identity_mode=normal
+if [[ "${DEVARIO_VALIDATED_ACTION_SNAPSHOT:-0}" == 1 ]]; then
+  composition_identity_mode=action-snapshot
+fi
 if ! devario_compose_profile \
-  "$base_profile_dir" "$edition_dir" "$profile_dir" "$project_dir"; then
+  "$base_profile_dir" "$edition_dir" "$profile_dir" "$project_dir" "$composition_identity_mode"; then
   exit 1
 fi
 
@@ -84,7 +88,10 @@ required_files=(
   "$profile_dir/airootfs/etc/greetd/config.toml"
   "$profile_dir/airootfs/etc/polkit-1/rules.d/49-devario-live-installer.rules"
   "$profile_dir/airootfs/etc/systemd/system/default.target"
+  "$profile_dir/airootfs/etc/systemd/system/devario-acceptance-self-check.service"
+  "$profile_dir/airootfs/etc/systemd/system/multi-user.target.wants/devario-acceptance-self-check.service"
   "$profile_dir/airootfs/etc/systemd/system/shelly-keyring-init.service"
+  "$profile_dir/airootfs/usr/lib/devario/acceptance-self-check"
   "$profile_dir/airootfs/usr/lib/devario/limine-update"
   "$profile_dir/airootfs/usr/lib/devario/prepare-target-kernel"
   "$profile_dir/airootfs/usr/local/bin/devario-aqueous-live-session"
@@ -134,6 +141,52 @@ required_files=(
   "$project_dir/scripts/makepkg-shelly.conf"
   "$project_dir/scripts/setup-qemu.sh"
   "$project_dir/scripts/lib/edition.sh"
+  "$project_dir/scripts/compare-release-artifacts.sh"
+  "$project_dir/scripts/test-image-boot.sh"
+  "$project_dir/scripts/reject-secret-material.py"
+  "$project_dir/scripts/render-release-os-release.py"
+  "$project_dir/scripts/build-external-packages-nspawn.sh"
+  "$project_dir/scripts/build-iso-controlled-nspawn.sh"
+  "$project_dir/scripts/create-core-input-lock.sh"
+  "$project_dir/scripts/verify-core-input-lock.sh"
+  "$project_dir/scripts/core-input-lock.py"
+  "$project_dir/scripts/verify-builder-attestation.sh"
+  "$project_dir/scripts/verify-builder-attestation.py"
+  "$project_dir/scripts/write-builder-attestation.sh"
+  "$project_dir/scripts/write-builder-attestation.py"
+  "$project_dir/scripts/verify-controlled-builder.sh"
+  "$project_dir/scripts/verify-image-boundary.sh"
+  "$project_dir/scripts/verify-repository-boundary.sh"
+  "$project_dir/scripts/tree-closure-digest.py"
+  "$project_dir/scripts/write-controlled-builder-manifest.py"
+  "$project_dir/scripts/lib/repository.sh"
+  "$project_dir/scripts/schemas/controlled-builder.schema.json"
+  "$project_dir/scripts/schemas/core-input-lock.schema.json"
+  "$project_dir/scripts/schemas/builder-attestation.schema.json"
+  "$project_dir/scripts/schemas/image-build-record.schema.json"
+  "$project_dir/scripts/validate-managed-action.sh"
+  "$project_dir/release/source-manifest.json"
+  "$project_dir/release/source-manifest.schema.json"
+  "$project_dir/release/generate-release-metadata.sh"
+  "$project_dir/release/generate-candidate-lock.sh"
+  "$project_dir/release/validate-candidate-lock.sh"
+  "$project_dir/release/generate-promotion-acceptance.sh"
+  "$project_dir/release/validate-promotion-acceptance.sh"
+  "$project_dir/release/generate-final-approval.sh"
+  "$project_dir/release/validate-final-approval.sh"
+  "$project_dir/release/promote-candidate.sh"
+  "$project_dir/release/validate-promotion.sh"
+  "$project_dir/release/approval-trust-policy.json"
+  "$project_dir/release/approval-keyring/.gitkeep"
+  "$project_dir/docs/RELEASE-POLICY.md"
+  "$project_dir/docs/CORRESPONDING-SOURCE.md"
+  "$project_dir/docs/IMAGE-ACCEPTANCE-MATRIX.md"
+  "$project_dir/docs/PUBLIC-RELEASE-CHECKLIST.md"
+  "$project_dir/.github/CODEOWNERS"
+  "$project_dir/.github/workflows/validate.yml"
+  "$project_dir/.github/actions/validate-managed/action.yml"
+  "$project_dir/editions/community/package-sources.conf"
+  "$project_dir/packages/devario-keyring/active-signer"
   "$project_dir/tools/devario-archiso/archiso-v89.tar.gz"
   "$project_dir/tools/devario-archiso/0001-bootstrap-with-shelly.patch"
   "$project_dir/tools/devario-archiso/0002-copy-late-airootfs-after-packages.patch"
@@ -144,6 +197,26 @@ required_files=(
   "$project_dir/tests/test-gpu-driver-setup.sh"
   "$project_dir/tests/test-prepare-target-kernel.sh"
   "$project_dir/tests/test-edition-composition.sh"
+  "$project_dir/tests/test-release-metadata.sh"
+  "$project_dir/tests/test-release-tree-symlinks.sh"
+  "$project_dir/tests/test-candidate-lock.sh"
+  "$project_dir/tests/test-reproducibility.sh"
+  "$project_dir/tests/test-acceptance-self-check.sh"
+  "$project_dir/tests/test-image-boot-harness.sh"
+  "$project_dir/tests/test-promotion-acceptance.sh"
+  "$project_dir/tests/test-final-approval.sh"
+  "$project_dir/tests/test-promotion.sh"
+  "$project_dir/tests/test-managed-action-contract.sh"
+  "$project_dir/tests/test-secret-material.sh"
+  "$project_dir/tests/test-repository-boundary.sh"
+  "$project_dir/tests/test-repository-closure.sh"
+  "$project_dir/tests/test-active-signer-trust.sh"
+  "$project_dir/tests/test-development-key-rejection.sh"
+  "$project_dir/tests/test-keyring-package-boundary.sh"
+  "$project_dir/tests/test-release-identity.sh"
+  "$project_dir/tests/test-core-input-lock-semantics.sh"
+  "$project_dir/tests/test-controlled-builder-closure.sh"
+  "$project_dir/tests/test-image-boundary.sh"
 )
 
 for path in "${required_files[@]}"; do
@@ -163,17 +236,26 @@ while IFS= read -r shell_file; do
   fi
 done < <(
   find "$project_dir/scripts" -maxdepth 1 -type f -name '*.sh' -print
+  find "$project_dir/release" -maxdepth 1 -type f -name '*.sh' -print
+  find "$project_dir/tests" -maxdepth 1 -type f -name '*.sh' -print
   find "$project_dir/packages" -mindepth 2 -maxdepth 2 -type f -name PKGBUILD -print
   printf '%s\n' "$project_dir/scripts/lib/edition.sh"
   printf '%s\n' "$profile_dir/profiledef.sh"
   printf '%s\n' "$profile_dir/late-airootfs/etc/skel/.bashrc"
   printf '%s\n' "$profile_dir/airootfs/usr/lib/devario/limine-update"
   printf '%s\n' "$profile_dir/airootfs/usr/lib/devario/prepare-target-kernel"
+  printf '%s\n' "$profile_dir/airootfs/usr/lib/devario/acceptance-self-check"
   printf '%s\n' "$project_dir/packages/devario-aqueous-desktop/gpu-driver-setup"
   printf '%s\n' "$project_dir/tests/fixtures/gpu-driver-setup/mock-modprobe"
   printf '%s\n' "$project_dir/tests/test-gpu-driver-setup.sh"
   printf '%s\n' "$project_dir/tests/test-prepare-target-kernel.sh"
 )
+
+while IFS= read -r python_file; do
+  if ! python3 -c 'import pathlib,sys; source=pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"); compile(source,sys.argv[1],"exec")' "$python_file"; then
+    fail "Python syntax check failed: ${python_file#"$project_dir/"}"
+  fi
+done < <(find "$project_dir/release" "$project_dir/scripts" -maxdepth 1 -type f -name '*.py' -print | sort)
 
 if ! bash "$project_dir/tests/test-gpu-driver-setup.sh"; then
   fail "GPU driver setup behavior tests failed"
@@ -185,6 +267,83 @@ fi
 if ! bash "$project_dir/tests/test-edition-composition.sh"; then
   fail "edition composition behavior tests failed"
 fi
+for release_test in \
+  test-release-metadata.sh \
+  test-release-tree-symlinks.sh \
+  test-candidate-lock.sh \
+  test-reproducibility.sh \
+  test-acceptance-self-check.sh \
+  test-image-boot-harness.sh \
+  test-promotion-acceptance.sh \
+  test-final-approval.sh \
+  test-promotion.sh \
+  test-managed-action-contract.sh; do
+  if ! bash "$project_dir/tests/$release_test"; then
+    fail "release contract test failed: $release_test"
+  fi
+done
+for boundary_test in \
+  test-secret-material.sh \
+  test-repository-boundary.sh \
+  test-repository-closure.sh \
+  test-active-signer-trust.sh \
+  test-development-key-rejection.sh \
+  test-keyring-package-boundary.sh \
+  test-release-identity.sh \
+  test-core-input-lock-semantics.sh \
+  test-controlled-builder-closure.sh \
+  test-image-boundary.sh; do
+  if ! bash "$project_dir/tests/$boundary_test"; then
+    fail "controlled-build/boundary test failed: $boundary_test"
+  fi
+done
+
+if ! python3 -c 'import jsonschema' >/dev/null 2>&1; then
+  fail 'python3-jsonschema is required for Draft 2020-12 release validation'
+else
+  while IFS= read -r schema_file; do
+    if ! python3 -c \
+      'import json,sys
+from jsonschema.validators import validator_for
+def strict_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate object key: {key}")
+        result[key] = value
+    return result
+with open(sys.argv[1], encoding="utf-8") as stream:
+    schema = json.load(stream, object_pairs_hook=strict_object)
+validator = validator_for(schema)
+validator.check_schema(schema)' \
+      "$schema_file"; then
+      fail "invalid JSON Schema: ${schema_file#"$project_dir/"}"
+    fi
+  done < <(find "$project_dir/release" "$project_dir/scripts/schemas" -type f -name '*.schema.json' -print | sort)
+  if ! python3 "$project_dir/release/validate-json.py" \
+    "$project_dir/release/source-manifest.schema.json" \
+    "$project_dir/release/source-manifest.json"; then
+    fail 'release/source-manifest.json failed strict schema validation'
+  fi
+  if ! python3 "$project_dir/release/validate-json.py" \
+    "$project_dir/release/trust-policy.schema.json" \
+    "$project_dir/release/approval-trust-policy.json"; then
+    fail 'release/approval-trust-policy.json failed strict schema validation'
+  fi
+fi
+
+secret_scan_args=(--tree "$project_dir")
+if [[ -d "$project_dir/.git" ]]; then secret_scan_args=(--git-tracked "$project_dir"); fi
+if ! python3 "$project_dir/scripts/reject-secret-material.py" "${secret_scan_args[@]}"; then
+  fail 'tracked source contains forbidden private-key material'
+fi
+
+while IFS= read -r action_use; do
+  action_ref="${action_use##*@}"
+  if [[ "$action_use" != uses:*./* && ! "$action_ref" =~ ^[0-9a-f]{40}$ ]]; then
+    fail "GitHub Action is not pinned to a full commit ID: $action_use"
+  fi
+done < <(grep -RhoE 'uses:[[:space:]]+[^[:space:]#]+' "$project_dir/.github")
 
 duplicates="$(sed -E '/^[[:space:]]*(#|$)/d' "$profile_dir/packages.x86_64" | sort | uniq -d)"
 if [[ -n "$duplicates" ]]; then
@@ -580,21 +739,30 @@ if ! grep -Fq 'if [[ "$package_name" == noctalia ]]' "$package_build_script" \
 fi
 
 if command -v makepkg >/dev/null 2>&1; then
+  makepkg_metadata_root="$(mktemp -d /tmp/devario-makepkg-metadata.XXXXXX)"
+  mkdir -p "$makepkg_metadata_root/packages" "$makepkg_metadata_root/sources" "$makepkg_metadata_root/build"
   for package_dir_name in "${!expected_pkgnames[@]}"; do
     if ! (
       cd "$project_dir/packages/$package_dir_name"
+      DEVARIO_MAKEPKG_PKGDEST="$makepkg_metadata_root/packages" \
+      DEVARIO_MAKEPKG_SRCPKGDEST="$makepkg_metadata_root/sources" \
+      DEVARIO_MAKEPKG_BUILDDIR="$makepkg_metadata_root/build" \
       PACMAN="$makepkg_adapter" makepkg --config "$makepkg_config" \
         --printsrcinfo >/dev/null
     ); then
       fail "$package_dir_name/PKGBUILD failed makepkg metadata validation"
     fi
   done
+  rm -rf -- "$makepkg_metadata_root"
 
   if command -v strace >/dev/null 2>&1; then
     makepkg_trace_dir="$(mktemp -d /tmp/devario-makepkg-trace.XXXXXX)"
     makepkg_trace="$makepkg_trace_dir/execve.log"
     makepkg_trace_stderr="$makepkg_trace_dir/strace.stderr"
     if ! PACMAN="$makepkg_adapter" \
+      DEVARIO_MAKEPKG_PKGDEST="$makepkg_trace_dir/packages" \
+      DEVARIO_MAKEPKG_SRCPKGDEST="$makepkg_trace_dir/sources" \
+      DEVARIO_MAKEPKG_BUILDDIR="$makepkg_trace_dir/build" \
       PKGDEST="$makepkg_trace_dir/packages" \
       BUILDDIR="$makepkg_trace_dir/build" \
       SRCDEST="$makepkg_trace_dir/sources" \
@@ -659,8 +827,9 @@ if grep -Eq "['\"]pacman([<>=][^'\"]*)?['\"]" \
 fi
 
 for runtime_placeholder in \
-  '@DEVARIO_RUNTIME_SIGLEVEL@' \
-  '@DEVARIO_RUNTIME_REPO@'; do
+  '@DEVARIO_CORE_RUNTIME_SIGLEVEL@' \
+  '@DEVARIO_CORE_RUNTIME_REPO@' \
+  '@DEVARIO_MANAGED_RUNTIME_REPOSITORY@'; do
   if ! grep -Fq "$runtime_placeholder" "$profile_dir/pacman.runtime.conf"; then
     fail "pacman.runtime.conf is missing placeholder $runtime_placeholder"
   fi
@@ -675,13 +844,15 @@ for alpm_config in \
   fi
 done
 
-if ! grep -Fq 'DEVARIO_REPO_URL' "$project_dir/scripts/build-iso.sh" \
-  || ! grep -Fq 'https://?*' "$project_dir/scripts/build-iso.sh"; then
-  fail "release ISO builds must require an explicit HTTPS Devario repository"
+if ! grep -Fq 'DEVARIO_CORE_REPO_URL' "$project_dir/scripts/build-iso.sh" \
+  || ! grep -Fq 'devario_validate_https_url "$core_runtime_url"' "$project_dir/scripts/build-iso.sh"; then
+  fail "release ISO builds must require an explicit credential-free HTTPS core repository"
 fi
 
 iso_nspawn_script="$project_dir/scripts/build-iso-nspawn.sh"
 for required_nspawn_iso_text in \
+  '--release-version' \
+  'build-iso-controlled-nspawn.sh' \
   '"$script_dir/build-packages-nspawn.sh" --prepare-only' \
   'run_container_root /usr/bin/shelly install standard --no-confirm' \
   'DEVARIO_WORK_DIR cannot be host-bound by the nspawn wrapper.' \
@@ -696,17 +867,24 @@ for required_nspawn_iso_text in \
   fi
 done
 
-if ! grep -Fq 'devario.db.tar.zst.sig' "$project_dir/scripts/build-iso.sh" \
-  || ! grep -Fq 'package_path.sig' "$project_dir/scripts/build-iso.sh"; then
+acceptance_unit="$profile_dir/airootfs/etc/systemd/system/devario-acceptance-self-check.service"
+acceptance_check="$profile_dir/airootfs/usr/lib/devario/acceptance-self-check"
+if ! grep -Fqx 'Requires=shelly-keyring-init.service' "$acceptance_unit" \
+  || ! grep -Eq '^After=.*\bshelly-keyring-init\.service\b' "$acceptance_unit" \
+  || ! grep -Fq '/var/lib/devario/shelly-keyring.ready' "$acceptance_check"; then
+  fail 'release acceptance must require successful Shelly keyring initialization'
+fi
+
+if ! grep -Fq 'devario_verify_repository "$staged_core_repo" devario-core' "$project_dir/scripts/build-iso.sh" \
+  || ! grep -Fq 'devario_gpgv_active_signature' "$project_dir/scripts/lib/repository.sh"; then
   fail "release ISO builds must reject unsigned repository metadata and packages"
 fi
 
-if ! grep -Fq 'gpgv --keyring' "$project_dir/scripts/build-iso.sh" \
-  || ! grep -Fq 'devario_keyring_source="$project_dir/packages/devario-keyring"' \
+if ! grep -Fq 'core_keyring_source="${DEVARIO_CORE_KEYRING_DIR:-$project_dir/packages/devario-keyring}"' \
     "$project_dir/scripts/build-iso.sh" \
-  || ! grep -Fq 'release_keyring="$devario_keyring_source/devario.gpg"' \
+  || ! grep -Fq 'devario_validate_keyring_bundle "$core_keyring_source" devario-core' \
     "$project_dir/scripts/build-iso.sh"; then
-  fail "release ISO builds must verify signatures against the packaged Devario key"
+  fail "release ISO builds must verify signatures against the fixed core keyring bundle"
 fi
 
 for required_kernel_preflight_text in \
@@ -722,8 +900,11 @@ for required_kernel_preflight_text in \
 done
 
 if ! grep -Fq 'keyring_packages=' "$project_dir/scripts/build-iso.sh" \
-  || ! grep -Fq 'usr/share/pacman/keyrings/devario.gpg' \
-    "$project_dir/scripts/build-iso.sh"; then
+  || ! grep -Fq \
+    'devario_verify_keyring_package "${keyring_packages[0]}" "$core_keyring_source" devario-core' \
+    "$project_dir/scripts/build-iso.sh" \
+  || ! grep -Fq 'devario_verify_keyring_package()' \
+    "$project_dir/scripts/lib/repository.sh"; then
   fail "release ISO builds must verify the trust root inside devario-keyring"
 fi
 
@@ -791,7 +972,7 @@ for required_iso_build_text in \
   'install -m 0600 /dev/null "$build_gpgdir/secring.gpg"' \
   '"$devario_shelly_key" --init "$build_gpgdir"' \
   '--populate-from /usr/share/pacman/keyrings --populate archlinux' \
-  '--populate-from "$devario_keyring_source" --populate devario' \
+  '--populate-from "$core_keyring_source" --populate devario' \
   '|| -e "$build_gpgdir/pubring.kbx"' \
   'GPGME_DEBUG="9:$gpgme_trace"' \
   'devario-iso-failure-report.log' \
@@ -920,6 +1101,7 @@ if [[ -n "$python_command" ]] \
     find "$profile_dir/airootfs/etc/calamares" \
       "$profile_dir/airootfs/usr/share/calamares/branding" \
       -type f \( -name '*.conf' -o -name '*.desc' \) -print
+    find "$project_dir/.github" -type f \( -name '*.yml' -o -name '*.yaml' \) -print
   )
   if ! "$python_command" -c \
     'import sys, yaml; d = yaml.safe_load(open(sys.argv[1], encoding="utf-8")); assert all(isinstance(d.get(k), dict) for k in ("strings", "images", "style", "uploadServer")); assert d["uploadServer"].get("type") == "none"' \
@@ -1218,7 +1400,7 @@ fi
 
 for required_line in \
   'ExecStart=/usr/bin/shelly keyring init' \
-  'ExecStart=/usr/bin/shelly keyring populate archlinux devario' \
+  'ExecStart=/usr/bin/shelly keyring populate archlinux devario-core' \
   'ExecStart=/usr/bin/install -Dm644 /dev/null /var/lib/devario/shelly-keyring.ready'; do
   if ! grep -Fxq "$required_line" "$keyring_unit"; then
     fail "shelly-keyring-init.service is missing: $required_line"
@@ -1309,6 +1491,9 @@ pacman_reference_is_allowed() {
     archiso/airootfs/etc/pacman.d/*)
       return 0
       ;;
+    archiso/airootfs/usr/lib/devario/acceptance-self-check)
+      return 0
+      ;;
     archiso/late-airootfs/usr/share/devario/fastfetch/config.jsonc)
       [[ "$text" == *'"format": "{pacman} (Shelly)"'* ]]
       return
@@ -1346,7 +1531,7 @@ pacman_reference_is_allowed() {
       [[ "$text" == *pacman.conf* \
         || "$text" == *pacman.runtime.conf* \
         || "$text" == *DEVARIO_PACMAN_CONF* \
-        || "$text" == *usr/share/pacman/keyrings/devario.gpg* \
+        || "$text" == *usr/share/pacman/keyrings/* \
         || "$text" == *usr/share/pacman/keyrings/archlinux.gpg* \
         || "$text" == *'--populate-from /usr/share/pacman/keyrings'* ]]
       return
@@ -1357,7 +1542,25 @@ pacman_reference_is_allowed() {
       ;;
     scripts/build-packages-nspawn.sh)
       [[ "$text" == *'/usr/share/pacman/keyrings/archlinux.gpg'* \
+        || "$text" == *'var/lib/pacman/'* \
         || "$text" == *mirrorlist* ]]
+      return
+      ;;
+    scripts/build-external-packages-nspawn.sh|scripts/build-iso-controlled-nspawn.sh)
+      [[ "$text" == *'usr/share/pacman/keyrings/'* \
+        || "$text" == *'var/lib/pacman/'* ]]
+      return
+      ;;
+    scripts/lib/repository.sh)
+      [[ "$text" == *'usr/share/pacman/keyrings/'* ]]
+      return
+      ;;
+    scripts/verify-controlled-builder.sh|scripts/verify-image-boundary.sh)
+      [[ "$text" == *'usr/share/pacman/keyrings/'* \
+        || "$text" == *'var/lib/pacman/'* \
+        || "$text" == *pacman.conf* \
+        || "$text" == *pacman_config* \
+        || "$text" == *PACMAN_CONFIG* ]]
       return
       ;;
     scripts/makepkg-shelly-adapter.sh)
@@ -1494,18 +1697,18 @@ fi
 # useful before the first package build, so an empty repo is not an error here.
 if command -v bsdtar >/dev/null 2>&1; then
   shopt -s nullglob
-  devario_artifacts=("$project_dir"/repo/*.pkg.tar.zst)
-  runtime_artifacts=("$project_dir"/repo/devario-alpm-runtime-[0-9]*.pkg.tar.zst)
-  shelly_artifacts=("$project_dir"/repo/shelly-[0-9]*.pkg.tar.zst)
-  ckbcomp_artifacts=("$project_dir"/repo/ckbcomp-[0-9]*.pkg.tar.zst)
-  aqueous_artifacts=("$project_dir"/repo/aqueous-[0-9]*.pkg.tar.zst)
-  aqueous_session_artifacts=("$project_dir"/repo/aqueous-session-*.pkg.tar.zst)
-  aqueous_noctalia_artifacts=("$project_dir"/repo/aqueous-noctalia-*.pkg.tar.zst)
-  noctalia_artifacts=("$project_dir"/repo/noctalia-[0-9]*.pkg.tar.zst)
-  noctalia_greeter_artifacts=("$project_dir"/repo/noctalia-greeter-[0-9]*.pkg.tar.zst)
-  desktop_meta_artifacts=("$project_dir"/repo/devario-aqueous-desktop-[0-9]*.pkg.tar.zst)
+  devario_artifacts=("$project_dir"/repo/core/*.pkg.tar.zst)
+  runtime_artifacts=("$project_dir"/repo/core/devario-alpm-runtime-[0-9]*.pkg.tar.zst)
+  shelly_artifacts=("$project_dir"/repo/core/shelly-[0-9]*.pkg.tar.zst)
+  ckbcomp_artifacts=("$project_dir"/repo/core/ckbcomp-[0-9]*.pkg.tar.zst)
+  aqueous_artifacts=("$project_dir"/repo/core/aqueous-[0-9]*.pkg.tar.zst)
+  aqueous_session_artifacts=("$project_dir"/repo/core/aqueous-session-*.pkg.tar.zst)
+  aqueous_noctalia_artifacts=("$project_dir"/repo/core/aqueous-noctalia-*.pkg.tar.zst)
+  noctalia_artifacts=("$project_dir"/repo/core/noctalia-[0-9]*.pkg.tar.zst)
+  noctalia_greeter_artifacts=("$project_dir"/repo/core/noctalia-greeter-[0-9]*.pkg.tar.zst)
+  desktop_meta_artifacts=("$project_dir"/repo/core/devario-aqueous-desktop-[0-9]*.pkg.tar.zst)
 
-  stale_repository_files=("$project_dir"/repo/*.old "$project_dir"/repo/*.old.sig)
+  stale_repository_files=("$project_dir"/repo/core/*.old "$project_dir"/repo/core/*.old.sig)
   if (( ${#stale_repository_files[@]} )); then
     fail "repository contains stale repo-add output: ${stale_repository_files[*]##*/}"
   fi
@@ -1517,7 +1720,7 @@ if command -v bsdtar >/dev/null 2>&1; then
       linux-cachyos-lts linux-cachyos-lts-headers \
       noctalia noctalia-greeter shelly; do
       expected_artifacts=(
-        "$project_dir"/repo/"$expected_artifact_package"-[0-9]*.pkg.tar.zst
+        "$project_dir"/repo/core/"$expected_artifact_package"-[0-9]*.pkg.tar.zst
       )
       if (( ${#expected_artifacts[@]} != 1 )); then
         fail "repository must contain exactly one $expected_artifact_package package artifact"
@@ -1673,8 +1876,8 @@ if command -v bsdtar >/dev/null 2>&1; then
         fail "$(basename -- "$signed_artifact") lacks a valid Devario signature"
       fi
     done
-    for repository_database in devario.db.tar.zst devario.files.tar.zst; do
-      database_path="$project_dir/repo/$repository_database"
+    for repository_database in devario-core.db.tar.zst devario-core.files.tar.zst; do
+      database_path="$project_dir/repo/core/$repository_database"
       if [[ ! -s "$database_path" || ! -s "$database_path.sig" ]] \
         || ! gpgv --keyring "$project_dir/packages/devario-keyring/devario.gpg" \
           "$database_path.sig" "$database_path" >/dev/null 2>&1; then

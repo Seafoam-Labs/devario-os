@@ -25,6 +25,10 @@ Its UID contains an `.invalid` address, it expires on 2027-08-03, and it is
 intended only for local development images. Production private keys are
 offline-controlled or held in an approved signing service, never stored in Git,
 CI variables exposed to builds, an ISO, or a repository checkout.
+The Managed development signer
+`580E40BB6D6E8745D69D89CC6E6C90512593874C` is equally forbidden for human
+approval. Both development fingerprints are permanently listed in the fixed
+approval policy and cannot be promoted into its approved set.
 
 Promotion copies already-built bytes. It never rebuilds a package under the
 same version, never re-signs a core package as managed, and never changes an
@@ -54,6 +58,108 @@ Each release has an immutable record containing:
 artifact SBOM, and unsigned provenance documents. It deliberately cannot sign.
 The approver compares the subjects against the staged artifacts before signing
 the metadata checksum file through the production trust process.
+
+Every controlled build sets an explicit `SOURCE_DATE_EPOCH`, an HTTPS
+`DEVARIO_BUILDER_ID`, and a unique `DEVARIO_INVOCATION_ID`. Metadata creation
+is fixed to `Person: ZoeyErinBauer`; an environment variable cannot change that
+identity. JSON release documents are validated with their checked-in Draft
+2020-12 schemas, including duplicate-key rejection.
+
+Every ISO build also receives its release version before construction. The
+canonical value matches `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` and is identical
+in the immutable core input lock, signed builder attestation, embedded
+build-source record, final `/etc/os-release`, release metadata, and candidate
+lock. A caller cannot name already-built bytes with a different version.
+
+## Candidate and reproducibility contracts
+
+`release/generate-candidate-lock.sh` creates candidate-lock version 2. It
+locks every regular file, size, mode, and SHA-256 digest in the closed artifact
+and metadata trees. It also binds the controlled core input lock, builder
+manifest and detached signature, builder attestation and detached signature,
+and, for Managed, the overlay input lock. The signed attestation covers the
+exact builder output tree; a Managed attestation and core input lock both bind
+the canonical `MANAGED-INPUT-LOCK.json`. Symlinks, special files, empty
+directories, untracked build inputs, and placeholder evidence are not release
+inputs. The publishable candidate artifact tree must be an exact path, digest,
+and size subset of the attested builder outputs; per-run attestations and their
+signatures remain evidence rather than reproducible release subjects.
+
+For a production candidate, validation regenerates the core input lock from
+the exact bootstrap archive/signature, immutable Arch snapshot databases,
+Arch keyring, Shelly bootstrap/signature, controlled-builder manifest,
+dependency closure, repository closures, and `SOURCE_DATE_EPOCH`. Managed
+validation independently regenerates its input lock with the overlay-owned
+validator and distinct keyring. Merely supplying JSON with matching digests is
+not sufficient.
+
+Two independent controlled invocations must produce the same deterministic
+subjects. `scripts/compare-release-artifacts.sh` requires distinct invocation
+IDs and distinct candidate-lock digests while requiring the same commits,
+input-lock digests, `SOURCE_DATE_EPOCH`, and exact artifact bytes. Per-run SLSA
+`runDetails` are retained but are deliberately not treated as reproducible
+subjects. A difference cannot be waived in a final approval.
+
+## Runtime acceptance and installation review
+
+The exact candidate ISO boots under both BIOS and UEFI. The exact disk created
+by Calamares then boots under both BIOS and UEFI. The four machine-readable
+results and console logs use a single exact marker and are bound to the
+candidate, ISO, installed-disk lock, and edition. An unrelated ISO, a qcow2
+backing/data file, a second or suffixed marker, or a writable/extra evidence
+file invalidates the evidence set.
+
+The QEMU checks do not pretend to automate a graphical Calamares installation.
+`installation-review.json` records the manual graphical review and is signed
+by the fixed approval trust root. It names `ZoeyErinBauer` and includes the
+current `reviewerFingerprint`; accepting a signer-selected public key is
+forbidden. See [IMAGE-ACCEPTANCE-MATRIX.md](IMAGE-ACCEPTANCE-MATRIX.md).
+
+`release/generate-promotion-acceptance.sh` finalizes the closed evidence tree
+and canonical `ACCEPTANCE.SHA256SUMS`. `release/validate-promotion-acceptance.sh`
+revalidates every nested schema, digest, result/log pair, disk, installation
+lock, and review signature.
+
+## Final approval and digest promotion
+
+`release/generate-final-approval.sh` creates an unsigned approval template
+binding the candidate, reproducibility report, acceptance manifest, evidence
+checksum manifest, source commits, artifact set, source channel, and target
+channel. A Managed approval additionally requires `--edition-evidence` and
+binds the exact basename and SHA-256 digest of the overlay's semantically
+validated `managed-lock.json`; Community approvals require this binding to be
+null and reject the argument. `ZoeyErinBauer` signs those exact bytes with the
+separately controlled active approval key. The generator cannot sign and
+publishing automation cannot choose a replacement trust root.
+
+`release/promote-candidate.sh` performs the final checks against clean Git
+HEADs and the exact core/Managed production keyring bundles, revalidates every
+package/database/source signature, then copies the already-approved bytes to a
+new immutable destination. It does not rebuild or overwrite. The resulting
+`promotion-record.json` and canonical `PROMOTION.SHA256SUMS` are checked by
+`release/validate-promotion.sh`. Managed promotion retains the exact approved
+`managed-lock.json` under the immutable `edition-evidence/` closure and
+revalidates its name, digest, bytes, and read-only state. Community promotion
+rejects that directory and binding.
+
+Promotion validation is never based on the destination record alone. It must
+also receive the exact candidate lock, signed approval and signature,
+reproducibility report, acceptance manifest and checksum closure, source ISO,
+expected target channel, and the exact Managed edition evidence when
+applicable. Their digests are bound in the promotion record; fixed trust and
+every nested acceptance binding are revalidated. A forged record plus newly
+generated checksums therefore cannot authenticate a destination.
+
+The only allowed transitions are `devario-core-testing` to
+`devario-core-stable` for Community and `devario-managed-pilot` to
+`devario-managed-stable` for Managed. Cross-edition and arbitrary channel
+transitions fail before promotion.
+
+The checked-in approval policy intentionally has no active key. A production
+release remains fail-closed until Zoey provisions the real approval public key
+and updates the fixed policy through an ordinary reviewed source commit. No
+private key, customer credential, or synthetic acceptance result belongs in
+this repository.
 
 ## Release gates
 

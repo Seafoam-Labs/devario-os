@@ -8,7 +8,7 @@ ConditionPathExists=!/var/lib/devario/shelly-keyring.ready
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/bin/shelly keyring init
-ExecStart=/usr/bin/shelly keyring populate archlinux devario
+ExecStart=/usr/bin/shelly keyring populate archlinux devario-core
 ExecStart=/usr/bin/install -Dm644 /dev/null /var/lib/devario/shelly-keyring.ready
 
 [Install]

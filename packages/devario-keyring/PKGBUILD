@@ -1,5 +1,5 @@
 pkgname=devario-keyring
-pkgver=20260803
+pkgver=20260814
 pkgrel=1
 pkgdesc="Devario repository signing keys"
 arch=('any')
@@ -9,14 +9,22 @@ source=(
   'devario.gpg'
   'devario-trusted'
   'devario-revoked'
+  'active-signer'
 )
-sha256sums=('SKIP' 'SKIP' 'SKIP')
+sha256sums=(
+  '9af97e6574213ad362602e56c08ca3dc8ab31cf8574f38efc9a145f041971529'
+  'd95ac6e81dc9748ebc6767073884fa3f07b622051a3931e03eb9df0411594419'
+  'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+  '60673a78e04ae97efe2c2fd5a1e13b0fe353d9ba8f827d3d74feb5c9bdbbd11f'
+)
 
 package() {
   install -Dm644 "$srcdir/devario.gpg" \
-    "$pkgdir/usr/share/pacman/keyrings/devario.gpg"
+    "$pkgdir/usr/share/pacman/keyrings/devario-core.gpg"
   install -Dm644 "$srcdir/devario-trusted" \
-    "$pkgdir/usr/share/pacman/keyrings/devario-trusted"
+    "$pkgdir/usr/share/pacman/keyrings/devario-core-trusted"
   install -Dm644 "$srcdir/devario-revoked" \
-    "$pkgdir/usr/share/pacman/keyrings/devario-revoked"
+    "$pkgdir/usr/share/pacman/keyrings/devario-core-revoked"
+  install -Dm644 "$srcdir/active-signer" \
+    "$pkgdir/usr/share/devario/keyrings/devario-core-active-signer"
 }

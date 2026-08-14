@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Seafoam-Labs/devario-os/main/release/image-acceptance.schema.json",
+  "title": "Devario QEMU image acceptance result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "candidateSha256", "candidateVersion", "edition", "mode", "firmware", "image", "log", "marker", "outcome"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "candidateSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "candidateVersion": {"type": "string", "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
+    "edition": {"enum": ["community", "managed"]},
+    "mode": {"enum": ["live", "installed"]},
+    "firmware": {"enum": ["bios", "uefi"]},
+    "image": {"$ref": "#/$defs/file"},
+    "log": {"$ref": "#/$defs/file"},
+    "marker": {"type": "string", "pattern": "^DEVARIO_ACCEPTANCE:PASS mode=(live|installed) firmware=(bios|uefi) edition=(community|managed)$"},
+    "outcome": {"const": "pass"}
+  },
+  "$defs": {
+    "file": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "sha256", "size"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[^/\\r\\n]+$"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "size": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

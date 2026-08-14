@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Seafoam-Labs/devario-os/main/release/installation-review.schema.json",
+  "title": "Signed Devario Calamares review",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "candidateSha256", "candidateVersion", "installationLockSha256", "installedDiskSha256", "edition", "installer", "reviewer", "reviewerFingerprint", "reviewedAt", "checks", "decision"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "candidateSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "candidateVersion": {"type": "string", "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
+    "installationLockSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "installedDiskSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "edition": {"enum": ["community", "managed"]},
+    "installer": {"const": "calamares"},
+    "reviewer": {"const": "ZoeyErinBauer"},
+    "reviewerFingerprint": {"type": "string", "pattern": "^[0-9A-F]{40,64}$"},
+    "reviewedAt": {"type": "string", "format": "date-time"},
+    "checks": {
+      "type": "object", "additionalProperties": false,
+      "required": ["graphicalLaunch", "targetSelection", "partitionSummary", "bootloaderChoice", "completionScreen", "noSecretsCaptured"],
+      "properties": {
+        "graphicalLaunch": {"const": true}, "targetSelection": {"const": true},
+        "partitionSummary": {"const": true}, "bootloaderChoice": {"const": true},
+        "completionScreen": {"const": true}, "noSecretsCaptured": {"const": true}
+      }
+    },
+    "decision": {"const": "pass"}
+  }
+}

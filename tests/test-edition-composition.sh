@@ -33,6 +33,7 @@ write_config() {
   : > "$edition_dir/packages.add"
   : > "$edition_dir/packages.remove"
   : > "$edition_dir/replacements.allow"
+  : > "$edition_dir/package-sources.conf"
 }
 
 compose() {
@@ -52,6 +53,17 @@ expect_failure() {
   fi
   if ! grep -Fq 'Edition error:' "$test_root/failure.stderr"; then
     fail "$description did not report an edition error"
+  fi
+}
+
+expect_contract_failure() {
+  local description="$1"
+  shift
+  if "$@" > "$test_root/failure.stdout" 2> "$test_root/failure.stderr"; then
+    fail "$description unexpectedly succeeded"
+  fi
+  if ! grep -Eq '^(Edition|Repository) error:' "$test_root/failure.stderr"; then
+    fail "$description did not report an edition/package-source contract error"
   fi
 }
 
@@ -93,6 +105,7 @@ fi
 add_remove="$core/editions/add-remove"
 write_config "$add_remove" add-remove
 printf '%s\n' thunderbird > "$add_remove/packages.add"
+printf '%s\n' thunderbird=arch > "$add_remove/package-sources.conf"
 printf '%s\n' firefox > "$add_remove/packages.remove"
 mkdir -p "$add_remove/airootfs/etc/devario"
 printf '%s\n' managed > "$add_remove/airootfs/etc/devario/channel"
@@ -124,9 +137,11 @@ expect_failure 'stale replacement allowlist entry' compose \
 bad_package="$core/editions/bad-package"
 write_config "$bad_package" bad-package
 printf '%s\n' aqueous > "$bad_package/packages.add"
+printf '%s\n' aqueous=core > "$bad_package/package-sources.conf"
 expect_failure 'addition of an existing package' compose \
   "$core" "$bad_package" "$test_root/add-existing-output"
 printf '%s\n' 'not installed' > "$bad_package/packages.add"
+: > "$bad_package/package-sources.conf"
 expect_failure 'package name containing whitespace' compose \
   "$core" "$bad_package" "$test_root/bad-package-name-output"
 : > "$bad_package/packages.add"
@@ -142,6 +157,32 @@ write_config "$duplicate" duplicate
 printf '%s\n' thunderbird thunderbird > "$duplicate/packages.add"
 expect_failure 'duplicate package addition' compose \
   "$core" "$duplicate" "$test_root/duplicate-output"
+
+missing_origin="$core/editions/missing-origin"
+write_config "$missing_origin" missing-origin
+printf '%s\n' thunderbird > "$missing_origin/packages.add"
+expect_contract_failure 'missing package origin mapping' compose \
+  "$core" "$missing_origin" "$test_root/missing-origin-output"
+
+extra_origin="$core/editions/extra-origin"
+write_config "$extra_origin" extra-origin
+printf '%s\n' thunderbird=arch > "$extra_origin/package-sources.conf"
+expect_contract_failure 'extra package origin mapping' compose \
+  "$core" "$extra_origin" "$test_root/extra-origin-output"
+
+duplicate_origin="$core/editions/duplicate-origin"
+write_config "$duplicate_origin" duplicate-origin
+printf '%s\n' thunderbird > "$duplicate_origin/packages.add"
+printf '%s\n' thunderbird=arch thunderbird=core > "$duplicate_origin/package-sources.conf"
+expect_contract_failure 'duplicate package origin mapping' compose \
+  "$core" "$duplicate_origin" "$test_root/duplicate-origin-output"
+
+managed_community="$core/editions/managed-community"
+write_config "$managed_community" community
+printf '%s\n' devario-managed-agent > "$managed_community/packages.add"
+printf '%s\n' devario-managed-agent=managed > "$managed_community/package-sources.conf"
+expect_failure 'managed package origin in Community' compose \
+  "$core" "$managed_community" "$test_root/managed-community-output"
 
 bad_allow="$core/editions/bad-allow"
 write_config "$bad_allow" bad-allow
@@ -190,8 +231,8 @@ expect_failure 'unknown edition config key' compose \
 locked_core="$test_root/locked core"
 make_core "$locked_core"
 git -C "$locked_core" init -q
-git -C "$locked_core" config user.name 'Edition Test'
-git -C "$locked_core" config user.email edition-test@example.invalid
+git -C "$locked_core" config user.name 'ZoeyErinBauer'
+git -C "$locked_core" config user.email '40698010+ZoeyErinBauer@users.noreply.github.com'
 git -C "$locked_core" add .
 git -C "$locked_core" commit -qm base
 locked_commit="$(git -C "$locked_core" rev-parse HEAD)"
@@ -200,6 +241,27 @@ write_config "$external" external
 printf 'devario_os_commit=%s\n' "$locked_commit" > "$external/base.lock"
 external_output="$test_root/external output"
 compose "$locked_core" "$external" "$external_output"
+printf '%s\n' 'devario_os_commit=0000000000000000000000000000000000000000' > "$external/base.lock"
+if DEVARIO_CORE_COMMIT=0000000000000000000000000000000000000000 \
+  compose "$locked_core" "$external" "$test_root/forged-override-output" >/dev/null 2>&1; then
+  fail 'an ordinary composition accepted a caller-forged DEVARIO_CORE_COMMIT override'
+fi
+action_core="$test_root/action core"
+mkdir "$action_core"
+git -C "$locked_core" archive --format=tar HEAD | tar -C "$action_core" -xf -
+action_sentinel="$test_root/action-snapshot.lock"
+printf 'devario_os_commit=%s\n' "$locked_commit" > "$action_sentinel"
+printf 'devario_os_commit=%s\n' "$locked_commit" > "$external/base.lock"
+mkdir "$test_root/action-snapshot-output"
+DEVARIO_CORE_COMMIT="$locked_commit" DEVARIO_VALIDATED_ACTION_SNAPSHOT=1 \
+DEVARIO_ACTION_SNAPSHOT_ROOT="$action_core" DEVARIO_ACTION_SNAPSHOT_SENTINEL="$action_sentinel" \
+  devario_compose_profile "$action_core/archiso" "$external" "$test_root/action-snapshot-output" "$action_core" action-snapshot
+mkdir "$test_root/missing-sentinel-output"
+if DEVARIO_CORE_COMMIT="$locked_commit" DEVARIO_VALIDATED_ACTION_SNAPSHOT=1 \
+  DEVARIO_ACTION_SNAPSHOT_ROOT="$action_core" DEVARIO_ACTION_SNAPSHOT_SENTINEL="$test_root/missing" \
+  devario_compose_profile "$action_core/archiso" "$external" "$test_root/missing-sentinel-output" "$action_core" action-snapshot >/dev/null 2>&1; then
+  fail 'an action snapshot accepted a missing validation-only sentinel'
+fi
 printf '%s\n' 'devario_os_commit=0000000000000000000000000000000000000000' \
   > "$external/base.lock"
 expect_failure 'mismatched external base lock' compose \

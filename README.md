@@ -221,6 +221,9 @@ every package and the repository database automatically:
 ./scripts/build-packages.sh
 ```
 
+Core artifacts are written only to `repo/core/`; that directory is never
+shared with managed-edition artifacts.
+
 Pass package-directory names to rebuild only selected packages while retaining
 the other existing repository artifacts. Kernel updates should be built in the
 official baseline container so host ISA settings cannot leak into release
@@ -248,6 +251,8 @@ contract in `editions/community/`. An edition directory contains:
 
 - `edition.conf` with validated display and ISO metadata
 - `packages.add` and `packages.remove`, one package name per line
+- `package-sources.conf`, with exactly one `package_name=arch|core|managed`
+  origin for every `packages.add` entry and no extra mappings
 - `replacements.allow`, listing every exact base-profile file it may replace
 - optional `airootfs/` and `late-airootfs/` configuration overlays
 
@@ -255,7 +260,8 @@ An out-of-repository edition must also provide `base.lock` containing exactly
 `devario_os_commit=<40-character-commit>`. Validation and builds reject a
 mismatched or dirty core checkout, undeclared file collisions, stale
 replacement allowances, unsafe symlinks, special files, executable overlay
-content, and removal of required core packages. Edition-specific executable
+content, ambiguous package origins, managed origins in Community, and removal
+of required core packages. Edition-specific executable
 code belongs in a package, where its ownership, modes, dependencies, and
 provenance can be validated.
 
@@ -325,7 +331,7 @@ example:
 
 ```sh
 sudo env \
-  DEVARIO_REPO_URL=https://repo.seafoam-labs.org/devario/x86_64 \
+  DEVARIO_CORE_REPO_URL=https://repo.seafoam-labs.org/devario-core/x86_64 \
   ./scripts/build-iso-nspawn.sh
 ```
 
@@ -333,22 +339,67 @@ sudo env \
 
 With no `DEVARIO_REPO_URL`, the ISO builder embeds the development repository at `/opt/devario/repo` and configures the installed system to use it with `Optional TrustAll`. That mode works offline but is not suitable for publication. The temporary repository used only while constructing the image has `SigLevel = Never`, because the build host does not own Devario's trust root; this does not become the installed configuration.
 
-For a release, export the public half of an existing offline-controlled signing key, build signed artifacts with that key, and provide the production HTTPS repository URL:
+For a release, export the public half of an existing offline-controlled signing
+key into a reviewed source commit. Release artifacts are produced only by the
+fresh, one-shot controlled nspawn wrappers; a native script cannot claim
+release mode. Supply immutable bootstrap/snapshot inputs, an external
+invoking-user-owned mode-0700 signing home, and a fresh output directory:
 
 ```sh
 DEVARIO_GNUPGHOME=/secure/devario-gnupg \
   DEVARIO_SIGNING_KEY=<fingerprint> \
   ./scripts/init-repository-key.sh
 
-DEVARIO_GNUPGHOME=/secure/devario-gnupg \
+sudo env DEVARIO_RELEASE_BUILD=1 \
+  DEVARIO_BOOTSTRAP_URL=https://archive.example.org/archlinux-bootstrap-2026.08.14.tar.zst \
+  DEVARIO_ARCH_SNAPSHOT_URL=https://archive.archlinux.org/repos/2026/08/14/ \
+  DEVARIO_NSPAWN_ROOT=/var/lib/machines/devario-core-release-2026.08.14 \
+  DEVARIO_GNUPGHOME=/secure/devario-gnupg \
   DEVARIO_SIGNING_KEY=<fingerprint> \
-  ./scripts/build-packages.sh
+  ./scripts/build-packages-nspawn.sh --output /release/2026.08.14/packages
 
-sudo DEVARIO_REPO_URL=https://packages.example.org/devario \
-  ./scripts/build-iso.sh
+sudo env DEVARIO_RELEASE_BUILD=1 \
+  DEVARIO_BOOTSTRAP_URL=https://archive.example.org/archlinux-bootstrap-2026.08.14.tar.zst \
+  DEVARIO_ARCH_SNAPSHOT_URL=https://archive.archlinux.org/repos/2026/08/14/ \
+  DEVARIO_NSPAWN_ROOT=/var/lib/machines/devario-iso-release-2026.08.14 \
+  DEVARIO_GNUPGHOME=/secure/devario-gnupg \
+  DEVARIO_SIGNING_KEY=<fingerprint> \
+  DEVARIO_CORE_REPO_DIR=/release/2026.08.14/packages/devario-core \
+  DEVARIO_CORE_REPO_URL=https://packages.example.org/devario-core/x86_64 \
+  DEVARIO_OUTPUT_DIR=/release/2026.08.14/image \
+  ./scripts/build-iso-nspawn.sh --release-version 2026.08.14
 ```
 
-Release-mode ISO construction rejects non-HTTPS repository URLs and unsigned artifacts, then verifies every package and the repository database against the public key packaged by `devario-keyring`. It writes a runtime `/etc/pacman.conf` that requires Devario package signatures. Replace the example URL with the real repository endpoint.
+The release version must match
+`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`. It is bound in the signed input lock and
+attestation, embedded in the image build-source record, and rendered into
+`/etc/os-release`; candidate metadata cannot supply a different version later.
+The closed output also retains `CORE-INPUT-LOCK.json`,
+`CONTROLLED-BUILDER.json` and its signature, and
+`BUILDER-ATTESTATION.json` and its signature.
+
+Release-mode ISO construction rejects non-HTTPS repository URLs and unsigned
+artifacts, then verifies every package and repository database against the
+active production signer in the packaged rotation-safe public bundle. It
+writes a runtime `/etc/pacman.conf` requiring signatures. Replace the example
+URLs with the real immutable/repository endpoints.
+
+Build managed packages through the core-controlled external-package interface;
+the input root keeps core repository bytes and the two public trust bundles
+physically distinct:
+
+```sh
+sudo env \
+  DEVARIO_BOOTSTRAP_URL=https://archive.example.org/archlinux-bootstrap-2026.08.14.tar.zst \
+  DEVARIO_ARCH_SNAPSHOT_URL=https://archive.archlinux.org/repos/2026/08/14/ \
+  DEVARIO_NSPAWN_ROOT=/var/lib/machines/devario-managed-release-2026.08.14 \
+  DEVARIO_GNUPGHOME=/secure/devario-managed-gnupg \
+  DEVARIO_SIGNING_KEY=<managed-fingerprint> \
+  ./scripts/build-packages-nspawn.sh --managed-build \
+    --managed-overlay ../devario-managed-overlay \
+    --managed-input-root /release/2026.08.14/managed-input \
+    --output /release/2026.08.14/managed-packages
+```
 
 Before publishing a release:
 
@@ -446,7 +497,8 @@ packages/aqueous/                Aqueous compositor, UWSM session, and Noctalia 
 packages/noctalia/               Pinned Noctalia shell package
 packages/noctalia-greeter/       Pinned greetd-native Noctalia Greeter package
 packages/devario-aqueous-desktop/ Complete desktop dependency set and target greetd template
-repo/                            Generated local binary repository
+repo/core/                       Generated core-only local binary repository
+repo/managed/                    Reserved physical boundary for managed artifacts
 scripts/                         Package, validation, and ISO build entry points
 tools/devario-archiso/           Checksummed Archiso v89 source and Shelly bootstrap patch
 ```

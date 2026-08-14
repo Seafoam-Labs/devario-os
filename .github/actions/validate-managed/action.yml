@@ -1,0 +1,22 @@
+name: Validate pinned Managed overlay
+description: Validate devario-managed-overlay against this exact public core revision.
+
+runs:
+  using: composite
+  steps:
+    - name: Verify pin and validate exact source snapshots
+      shell: bash
+      env:
+        DEVARIO_ACTION_REPOSITORY: ${{ github.action_repository }}
+        DEVARIO_ACTION_REF: ${{ github.action_ref }}
+        DEVARIO_ACTION_PATH: ${{ github.action_path }}
+        DEVARIO_CALLER_REPOSITORY: ${{ github.repository }}
+        DEVARIO_MANAGED_WORKSPACE: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        "$DEVARIO_ACTION_PATH/../../../scripts/validate-managed-action.sh" \
+          --action-repository "$DEVARIO_ACTION_REPOSITORY" \
+          --action-ref "$DEVARIO_ACTION_REF" \
+          --caller-repository "$DEVARIO_CALLER_REPOSITORY" \
+          --action-path "$DEVARIO_ACTION_PATH" \
+          --managed-workspace "$DEVARIO_MANAGED_WORKSPACE"

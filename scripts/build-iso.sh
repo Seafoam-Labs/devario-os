@@ -5,12 +5,17 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(cd -- "$script_dir/.." && pwd)"
 profile_dir="$project_dir/archiso"
 edition_dir="$project_dir/editions/community"
-repo_dir="$project_dir/repo"
+core_repo_dir="${DEVARIO_CORE_REPO_DIR:-$project_dir/repo/core}"
+managed_repo_dir="${DEVARIO_MANAGED_REPO_DIR:-}"
 output_dir="${DEVARIO_OUTPUT_DIR:-$project_dir/out}"
 work_dir="${DEVARIO_WORK_DIR:-$project_dir/work}"
-runtime_repo_url="${DEVARIO_REPO_URL:-}"
-devario_keyring_source="$project_dir/packages/devario-keyring"
-release_keyring="$devario_keyring_source/devario.gpg"
+core_runtime_url="${DEVARIO_CORE_REPO_URL:-${DEVARIO_REPO_URL:-}}"
+managed_runtime_url="${DEVARIO_MANAGED_REPO_URL:-}"
+core_keyring_source="${DEVARIO_CORE_KEYRING_DIR:-$project_dir/packages/devario-keyring}"
+managed_keyring_source="${DEVARIO_MANAGED_KEYRING_DIR:-}"
+release_build="${DEVARIO_RELEASE_BUILD:-0}"
+release_version="${DEVARIO_RELEASE_VERSION:-}"
+input_lock="${DEVARIO_INPUT_LOCK:-}"
 archiso_bundle_dir="$project_dir/tools/devario-archiso"
 archiso_archive="$archiso_bundle_dir/archiso-v89.tar.gz"
 archiso_patch="$archiso_bundle_dir/0001-bootstrap-with-shelly.patch"
@@ -24,6 +29,11 @@ Usage: sudo ./scripts/build-iso.sh [--edition DIRECTORY]
 
 Compose the base Archiso profile with Community by default, or with the strict
 edition contract rooted at DIRECTORY, then build the resulting ISO.
+
+Repository directories, keyring bundles, and credential-free HTTPS runtime
+URLs are passed independently as DEVARIO_CORE_* and DEVARIO_MANAGED_* values.
+Community rejects every managed input. Release builds require the authenticated
+controlled nspawn/input-lock contract and fresh output/work directories.
 EOF
 }
 
@@ -86,27 +96,46 @@ if [[ "$actual_archiso_sha256" != "$archiso_archive_sha256" ]]; then
   exit 1
 fi
 
-if [[ ! -f "$repo_dir/devario.db.tar.zst" ]]; then
-  echo "The local repository is missing. Run ./scripts/build-packages.sh first." >&2
-  exit 1
-fi
-
 if [[ ! -f "$profile_dir/pacman.runtime.conf" ]]; then
   echo "The installed-system package-manager template is missing." >&2
   exit 1
 fi
 
+if [[ "$release_build" != 0 && "$release_build" != 1 ]]; then
+  echo 'DEVARIO_RELEASE_BUILD must be 0 or 1.' >&2
+  exit 2
+fi
+if (( release_build )); then
+  [[ -n "$release_version" ]] || { echo 'Release ISO construction requires DEVARIO_RELEASE_VERSION.' >&2; exit 1; }
+  devario_validate_release_version "$release_version"
+  for fresh_dir in "$output_dir" "$work_dir"; do
+    if [[ -e "$fresh_dir" ]] && [[ -n "$(find "$fresh_dir" -mindepth 1 -print -quit)" ]]; then
+      echo "Release output/work directory must be fresh and empty: $fresh_dir" >&2
+      exit 1
+    fi
+  done
+  if [[ "${DEVARIO_CONTROLLED_NSPAWN:-0}" != 1 \
+    || "$input_lock" != /input/CORE-INPUT-LOCK.json ]]; then
+    echo 'Native or unauthenticated release ISO construction is forbidden.' >&2
+    exit 1
+  fi
+  DEVARIO_REPOSITORY_NAME=devario-core "$script_dir/verify-controlled-builder.sh"
+elif [[ -n "$release_version" ]]; then
+  echo 'DEVARIO_RELEASE_VERSION is valid only for a controlled release ISO.' >&2
+  exit 1
+fi
 mkdir -p "$output_dir" "$work_dir"
 
 generated_conf="$(mktemp /tmp/devario-alpm.XXXXXX.conf)"
-staged_repo="$(mktemp -d /tmp/devario-repo.XXXXXX)"
+staged_core_repo="$(mktemp -d /tmp/devario-core-repo.XXXXXX)"
+staged_managed_repo="$(mktemp -d /tmp/devario-managed-repo.XXXXXX)"
 staged_profile="$(mktemp -d /tmp/devario-profile.XXXXXX)"
 archiso_source="$(mktemp -d /tmp/devario-archiso.XXXXXX)"
 shelly_root="$(mktemp -d "$work_dir/.devario-shelly.XXXXXX")"
 build_gpgdir="$(mktemp -d "$work_dir/.devario-keyring.XXXXXX")"
 cleanup() {
   rm -f -- "$generated_conf"
-  rm -rf -- "$staged_repo"
+  rm -rf -- "$staged_core_repo" "$staged_managed_repo"
   rm -rf -- "$staged_profile"
   rm -rf -- "$archiso_source"
   rm -rf -- "$shelly_root"
@@ -116,16 +145,51 @@ trap cleanup EXIT
 
 # Stage the local repository under a short, root-readable path consumed by the
 # isolated Shelly target transaction.
-cp -a -- "$repo_dir/." "$staged_repo/"
-chmod 755 "$staged_repo"
-find "$staged_repo" -type f -exec chmod 444 {} +
+cp -a -- "$core_repo_dir/." "$staged_core_repo/"
+chmod 755 "$staged_core_repo"
+find "$staged_core_repo" -type f -exec chmod 444 {} +
 
 devario_compose_profile \
   "$profile_dir" "$edition_dir" "$staged_profile" "$project_dir"
 echo "Building Devario $DEVARIO_EDITION_VARIANT edition ($DEVARIO_EDITION_ID)."
 
+if (( release_build )); then
+  "$script_dir/render-release-os-release.py" \
+    --file "$staged_profile/airootfs/etc/os-release" \
+    --edition "$DEVARIO_EDITION_ID" --variant "$DEVARIO_EDITION_VARIANT" \
+    --release-version "$release_version"
+fi
+
+if (( DEVARIO_EDITION_HAS_MANAGED )); then
+  if [[ -z "$managed_repo_dir" || -z "$managed_keyring_source" ]]; then
+    echo 'An edition with managed package origins requires separate managed repository/keyring inputs.' >&2
+    exit 1
+  fi
+  cp -a -- "$managed_repo_dir/." "$staged_managed_repo/"
+  chmod 755 "$staged_managed_repo"
+  find "$staged_managed_repo" -type f -exec chmod 444 {} +
+else
+  if [[ -n "$managed_repo_dir" || -n "$managed_keyring_source" || -n "$managed_runtime_url" ]]; then
+    echo 'Community/core-only editions reject every managed repository, key, and URL input.' >&2
+    exit 1
+  fi
+fi
+
+key_policy=development
+if (( release_build )); then key_policy=production; fi
+devario_verify_repository "$staged_core_repo" devario-core "$core_keyring_source" "$key_policy"
+core_active="$DEVARIO_ACTIVE_SIGNER"; core_public="$DEVARIO_KEYRING_PUBLIC"
+core_fingerprints=("${DEVARIO_PUBLIC_FINGERPRINTS[@]}")
+if (( DEVARIO_EDITION_HAS_MANAGED )); then
+  devario_verify_repository "$staged_managed_repo" devario-managed "$managed_keyring_source" "$key_policy"
+  managed_active="$DEVARIO_ACTIVE_SIGNER"; managed_public="$DEVARIO_KEYRING_PUBLIC"
+  managed_fingerprints=("${DEVARIO_PUBLIC_FINGERPRINTS[@]}")
+  [[ "$core_active" != "$managed_active" ]] || { echo 'Core and managed active signers must be distinct.' >&2; exit 1; }
+  devario_require_disjoint_fingerprint_sets core_fingerprints managed_fingerprints
+fi
+
 shopt -s nullglob
-repo_packages=("$staged_repo"/*.pkg.tar.zst)
+repo_packages=("$staged_core_repo"/*.pkg.tar.zst)
 if (( ${#repo_packages[@]} == 0 )); then
   echo "The Devario repository contains no package archives." >&2
   exit 1
@@ -151,6 +215,10 @@ required_devario_packages=(
   noctalia-greeter
   shelly
 )
+declare -A required_core_package_set=()
+for package_name in "${required_devario_packages[@]}"; do
+  required_core_package_set["$package_name"]=1
+done
 declare -A repository_package_counts=()
 for package_path in "${repo_packages[@]}"; do
   package_name="$(
@@ -163,6 +231,16 @@ for package_path in "${repo_packages[@]}"; do
   fi
   (( repository_package_counts["$package_name"] += 1 )) || true
 done
+declare -A managed_package_counts=()
+if (( DEVARIO_EDITION_HAS_MANAGED )); then
+  managed_packages=("$staged_managed_repo"/*.pkg.tar.zst)
+  (( ${#managed_packages[@]} > 0 )) || { echo 'Managed repository contains no packages.' >&2; exit 1; }
+  for package_path in "${managed_packages[@]}"; do
+    package_name="$(bsdtar -xOf "$package_path" .PKGINFO | awk -F ' = ' '$1 == "pkgname" {print $2; exit}')"
+    [[ -n "$package_name" ]] || { echo "Unreadable managed package: $package_path" >&2; exit 1; }
+    (( managed_package_counts["$package_name"] += 1 )) || true
+  done
+fi
 
 missing_devario_packages=()
 duplicate_devario_packages=()
@@ -188,72 +266,82 @@ if (( ${#missing_devario_packages[@]} || ${#duplicate_devario_packages[@]} )); t
   exit 1
 fi
 
-shelly_packages=("$staged_repo"/shelly-[0-9]*.pkg.tar.zst)
+# Enforce the edition's one-to-one package origin contract. An Arch-origin
+# addition must not be shadowed by either Devario repository; core and managed
+# additions must exist exactly once only in their declared authority.
+for package_name in "${!DEVARIO_PACKAGE_ORIGINS[@]}"; do
+  core_count="${repository_package_counts[$package_name]:-0}"
+  managed_count="${managed_package_counts[$package_name]:-0}"
+  case "${DEVARIO_PACKAGE_ORIGINS[$package_name]}" in
+    arch)
+      (( core_count == 0 && managed_count == 0 )) || { echo "Arch-origin package is shadowed: $package_name" >&2; exit 1; }
+      ;;
+    core)
+      (( core_count == 1 && managed_count == 0 )) || { echo "Core package origin is missing/ambiguous: $package_name" >&2; exit 1; }
+      ;;
+    managed)
+      (( core_count == 0 && managed_count == 1 )) || { echo "Managed package origin is missing/ambiguous: $package_name" >&2; exit 1; }
+      ;;
+  esac
+done
+
+# The fixed base profile has an implicit, code-owned origin contract: the
+# required Devario package set comes only from core and every other base name
+# comes only from the locked Arch repositories. This prevents either custom
+# repository from shadowing an otherwise unlisted base package.
+while IFS= read -r package_name || [[ -n "$package_name" ]]; do
+  [[ "$package_name" =~ ^[[:space:]]*(#.*)?$ ]] && continue
+  [[ -z "${DEVARIO_PACKAGE_ORIGINS[$package_name]:-}" ]] || continue
+  core_count="${repository_package_counts[$package_name]:-0}"
+  managed_count="${managed_package_counts[$package_name]:-0}"
+  if [[ -n "${required_core_package_set[$package_name]:-}" ]]; then
+    (( core_count == 1 && managed_count == 0 )) || {
+      echo "Fixed core package origin is missing or shadowed: $package_name" >&2
+      exit 1
+    }
+  elif (( core_count != 0 || managed_count != 0 )); then
+    echo "Arch base package is shadowed by a Devario repository: $package_name" >&2
+    exit 1
+  fi
+done < "$staged_profile/packages.x86_64"
+
+shelly_packages=("$staged_core_repo"/shelly-[0-9]*.pkg.tar.zst)
 if (( ${#shelly_packages[@]} != 1 )); then
   echo "The Devario repository must contain exactly one Shelly package." >&2
   exit 1
 fi
 
-if [[ -n "$runtime_repo_url" ]]; then
-  if [[ "$runtime_repo_url" != https://?* \
-    || "$runtime_repo_url" == *$'\n'* \
-    || "$runtime_repo_url" == *$'\r'* ]]; then
-    echo "DEVARIO_REPO_URL must use HTTPS for a release image." >&2
-    exit 1
-  fi
-  for release_command in gpgv bsdtar cmp; do
-    if ! command -v "$release_command" >/dev/null 2>&1; then
-      echo "$release_command is required to verify a release repository." >&2
-      exit 1
-    fi
-  done
-  if [[ ! -s "$release_keyring" ]]; then
-    echo "The packaged Devario public key is missing." >&2
-    exit 1
-  fi
-  install -m444 "$release_keyring" "$staged_repo/.devario-release-key.gpg"
-  release_keyring="$staged_repo/.devario-release-key.gpg"
-  if [[ ! -s "$staged_repo/devario.db.tar.zst.sig" ]]; then
-    echo "A release image requires a signed Devario repository database." >&2
-    exit 1
-  fi
-  if ! gpgv --keyring "$release_keyring" \
-    "$staged_repo/devario.db.tar.zst.sig" \
-    "$staged_repo/devario.db.tar.zst"; then
-    echo "The repository database signature does not match the packaged Devario key." >&2
-    exit 1
+if (( release_build )); then
+  [[ -n "$core_runtime_url" ]] || { echo 'Release image requires DEVARIO_CORE_REPO_URL.' >&2; exit 1; }
+  devario_validate_https_url "$core_runtime_url"
+  if (( DEVARIO_EDITION_HAS_MANAGED )); then
+    [[ -n "$managed_runtime_url" ]] || { echo 'Managed release requires DEVARIO_MANAGED_REPO_URL.' >&2; exit 1; }
+    devario_validate_https_url "$managed_runtime_url"
   fi
 
-  keyring_packages=("$staged_repo"/devario-keyring-[0-9]*.pkg.tar.zst)
-  if (( ${#keyring_packages[@]} != 1 )); then
-    echo "A release repository must contain exactly one Devario keyring package." >&2
-    exit 1
+  keyring_packages=("$staged_core_repo"/devario-keyring-[0-9]*.pkg.tar.zst)
+  (( ${#keyring_packages[@]} == 1 )) || { echo 'Core release requires exactly one keyring package.' >&2; exit 1; }
+  devario_verify_keyring_package "${keyring_packages[0]}" "$core_keyring_source" devario-core
+  if (( DEVARIO_EDITION_HAS_MANAGED )); then
+    managed_keyring_packages=("$staged_managed_repo"/devario-managed-keyring-[0-9]*.pkg.tar.zst)
+    (( ${#managed_keyring_packages[@]} == 1 )) || { echo 'Managed release requires exactly one managed keyring package.' >&2; exit 1; }
+    devario_verify_keyring_package "${managed_keyring_packages[0]}" "$managed_keyring_source" devario-managed
   fi
-  if ! cmp -s "$release_keyring" \
-    <(bsdtar -xOf "${keyring_packages[0]}" usr/share/pacman/keyrings/devario.gpg); then
-    echo "The Devario keyring package does not contain the release verification key." >&2
-    exit 1
-  fi
-
-  for package_path in "${repo_packages[@]}"; do
-    if [[ ! -s "$package_path.sig" ]]; then
-      echo "A release image requires a signature for $(basename -- "$package_path")." >&2
-      exit 1
-    fi
-    if ! gpgv --keyring "$release_keyring" "$package_path.sig" "$package_path"; then
-      echo "The signature for $(basename -- "$package_path") does not match the packaged Devario key." >&2
-      exit 1
-    fi
-  done
-  runtime_siglevel="Required"
-  runtime_server="$runtime_repo_url"
+  core_runtime_siglevel=Required
+  core_runtime_server="$core_runtime_url"
+  managed_runtime_siglevel=Required
+  managed_runtime_server="$managed_runtime_url"
 else
-  # Development images retain a copy of the build repository so the installed
-  # system can reinstall its core Devario packages without network access.
-  runtime_siglevel="Optional TrustAll"
-  runtime_server="file:///opt/devario/repo"
-  mkdir -p "$staged_profile/airootfs/opt/devario/repo"
-  cp -a -- "$staged_repo/." "$staged_profile/airootfs/opt/devario/repo/"
+  core_runtime_siglevel='Optional TrustAll'
+  core_runtime_server='file:///opt/devario/repos/core'
+  mkdir -p "$staged_profile/airootfs/opt/devario/repos/core"
+  cp -a -- "$staged_core_repo/." "$staged_profile/airootfs/opt/devario/repos/core/"
+  if (( DEVARIO_EDITION_HAS_MANAGED )); then
+    managed_runtime_siglevel='Optional TrustAll'
+    managed_runtime_server='file:///opt/devario/repos/managed'
+    mkdir -p "$staged_profile/airootfs/opt/devario/repos/managed"
+    cp -a -- "$staged_managed_repo/." "$staged_profile/airootfs/opt/devario/repos/managed/"
+  fi
 fi
 
 # Use the Shelly binaries from the repository being installed into the image.
@@ -276,11 +364,9 @@ if [[ ! -s /usr/share/pacman/keyrings/archlinux.gpg ]]; then
   echo "The Arch Linux keyring source is missing from the build environment." >&2
   exit 1
 fi
-if [[ ! -s "$devario_keyring_source/devario.gpg" \
-  || ! -f "$devario_keyring_source/devario-trusted" \
-  || ! -f "$devario_keyring_source/devario-revoked" ]]; then
-  echo "The Devario keyring source is incomplete." >&2
-  exit 1
+devario_validate_keyring_bundle "$core_keyring_source" devario-core "$key_policy"
+if (( DEVARIO_EDITION_HAS_MANAGED )); then
+  devario_validate_keyring_bundle "$managed_keyring_source" devario-managed "$key_policy"
 fi
 
 # Never depend on mutable host trust state and never create a private bootstrap
@@ -292,7 +378,11 @@ install -m 0600 /dev/null "$build_gpgdir/secring.gpg"
 "$devario_shelly_key" --gpgdir "$build_gpgdir" \
   --populate-from /usr/share/pacman/keyrings --populate archlinux
 "$devario_shelly_key" --gpgdir "$build_gpgdir" \
-  --populate-from "$devario_keyring_source" --populate devario
+  --populate-from "$core_keyring_source" --populate devario
+if (( DEVARIO_EDITION_HAS_MANAGED )); then
+  "$devario_shelly_key" --gpgdir "$build_gpgdir" \
+    --populate-from "$managed_keyring_source" --populate devario-managed
+fi
 if [[ ! -s "$build_gpgdir/pubring.gpg" \
   || ! -s "$build_gpgdir/trustdb.gpg" \
   || -e "$build_gpgdir/pubring.kbx" ]]; then
@@ -313,16 +403,62 @@ patch --fuzz=0 -d "$patched_archiso_dir" -Np1 \
 patched_mkarchiso="$patched_archiso_dir/archiso/mkarchiso"
 bash -O extglob -n "$patched_mkarchiso"
 
-runtime_server_escaped="${runtime_server//\\/\\\\}"
-runtime_server_escaped="${runtime_server_escaped//|/\\|}"
-runtime_server_escaped="${runtime_server_escaped//&/\\&}"
+escape_sed() {
+  local value="$1"
+  value="${value//\\/\\\\}"; value="${value//|/\\|}"; value="${value//&/\\&}"
+  printf '%s\n' "$value"
+}
+core_runtime_server_escaped="$(escape_sed "$core_runtime_server")"
+managed_runtime_repository=''
+managed_build_repository=''
+if (( DEVARIO_EDITION_HAS_MANAGED )); then
+  managed_runtime_server_escaped="$(escape_sed "$managed_runtime_server")"
+  managed_runtime_repository="[devario-managed]\nSigLevel = $managed_runtime_siglevel\nServer = $managed_runtime_server_escaped"
+  managed_build_repository="[devario-managed]\nSigLevel = Never\nServer = file://$(escape_sed "$staged_managed_repo")"
+fi
 sed \
-  -e "s|@DEVARIO_RUNTIME_SIGLEVEL@|$runtime_siglevel|g" \
-  -e "s|@DEVARIO_RUNTIME_REPO@|$runtime_server_escaped|g" \
+  -e "s|@DEVARIO_CORE_RUNTIME_SIGLEVEL@|$core_runtime_siglevel|g" \
+  -e "s|@DEVARIO_CORE_RUNTIME_REPO@|$core_runtime_server_escaped|g" \
+  -e "s|@DEVARIO_MANAGED_RUNTIME_REPOSITORY@|$managed_runtime_repository|g" \
   "$staged_profile/pacman.runtime.conf" \
   > "$staged_profile/airootfs/etc/pacman.conf"
 
-sed "s|@DEVARIO_REPO@|$staged_repo|g" "$staged_profile/pacman.conf" > "$generated_conf"
+sed \
+  -e "s|@DEVARIO_CORE_REPO@|$(escape_sed "$staged_core_repo")|g" \
+  -e "s|@DEVARIO_MANAGED_BUILD_REPOSITORY@|$managed_build_repository|g" \
+  "$staged_profile/pacman.conf" > "$generated_conf"
+
+if (( release_build )); then
+  build_record_dir="$staged_profile/airootfs/usr/share/devario"
+  install -d -m 0755 "$build_record_dir"
+  BUILD_RECORD="$build_record_dir/build-source.json" INPUT_LOCK="$input_lock" \
+  EDITION="$DEVARIO_EDITION_ID" RELEASE_VERSION="$release_version" \
+  CORE_URL="$core_runtime_url" CORE_ACTIVE="$core_active" \
+  CORE_PUBLIC="$core_public" MANAGED_URL="$managed_runtime_url" \
+  MANAGED_ACTIVE="${managed_active:-}" MANAGED_PUBLIC="${managed_public:-}" \
+  SCHEMA="$script_dir/schemas/image-build-record.schema.json" python3 - <<'PY'
+import hashlib,json,os,pathlib
+from jsonschema import Draft202012Validator
+def hook(pairs):
+ out={}
+ for k,v in pairs:
+  if k in out: raise SystemExit(f"duplicate JSON key: {k}")
+  out[k]=v
+ return out
+raw=pathlib.Path(os.environ["INPUT_LOCK"]).read_bytes(); lock=json.loads(raw,object_pairs_hook=hook)
+if raw!=(json.dumps(lock,sort_keys=True,separators=(",",":"))+"\n").encode(): raise SystemExit("input lock is not canonical")
+if lock["releaseVersion"] != os.environ["RELEASE_VERSION"]: raise SystemExit("release version differs from input lock")
+data={"schemaVersion":1,"releaseMode":True,"edition":os.environ["EDITION"],"releaseVersion":lock["releaseVersion"],"coreCommit":lock["core"]["commit"],
+ "sourceDateEpoch":lock["sourceDateEpoch"],"inputLockSha256":hashlib.sha256(raw).hexdigest(),
+ "coreRepository":{"url":os.environ["CORE_URL"],"activeSigner":os.environ["CORE_ACTIVE"],"publicKeyringSha256":hashlib.sha256(pathlib.Path(os.environ["CORE_PUBLIC"]).read_bytes()).hexdigest()}}
+if os.environ["EDITION"]=="managed":
+ data["managedCommit"]=lock["edition"]["commit"]
+ data["managedRepository"]={"url":os.environ["MANAGED_URL"],"activeSigner":os.environ["MANAGED_ACTIVE"],"publicKeyringSha256":hashlib.sha256(pathlib.Path(os.environ["MANAGED_PUBLIC"]).read_bytes()).hexdigest()}
+schema=json.loads(pathlib.Path(os.environ["SCHEMA"]).read_text(),object_pairs_hook=hook); Draft202012Validator(schema).validate(data)
+pathlib.Path(os.environ["BUILD_RECORD"]).write_text(json.dumps(data,sort_keys=True,separators=(",",":"))+"\n")
+PY
+  chmod 0444 "$build_record_dir/build-source.json"
+fi
 
 gpgme_trace="$output_dir/devario-gpgme.log"
 failure_report="$output_dir/devario-iso-failure-report.log"
@@ -359,6 +495,24 @@ if (( archiso_status != 0 )); then
   echo "ISO failure report: $failure_report" >&2
   echo "GPGME verification trace: $gpgme_trace" >&2
   exit "$archiso_status"
+fi
+
+if (( release_build )); then
+  mapfile -t built_images < <(find "$output_dir" -maxdepth 1 -type f -name '*.iso' -print)
+  (( ${#built_images[@]} == 1 )) || { echo 'Release build must produce exactly one ISO.' >&2; exit 1; }
+  boundary_args=(
+    --iso "${built_images[0]}" --edition "$DEVARIO_EDITION_ID" --release
+    --input-lock "$input_lock" --core-keyring "$core_keyring_source"
+    --core-url "$core_runtime_url" --release-version "$release_version"
+    --write-inventory "$output_dir/IMAGE-PACKAGE-INVENTORY.json"
+  )
+  if (( DEVARIO_EDITION_HAS_MANAGED )); then
+    boundary_args+=(--managed-keyring "$managed_keyring_source" --managed-url "$managed_runtime_url")
+  fi
+  if [[ -n "${DEVARIO_EXPECTED_IMAGE_INVENTORY:-}" ]]; then
+    boundary_args+=(--expected-inventory "$DEVARIO_EXPECTED_IMAGE_INVENTORY")
+  fi
+  "$script_dir/verify-image-boundary.sh" "${boundary_args[@]}"
 fi
 
 echo "ISO output is available in $output_dir"

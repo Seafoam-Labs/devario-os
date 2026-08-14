@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Seafoam-Labs/devario-os/main/release/final-approval.schema.json",
+  "title": "Signed Devario final promotion approval",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "candidateSha256", "version", "edition", "coreCommit", "overlayCommit", "fromChannel", "targetChannel", "artifactSetSha256", "editionEvidence", "reproducibility", "acceptance", "approver", "approverFingerprint", "approvedAt", "decision"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "candidateSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "version": {"type": "string", "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
+    "edition": {"enum": ["community", "managed"]},
+    "coreCommit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "overlayCommit": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[0-9a-f]{40}$"}]},
+    "fromChannel": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+    "targetChannel": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+    "artifactSetSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "editionEvidence": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/namedBinding"}
+      ]
+    },
+    "reproducibility": {"$ref": "#/$defs/binding"},
+    "acceptance": {
+      "type": "object", "additionalProperties": false,
+      "required": ["manifestSha256", "evidenceManifestSha256"],
+      "properties": {
+        "manifestSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "evidenceManifestSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "approver": {"const": "ZoeyErinBauer"},
+    "approverFingerprint": {"type": "string", "pattern": "^[0-9A-F]{40,64}$"},
+    "approvedAt": {"type": "string", "format": "date-time"},
+    "decision": {"const": "approve"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"edition": {"const": "community"}}},
+      "then": {"properties": {"editionEvidence": {"type": "null"}}},
+      "else": {"properties": {"editionEvidence": {"$ref": "#/$defs/namedBinding"}}}
+    }
+  ],
+  "$defs": {
+    "binding": {
+      "type": "object", "additionalProperties": false, "required": ["sha256"],
+      "properties": {"sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+    },
+    "namedBinding": {
+      "type": "object", "additionalProperties": false, "required": ["name", "sha256"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

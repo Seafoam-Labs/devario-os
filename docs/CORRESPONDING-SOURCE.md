@@ -48,6 +48,55 @@ the source checksum file with the appropriate release metadata key. Verify the
 download as an unauthenticated user before publication, and include a stable
 source location in the release notes and package repository metadata.
 
+The canonical checked-in schema is `release/source-index.schema.json`. Each
+entry repeats the exact installed package `name`, `version`, `architecture`,
+and `packageBase`, binds the package archive inside the candidate artifact tree
+by relative path, SHA-256, and size, and lists one or more immutable HTTPS
+source locations with their revision and digest. For example:
+
+```json
+{
+  "name": "devario-base",
+  "version": "1-1",
+  "architecture": "any",
+  "packageBase": "devario-base",
+  "binary": {
+    "path": "core/devario-base-1-1-any.pkg.tar.zst",
+    "sha256": "<64 lowercase hexadecimal characters>",
+    "size": 1234
+  },
+  "sources": [{
+    "uri": "https://example.invalid/immutable/source.tar.zst",
+    "revision": "immutable revision",
+    "sha256": "<64 lowercase hexadecimal characters>",
+    "correspondingSource": true
+  }]
+}
+```
+
+Release metadata generation rejects an index unless it exactly covers the
+package inventory extracted from the final ISO and every `binary` entry equals
+an actual candidate artifact. Candidate validation repeats those checks and
+verifies that the installed-package SPDX document carries the same binary and
+source mapping.
+
 Do not publish a binary while its corresponding-source entry is missing,
 ambiguous, dependent on an unpinned network resource, or subject to unresolved
 redistribution terms.
+
+## Imported-source history
+
+`release/source-manifest.json` distinguishes two immutable revisions. Its
+`sourceRevision` is the initial commit that imported the source inventory into
+`devario-os`; it is not a self-reference to a future release commit. Its
+`importedFrom` object records the exact former monorepository URL and commit.
+Release metadata separately records the current core commit. These fields must
+not be rewritten to make an old source archive appear to have been imported
+from a newer revision.
+
+The checked-in manifest is validated against
+`release/source-manifest.schema.json` and each recorded file is rehashed before
+release metadata is produced. The immutable release source location retains
+that manifest, the matching source files, source-package metadata, and signed
+source checksums for as long as the binary is offered (or longer when its
+license requires it).

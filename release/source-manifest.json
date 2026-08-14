@@ -2,7 +2,11 @@
   "$schema": "./source-manifest.schema.json",
   "schemaVersion": 1,
   "repository": "https://github.com/Seafoam-Labs/devario-os",
-  "sourceRevision": "375faed39f9a37e348d5c4de089a4b0ef7e68ab9",
+  "sourceRevision": "7bbaf3aab3c84192fac6ff80d1ad1783f412f206",
+  "importedFrom": {
+    "repository": "https://github.com/Seafoam-Labs/Devario",
+    "revision": "375faed39f9a37e348d5c4de089a4b0ef7e68ab9"
+  },
   "artifacts": [
     {
       "id": "aqueous-001beb7d",

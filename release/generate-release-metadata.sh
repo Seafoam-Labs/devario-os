@@ -7,13 +7,16 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(cd -- "$script_dir/.." && pwd)"
 source_manifest="$script_dir/source-manifest.json"
+# shellcheck source=lib-release.sh
+source "$script_dir/lib-release.sh"
 
 usage() {
   cat <<'EOF'
 Usage: generate-release-metadata.sh \
   --artifacts DIR --output DIR --edition EDITION --version VERSION \
   --architecture ARCH --channel CHANNEL --core-commit COMMIT \
-  [--overlay-commit COMMIT]
+  --installed-packages IMAGE-PACKAGE-INVENTORY.json \
+  --source-index SOURCE-INDEX.json [--overlay-commit COMMIT]
 
 Generate unsigned release checksums, an SPDX 2.3 artifact SBOM, an in-toto
 Statement v1/SLSA provenance document, and a release record. The output
@@ -21,9 +24,10 @@ directory must not be inside the artifact directory.
 
 The following optional environment variables describe the controlled build:
   SOURCE_DATE_EPOCH          timestamp used for deterministic metadata
-  DEVARIO_BUILDER_ID         URI identifying the builder
-  DEVARIO_INVOCATION_ID      unique build invocation identifier
-  DEVARIO_METADATA_CREATOR   SPDX creator, default: Person: ZoeyErinBauer
+  DEVARIO_BUILDER_ID         required URI identifying the controlled builder
+  DEVARIO_INVOCATION_ID      required unique build invocation identifier
+The SPDX creator is fixed to Person: ZoeyErinBauer. It cannot be overridden by
+the build environment.
 EOF
 }
 
@@ -35,10 +39,12 @@ architecture=''
 channel=''
 core_commit=''
 overlay_commit=''
+installed_packages=''
+source_index=''
 
 while (( $# )); do
   case "$1" in
-    --artifacts|--output|--edition|--version|--architecture|--channel|--core-commit|--overlay-commit)
+    --artifacts|--output|--edition|--version|--architecture|--channel|--core-commit|--overlay-commit|--installed-packages|--source-index)
       if (( $# < 2 )); then
         echo "Missing value for $1" >&2
         usage >&2
@@ -56,6 +62,8 @@ while (( $# )); do
         --channel) channel="$value" ;;
         --core-commit) core_commit="$value" ;;
         --overlay-commit) overlay_commit="$value" ;;
+        --installed-packages) installed_packages="$value" ;;
+        --source-index) source_index="$value" ;;
       esac
       ;;
     -h|--help)
@@ -70,15 +78,19 @@ while (( $# )); do
   esac
 done
 
-for required_value in artifacts_dir output_dir edition version architecture channel core_commit; do
+for required_value in artifacts_dir output_dir edition version architecture channel core_commit installed_packages source_index; do
   if [[ -z "${!required_value}" ]]; then
     echo "Missing required option for ${required_value//_/-}." >&2
     usage >&2
     exit 2
   fi
 done
+devario_validate_release_version "$version" || {
+  echo 'Version must match the canonical 1-64 character release-version pattern.' >&2
+  exit 1
+}
 
-for command_name in date find grep install jq mktemp realpath sha256sum sort stat; do
+for command_name in date find grep install jq mktemp python3 realpath sha256sum sort stat; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "Missing required command: $command_name" >&2
     exit 1
@@ -93,9 +105,33 @@ if [[ ! -r "$source_manifest" ]]; then
   echo "Vendored-source manifest is missing: $source_manifest" >&2
   exit 1
 fi
+for release_input in "$installed_packages" "$source_index"; do
+  [[ -f "$release_input" && ! -L "$release_input" ]] || { echo "Release evidence is missing or unsafe: $release_input" >&2; exit 1; }
+done
+python3 "$script_dir/validate-json.py" "$script_dir/installed-package-inventory.schema.json" "$installed_packages"
+python3 "$script_dir/validate-json.py" "$script_dir/source-index.schema.json" "$source_index"
+inventory_canonical="$(mktemp /tmp/devario-inventory-canonical.XXXXXX)"
+source_index_canonical="$(mktemp /tmp/devario-source-index-canonical.XXXXXX)"
+jq -cS '.' "$installed_packages" > "$inventory_canonical"; jq -cS '.' "$source_index" > "$source_index_canonical"
+cmp -s "$inventory_canonical" "$installed_packages" || { rm -f -- "$inventory_canonical" "$source_index_canonical"; echo 'Installed package inventory must be canonical JSON.' >&2; exit 1; }
+cmp -s "$source_index_canonical" "$source_index" || { rm -f -- "$inventory_canonical" "$source_index_canonical"; echo 'Source index must be canonical JSON.' >&2; exit 1; }
+rm -f -- "$inventory_canonical" "$source_index_canonical"
+if ! jq -e --slurpfile inventory "$installed_packages" '
+  ([.packages[] | [.name,.version,.architecture,.packageBase]] | sort) ==
+  ([$inventory[0][] | [.name,.version,.architecture,.packageBase]] | sort) and
+  ([.packages[].name] | length) == ([.packages[].name] | unique | length)
+' "$source_index" >/dev/null; then
+  echo 'Source index does not map every exact installed package once.' >&2; exit 1
+fi
+if ! python3 "$script_dir/validate-json.py" \
+  "$script_dir/source-manifest.schema.json" "$source_manifest"; then
+  echo "Vendored-source manifest failed its Draft 2020-12 schema." >&2
+  exit 1
+fi
 
 artifacts_dir="$(realpath -- "$artifacts_dir")"
 output_dir="$(realpath -m -- "$output_dir")"
+devario_validate_source_binary_closure "$source_index" "$artifacts_dir"
 case "$output_dir/" in
   "$artifacts_dir/"*)
     echo "Output directory must not be inside the artifact directory." >&2
@@ -136,19 +172,17 @@ if [[ "$edition" != managed && -n "$overlay_commit" ]]; then
   exit 1
 fi
 
-if [[ -n "${SOURCE_DATE_EPOCH:-}" ]]; then
-  if [[ ! "$SOURCE_DATE_EPOCH" =~ ^[0-9]+$ ]]; then
-    echo "SOURCE_DATE_EPOCH must be a non-negative integer." >&2
-    exit 1
-  fi
-  generated_at="$(date -u --date="@$SOURCE_DATE_EPOCH" '+%Y-%m-%dT%H:%M:%SZ')"
-else
-  generated_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+if [[ ! "${SOURCE_DATE_EPOCH:-}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "SOURCE_DATE_EPOCH must be set to a positive integer for release metadata." >&2
+  exit 1
 fi
+generated_at="$(date -u --date="@$SOURCE_DATE_EPOCH" '+%Y-%m-%dT%H:%M:%SZ')"
 
-builder_id="${DEVARIO_BUILDER_ID:-https://github.com/Seafoam-Labs/devario-os}"
-invocation_id="${DEVARIO_INVOCATION_ID:-manual-${core_commit:0:12}-${version}}"
-metadata_creator="${DEVARIO_METADATA_CREATOR:-Person: ZoeyErinBauer}"
+builder_id="${DEVARIO_BUILDER_ID:-}"
+invocation_id="${DEVARIO_INVOCATION_ID:-}"
+[[ "$builder_id" =~ ^https://[^[:space:]]+$ ]] || { echo 'DEVARIO_BUILDER_ID must be an explicit HTTPS controlled-builder URI.' >&2; exit 1; }
+[[ "$invocation_id" =~ ^[A-Za-z0-9][A-Za-z0-9._:/-]{7,255}$ ]] || { echo 'DEVARIO_INVOCATION_ID must be an explicit unique identifier.' >&2; exit 1; }
+metadata_creator='Person: ZoeyErinBauer'
 
 temp_dir="$(mktemp -d /tmp/devario-release-metadata.XXXXXX)"
 cleanup() {
@@ -162,6 +196,8 @@ if ! jq -e '
   .schemaVersion == 1 and
   (.repository | type == "string") and
   (.sourceRevision | test("^[0-9a-f]{40}$")) and
+  (.importedFrom.repository | type == "string") and
+  (.importedFrom.revision | test("^[0-9a-f]{40}$")) and
   (.artifacts | length) > 0 and
   all(.artifacts[];
     (.id | type == "string") and
@@ -198,8 +234,10 @@ while IFS=$'\t' read -r source_path expected_digest expected_size; do
   fi
 done < <(jq -r '.artifacts[] | [.path, .sha256, (.size | tostring)] | @tsv' "$source_manifest")
 
+devario_require_closed_tree "$artifacts_dir"
+
 mapfile -d '' artifact_paths < <(
-  find "$artifacts_dir" -maxdepth 1 -type f -printf '%f\0' | sort -z
+  find "$artifacts_dir" -type f -printf '%P\0' | sort -z
 )
 if (( ${#artifact_paths[@]} == 0 )); then
   echo "Artifact directory contains no files: $artifacts_dir" >&2
@@ -251,6 +289,8 @@ subject_set_digest="$(sha256sum -- "$temp_dir/SHA256SUMS")"
 subject_set_digest="${subject_set_digest%% *}"
 source_manifest_digest="$(sha256sum -- "$source_manifest")"
 source_manifest_digest="${source_manifest_digest%% *}"
+installed_packages_digest="$(sha256sum -- "$installed_packages")"; installed_packages_digest="${installed_packages_digest%% *}"
+source_index_digest="$(sha256sum -- "$source_index")"; source_index_digest="${source_index_digest%% *}"
 
 overlay_json='null'
 if [[ -n "$overlay_commit" ]]; then
@@ -264,16 +304,25 @@ jq -n \
   --arg channel "$channel" \
   --arg coreCommit "$core_commit" \
   --arg generatedAt "$generated_at" \
+  --arg sourceDateEpoch "$SOURCE_DATE_EPOCH" \
   --arg sourceDigest "$source_manifest_digest" \
+  --arg builderId "$builder_id" \
+  --arg invocationId "$invocation_id" \
+  --arg inventoryDigest "$installed_packages_digest" \
+  --arg sourceIndexDigest "$source_index_digest" \
   --argjson overlayCommit "$overlay_json" \
   --slurpfile subjects "$temp_dir/subjects.json" \
   '{
-    schemaVersion: 1,
+    schemaVersion: 2,
     edition: $edition,
     version: $version,
     architecture: $architecture,
     channel: $channel,
     generatedAt: $generatedAt,
+    sourceDateEpoch: ($sourceDateEpoch | tonumber),
+    build: {builderId: $builderId, invocationId: $invocationId},
+    imagePackageInventory: {path:"IMAGE-PACKAGE-INVENTORY.json",sha256:$inventoryDigest},
+    correspondingSourceIndex: {path:"source-index.json",sha256:$sourceIndexDigest},
     source: {
       coreCommit: $coreCommit,
       overlayCommit: $overlayCommit,
@@ -284,6 +333,12 @@ jq -n \
     },
     subjects: $subjects[0]
   }' > "$temp_dir/release.json"
+
+if ! python3 "$script_dir/validate-json.py" \
+  "$script_dir/release-metadata.schema.json" "$temp_dir/release.json"; then
+  echo "Generated release metadata failed its schema." >&2
+  exit 1
+fi
 
 jq -n \
   --arg name "Devario-$edition-$version-$architecture" \
@@ -304,6 +359,24 @@ jq -n \
     documentDescribes: ($files[0] | map(.SPDXID)),
     files: $files[0]
   }' > "$temp_dir/release.spdx.json"
+
+jq -n --arg name "Devario-$edition-$version-$architecture-installed-packages" \
+  --arg namespace "https://github.com/Seafoam-Labs/devario-os/releases/$version/installed-$installed_packages_digest" \
+  --arg created "$generated_at" --arg creator "$metadata_creator" \
+  --slurpfile inventory "$installed_packages" --slurpfile sources "$source_index" '
+  {
+    spdxVersion:"SPDX-2.3",dataLicense:"CC0-1.0",SPDXID:"SPDXRef-DOCUMENT",name:$name,
+    documentNamespace:$namespace,creationInfo:{created:$created,creators:[$creator,"Tool: devario-release-metadata"]},
+    documentDescribes:[$inventory[0][] | "SPDXRef-Package-" + (.name|gsub("[^A-Za-z0-9.-]";"-"))],
+    packages:[$inventory[0][] as $package |
+      ($sources[0].packages[] | select(.name==$package.name)) as $source |
+      {name:$package.name,SPDXID:("SPDXRef-Package-"+($package.name|gsub("[^A-Za-z0-9.-]";"-"))),versionInfo:$package.version,
+       supplier:(if $package.packager=="" then "NOASSERTION" else "Organization: "+$package.packager end),
+       downloadLocation:"NOASSERTION",filesAnalyzed:false,
+       licenseDeclared:(if ($package.licenses|length)==0 then "NOASSERTION" else ($package.licenses|join(" AND ")) end),
+       licenseConcluded:"NOASSERTION",copyrightText:"NOASSERTION",
+       comment:("architecture="+$package.architecture+"; packageBase="+$package.packageBase+"; binary="+$source.binary.path+"@"+$source.binary.sha256+"; correspondingSource="+([$source.sources[].uri]|join(",")))}]
+  }' > "$temp_dir/installed-packages.spdx.json"
 
 jq -n \
   --arg builderId "$builder_id" \
@@ -362,15 +435,21 @@ install -m 0644 "$temp_dir/release.json" "$output_dir/release.json"
 install -m 0644 "$temp_dir/release.spdx.json" "$output_dir/release.spdx.json"
 install -m 0644 "$temp_dir/provenance.intoto.json" "$output_dir/provenance.intoto.json"
 install -m 0644 "$source_manifest" "$output_dir/source-manifest.json"
+install -m 0644 "$installed_packages" "$output_dir/IMAGE-PACKAGE-INVENTORY.json"
+install -m 0644 "$source_index" "$output_dir/source-index.json"
+install -m 0644 "$temp_dir/installed-packages.spdx.json" "$output_dir/installed-packages.spdx.json"
 
 (
   cd "$output_dir"
   sha256sum -- \
     SHA256SUMS \
+    IMAGE-PACKAGE-INVENTORY.json \
+    installed-packages.spdx.json \
     provenance.intoto.json \
     release.json \
     release.spdx.json \
     source-manifest.json \
+    source-index.json \
     > METADATA.SHA256SUMS
 )
 

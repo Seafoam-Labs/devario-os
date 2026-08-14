@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Seafoam-Labs/devario-os/main/release/promotion-acceptance.schema.json",
+  "title": "Closed Devario promotion acceptance evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "candidateSha256", "candidateVersion", "edition", "diskFormat", "installedDisk", "installationLock", "installationReview", "results"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "candidateSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "candidateVersion": {"type": "string", "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
+    "edition": {"enum": ["community", "managed"]},
+    "diskFormat": {"enum": ["raw", "qcow2"]},
+    "installedDisk": {"$ref": "#/$defs/file"},
+    "installationLock": {"$ref": "#/$defs/file"},
+    "installationReview": {
+      "type": "object", "additionalProperties": false,
+      "required": ["document", "signature"],
+      "properties": {"document": {"$ref": "#/$defs/file"}, "signature": {"$ref": "#/$defs/file"}}
+    },
+    "results": {
+      "type": "array", "minItems": 4, "maxItems": 4,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["mode", "firmware", "document", "log"],
+        "properties": {
+          "mode": {"enum": ["live", "installed"]},
+          "firmware": {"enum": ["bios", "uefi"]},
+          "document": {"$ref": "#/$defs/file"}, "log": {"$ref": "#/$defs/file"}
+        }
+      },
+      "allOf": [
+        {"contains": {"properties": {"mode": {"const": "live"}, "firmware": {"const": "bios"}}, "required": ["mode", "firmware"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"mode": {"const": "live"}, "firmware": {"const": "uefi"}}, "required": ["mode", "firmware"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"mode": {"const": "installed"}, "firmware": {"const": "bios"}}, "required": ["mode", "firmware"]}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"mode": {"const": "installed"}, "firmware": {"const": "uefi"}}, "required": ["mode", "firmware"]}, "minContains": 1, "maxContains": 1}
+      ]
+    }
+  },
+  "$defs": {
+    "file": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "sha256", "size"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//)[^\\r\\n]+$"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "size": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

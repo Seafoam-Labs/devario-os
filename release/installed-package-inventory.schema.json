@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Seafoam-Labs/devario-os/main/release/installed-package-inventory.schema.json",
+  "title": "Canonical installed image package inventory",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "type": "object", "additionalProperties": false,
+    "required": ["name", "version", "architecture", "packageBase", "licenses", "packager"],
+    "properties": {
+      "name": {"type": "string", "pattern": "^[A-Za-z0-9@._+:-]+$"},
+      "version": {"type": "string", "minLength": 1},
+      "architecture": {"enum": ["any", "x86_64"]},
+      "packageBase": {"type": "string", "pattern": "^[A-Za-z0-9@._+:-]+$"},
+      "licenses": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+      "packager": {"type": "string"}
+    }
+  }
+}

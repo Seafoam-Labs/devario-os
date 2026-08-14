@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Seafoam-Labs/devario-os/main/release/release-metadata.schema.json",
+  "title": "Devario release metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "edition", "version", "architecture", "channel",
+    "generatedAt", "sourceDateEpoch", "build", "source", "imagePackageInventory", "correspondingSourceIndex", "subjects"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 2},
+    "edition": {"enum": ["community", "managed"]},
+    "version": {"type": "string", "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
+    "architecture": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+    "channel": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+    "generatedAt": {"type": "string", "format": "date-time"},
+    "sourceDateEpoch": {"type": "integer", "minimum": 1},
+    "build": {
+      "type": "object", "additionalProperties": false,
+      "required": ["builderId", "invocationId"],
+      "properties": {
+        "builderId": {"type": "string", "format": "uri"},
+        "invocationId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{7,255}$"}
+      }
+    },
+    "imagePackageInventory": {"$ref": "#/$defs/fileDigest"},
+    "correspondingSourceIndex": {"$ref": "#/$defs/fileDigest"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coreCommit", "overlayCommit", "vendoredSourceManifest"],
+      "properties": {
+        "coreCommit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "overlayCommit": {
+          "oneOf": [
+            {"type": "null"},
+            {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+          ]
+        },
+        "vendoredSourceManifest": {"$ref": "#/$defs/fileDigest"}
+      }
+    },
+    "subjects": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/subject"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"edition": {"const": "managed"}}},
+      "then": {"properties": {"source": {"properties": {"overlayCommit": {"type": "string"}}}}},
+      "else": {"properties": {"source": {"properties": {"overlayCommit": {"type": "null"}}}}}
+    }
+  ],
+  "$defs": {
+    "fileDigest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "digest", "size"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//)[^\\r\\n]+$"},
+        "digest": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sha256"],
+          "properties": {"sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+        },
+        "size": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

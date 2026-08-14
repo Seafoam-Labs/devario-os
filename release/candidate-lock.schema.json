@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Seafoam-Labs/devario-os/main/release/candidate-lock.schema.json",
+  "title": "Devario immutable release candidate lock",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "edition", "version", "architecture", "candidateChannel",
+    "coreCommit", "overlayCommit", "sourceDateEpoch", "createdAt", "artifacts",
+    "artifactSetSha256", "metadata", "metadataSetSha256", "buildEvidence"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 2},
+    "edition": {"enum": ["community", "managed"]},
+    "version": {"type": "string", "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
+    "architecture": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+    "candidateChannel": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+    "coreCommit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "overlayCommit": {
+      "oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[0-9a-f]{40}$"}]
+    },
+    "sourceDateEpoch": {"type": "integer", "minimum": 1},
+    "createdAt": {"type": "string", "format": "date-time"},
+    "artifacts": {"$ref": "#/$defs/tree"},
+    "artifactSetSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "metadata": {"$ref": "#/$defs/tree"},
+    "metadataSetSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "buildEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coreInputLock", "overlayInputLock", "builderManifest", "builderManifestSignature", "builderAttestation", "builderAttestationSignature"],
+      "properties": {
+        "coreInputLock": {"$ref": "#/$defs/evidence"},
+        "overlayInputLock": {
+          "oneOf": [{"type": "null"}, {"$ref": "#/$defs/evidence"}]
+        },
+        "builderManifest": {"$ref": "#/$defs/evidence"},
+        "builderManifestSignature": {"$ref": "#/$defs/evidence"},
+        "builderAttestation": {"$ref": "#/$defs/evidence"},
+        "builderAttestationSignature": {"$ref": "#/$defs/evidence"}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"edition": {"const": "managed"}}},
+      "then": {
+        "properties": {
+          "overlayCommit": {"type": "string"},
+          "buildEvidence": {"properties": {"overlayInputLock": {"$ref": "#/$defs/evidence"}}}
+        }
+      },
+      "else": {
+        "properties": {
+          "overlayCommit": {"type": "null"},
+          "buildEvidence": {"properties": {"overlayInputLock": {"type": "null"}}}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "tree": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/file"}
+    },
+    "file": {
+      "oneOf": [
+        {"$ref": "#/$defs/regularFile"},
+        {"$ref": "#/$defs/repositorySymlink"}
+      ]
+    },
+    "regularFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "size", "mode"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//)[^\\r\\n]+$"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "size": {"type": "integer", "minimum": 1},
+        "mode": {"type": "string", "pattern": "^[0-7]{3,4}$"}
+      }
+    },
+    "repositorySymlink": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "mode", "target"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//)(?:[^\\r\\n]+/)?devario-(?:core|managed)\\.(?:db|files)(?:\\.sig)?$"},
+        "mode": {"const": "120000"},
+        "target": {"type": "string"}
+      },
+      "oneOf": [
+        {"properties": {"path": {"pattern": "(?:^|/)devario-core\\.db$"}, "target": {"const": "devario-core.db.tar.zst"}}},
+        {"properties": {"path": {"pattern": "(?:^|/)devario-core\\.files$"}, "target": {"const": "devario-core.files.tar.zst"}}},
+        {"properties": {"path": {"pattern": "(?:^|/)devario-core\\.db\\.sig$"}, "target": {"const": "devario-core.db.tar.zst.sig"}}},
+        {"properties": {"path": {"pattern": "(?:^|/)devario-core\\.files\\.sig$"}, "target": {"const": "devario-core.files.tar.zst.sig"}}},
+        {"properties": {"path": {"pattern": "(?:^|/)devario-managed\\.db$"}, "target": {"const": "devario-managed.db.tar.zst"}}},
+        {"properties": {"path": {"pattern": "(?:^|/)devario-managed\\.files$"}, "target": {"const": "devario-managed.files.tar.zst"}}},
+        {"properties": {"path": {"pattern": "(?:^|/)devario-managed\\.db\\.sig$"}, "target": {"const": "devario-managed.db.tar.zst.sig"}}},
+        {"properties": {"path": {"pattern": "(?:^|/)devario-managed\\.files\\.sig$"}, "target": {"const": "devario-managed.files.tar.zst.sig"}}}
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sha256"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

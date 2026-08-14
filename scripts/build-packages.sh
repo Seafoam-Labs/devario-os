@@ -3,11 +3,19 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(cd -- "$script_dir/.." && pwd)"
-repo_dir="$project_dir/repo"
+repo_dir="${DEVARIO_PACKAGE_OUTPUT_DIR:-$project_dir/repo/core}"
+repository_name=devario-core
+keyring_dir="${DEVARIO_KEYRING_DIR:-$project_dir/packages/devario-keyring}"
 makepkg_adapter="$script_dir/makepkg-shelly-adapter.sh"
 makepkg_config="$script_dir/makepkg-shelly.conf"
 signing_key="${DEVARIO_SIGNING_KEY:-}"
 signing_home="${DEVARIO_GNUPGHOME:-$project_dir/.devario-signing}"
+key_policy="${DEVARIO_KEY_POLICY:-development}"
+release_build="${DEVARIO_RELEASE_BUILD:-0}"
+package_work_dir="${DEVARIO_PACKAGE_WORK_DIR:-}"
+source_output_dir="${DEVARIO_SOURCE_OUTPUT_DIR:-}"
+prepare_dependencies_only="${DEVARIO_BUILDER_PREPARE:-0}"
+expected_packager='ZoeyErinBauer <40698010+ZoeyErinBauer@users.noreply.github.com>'
 package_order=(
   devario-alpm-runtime
   devario-keyring
@@ -29,6 +37,10 @@ Usage: ./scripts/build-packages.sh [package-directory ...]
 Build every Devario package when no package directory is specified. Otherwise,
 build only the requested package directories in the repository's canonical
 order and refresh the repository database with all existing artifacts.
+
+Release builds set DEVARIO_RELEASE_BUILD=1, use a production public-key bundle,
+require the exact clean committed source tree, build the full package set into
+fresh output/work directories, and emit corresponding source archives.
 EOF
 }
 
@@ -70,11 +82,64 @@ else
   done
 fi
 
-if [[ -z "$signing_key" && -s "$signing_home/fingerprint" ]]; then
-  read -r signing_key < "$signing_home/fingerprint"
+if [[ "$release_build" != 0 && "$release_build" != 1 ]]; then
+  echo 'DEVARIO_RELEASE_BUILD must be 0 or 1.' >&2
+  exit 2
 fi
+if [[ "$prepare_dependencies_only" != 0 && "$prepare_dependencies_only" != 1 ]]; then
+  echo 'DEVARIO_BUILDER_PREPARE must be 0 or 1.' >&2
+  exit 2
+fi
+if (( release_build )) && (( ${#requested_package_directories[@]} != 0 )); then
+  echo 'A release package build must rebuild the complete canonical package set.' >&2
+  exit 1
+fi
+
+# shellcheck source=lib/repository.sh
+source "$script_dir/lib/repository.sh"
+devario_validate_keyring_bundle "$keyring_dir" "$repository_name" "$key_policy"
+
 if [[ -n "$signing_key" ]]; then
   export GNUPGHOME="$signing_home"
+  devario_require_active_secret_signer "$signing_home" "$signing_key"
+  signing_key="$DEVARIO_SIGNING_FINGERPRINT"
+fi
+
+if (( release_build )); then
+  if [[ "$key_policy" != production ]]; then
+    echo 'A release package build requires the production key policy.' >&2
+    exit 1
+  fi
+  if (( ! prepare_dependencies_only )) && [[ -z "$signing_key" ]]; then
+    echo 'An artifact-producing release package build requires the active signer.' >&2
+    exit 1
+  fi
+  if (( ! prepare_dependencies_only )); then
+    if [[ "${DEVARIO_CONTROLLED_NSPAWN:-0}" != 1 \
+      || "${DEVARIO_INPUT_LOCK:-}" != /input/CORE-INPUT-LOCK.json ]]; then
+      echo 'Native or unauthenticated release package construction is forbidden.' >&2
+      exit 1
+    fi
+    DEVARIO_KEYRING_DIR="$keyring_dir" DEVARIO_REPOSITORY_NAME="$repository_name" \
+      "$script_dir/verify-controlled-builder.sh"
+  fi
+  if [[ "${DEVARIO_VERIFIED_SOURCE:-0}" != 1 ]]; then
+    "$script_dir/verify-repository-boundary.sh" --repository "$project_dir"
+  fi
+  if [[ "${DEVARIO_VERIFIED_SOURCE:-0}" == 1 ]]; then
+    "$script_dir/reject-secret-material.py" --tree "$project_dir"
+  else
+    "$script_dir/reject-secret-material.py" --git-tracked "$project_dir"
+  fi
+  expected_epoch="${DEVARIO_CORE_SOURCE_DATE_EPOCH:-}"
+  if [[ -z "$expected_epoch" ]]; then
+    expected_epoch="$(git -C "$project_dir" show -s --format=%ct HEAD 2>/dev/null || true)"
+  fi
+  if [[ ! "$expected_epoch" =~ ^[0-9]+$ \
+    || "${SOURCE_DATE_EPOCH:-}" != "$expected_epoch" ]]; then
+    echo 'Release SOURCE_DATE_EPOCH must equal the verified core commit timestamp.' >&2
+    exit 1
+  fi
 fi
 
 if (( EUID == 0 )); then
@@ -82,7 +147,7 @@ if (( EUID == 0 )); then
   exit 1
 fi
 
-for command_name in awk bsdtar makepkg repo-add shelly sort; do
+for command_name in awk bsdtar find makepkg python3 repo-add shelly sort; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "Missing required command: $command_name" >&2
     exit 1
@@ -92,6 +157,47 @@ done
 if [[ ! -x "$makepkg_adapter" ]]; then
   echo "The strict makepkg Shelly adapter is not executable: $makepkg_adapter" >&2
   exit 1
+fi
+
+if [[ -z "$package_work_dir" ]]; then
+  package_work_dir="$(mktemp -d /tmp/devario-package-build.XXXXXX)"
+  cleanup_package_work=1
+else
+  package_work_dir="$(realpath -m -- "$package_work_dir")"
+  cleanup_package_work=0
+  if [[ -e "$package_work_dir" ]] \
+    && [[ -n "$(find "$package_work_dir" -mindepth 1 -print -quit)" ]]; then
+    echo "Package work directory must be fresh and empty: $package_work_dir" >&2
+    exit 1
+  fi
+  install -d -m 0755 "$package_work_dir"
+fi
+cleanup() {
+  if (( cleanup_package_work )); then
+    rm -rf -- "$package_work_dir"
+  fi
+}
+trap cleanup EXIT
+package_artifact_dir="$package_work_dir/artifacts"
+package_source_dir="$package_work_dir/sources"
+package_build_dir="$package_work_dir/build"
+install -d -m 0755 "$package_artifact_dir" "$package_source_dir" "$package_build_dir"
+export DEVARIO_MAKEPKG_PKGDEST="$package_artifact_dir"
+export DEVARIO_MAKEPKG_SRCPKGDEST="$package_source_dir"
+export DEVARIO_MAKEPKG_BUILDDIR="$package_build_dir"
+
+if (( release_build )); then
+  if [[ -e "$repo_dir" ]] && [[ -n "$(find "$repo_dir" -mindepth 1 -print -quit)" ]]; then
+    echo "Release repository output must be fresh and empty: $repo_dir" >&2
+    exit 1
+  fi
+  [[ -n "$source_output_dir" ]] || source_output_dir="$(dirname -- "$repo_dir")/sources"
+  if [[ -e "$source_output_dir" ]] \
+    && [[ -n "$(find "$source_output_dir" -mindepth 1 -print -quit)" ]]; then
+    echo "Release source output must be fresh and empty: $source_output_dir" >&2
+    exit 1
+  fi
+  install -d -m 0755 "$source_output_dir"
 fi
 if [[ ! -r "$makepkg_config" ]]; then
   echo "The Shelly-only makepkg configuration is missing: $makepkg_config" >&2
@@ -177,6 +283,11 @@ if (( ${#build_dependencies[@]} )); then
   shelly install standard --no-confirm "${build_dependencies[@]}"
 fi
 
+if (( prepare_dependencies_only )); then
+  echo 'Builder dependency preparation completed without producing artifacts.'
+  exit 0
+fi
+
 mkdir -p "$repo_dir"
 
 printf 'Building package directories:'
@@ -252,11 +363,42 @@ for package_name in "${selected_package_order[@]}"; do
       exit 1
     fi
     built_artifacts+=("$artifact")
+    artifact_packager="$(bsdtar -xOf "$artifact" .PKGINFO | awk -F ' = ' '$1 == "packager" {print $2; exit}')"
+    buildinfo_packager="$(bsdtar -xOf "$artifact" .BUILDINFO | awk -F ' = ' '$1 == "packager" {print $2; exit}')"
+    if [[ "$artifact_packager" != "$expected_packager" || "$buildinfo_packager" != "$expected_packager" ]]; then
+      echo "Package attribution differs from the required ZoeyErinBauer identity: $artifact" >&2
+      exit 1
+    fi
   done
   artifacts=("${built_artifacts[@]}")
   if (( ${#artifacts[@]} == 0 )); then
     echo "$package_name did not create any package artifacts." >&2
     exit 1
+  fi
+
+  if (( release_build )); then
+    # Emit the complete makepkg source archive from the same exact snapshot.
+    # It is kept outside the binary ALPM repository so repository closure and
+    # corresponding-source publication remain independently auditable.
+    (
+      cd "$package_dir"
+      run_makepkg --allsource --force --noconfirm
+    )
+    shopt -s nullglob
+    source_archives=("$package_source_dir/${package_base}-"*.src.tar.*)
+    shopt -u nullglob
+    if (( ${#source_archives[@]} != 1 )); then
+      echo "$package_name must produce exactly one corresponding-source archive." >&2
+      exit 1
+    fi
+    install -m 0444 "${source_archives[0]}" \
+      "$source_output_dir/$(basename -- "${source_archives[0]}")"
+    source_destination="$source_output_dir/$(basename -- "${source_archives[0]}")"
+    GNUPGHOME="$signing_home" gpg --batch --yes --detach-sign \
+      --local-user "$signing_key" --output "$source_destination.sig" \
+      "$source_destination"
+    chmod 0444 "$source_destination.sig"
+    devario_gpgv_active_signature "$source_destination.sig" "$source_destination"
   fi
 
   # Keep only the just-built version of every output package. repo-add --remove
@@ -328,14 +470,19 @@ fi
 
 repo_args=(--remove)
 # repo-add must never reuse a signature for the previous database contents.
-rm -f -- "$repo_dir/devario.db.tar.zst.sig" "$repo_dir/devario.db.sig"
+rm -f -- \
+  "$repo_dir/$repository_name.db.tar.zst.sig" \
+  "$repo_dir/$repository_name.db.sig" \
+  "$repo_dir/$repository_name.files.tar.zst.sig" \
+  "$repo_dir/$repository_name.files.sig"
 if [[ -n "$signing_key" ]]; then
   repo_args+=(--sign --key "$signing_key")
 fi
-repo-add "${repo_args[@]}" "$repo_dir/devario.db.tar.zst" "${repo_packages[@]}"
+repo-add "${repo_args[@]}" "$repo_dir/$repository_name.db.tar.zst" "${repo_packages[@]}"
 rm -f -- \
-  "$repo_dir/devario.db.tar.zst.old" \
-  "$repo_dir/devario.db.tar.zst.old.sig" \
-  "$repo_dir/devario.files.tar.zst.old" \
-  "$repo_dir/devario.files.tar.zst.old.sig"
+  "$repo_dir/$repository_name.db.tar.zst.old" \
+  "$repo_dir/$repository_name.db.tar.zst.old.sig" \
+  "$repo_dir/$repository_name.files.tar.zst.old" \
+  "$repo_dir/$repository_name.files.tar.zst.old.sig"
+devario_verify_repository "$repo_dir" "$repository_name" "$keyring_dir" "$key_policy"
 echo "Local repository is ready at $repo_dir"

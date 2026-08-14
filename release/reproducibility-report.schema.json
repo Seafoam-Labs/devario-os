@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Seafoam-Labs/devario-os/main/release/reproducibility-report.schema.json",
+  "title": "Devario independent-build reproducibility report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "outcome", "subjectSetSha256", "subjectIdentitySha256", "comparedSubjects", "builds", "excludedPerRunMetadata"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "outcome": {"enum": ["pass", "fail"]},
+    "subjectSetSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "subjectIdentitySha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "comparedSubjects": {"type": "integer", "minimum": 1},
+    "builds": {
+      "type": "array", "minItems": 2, "maxItems": 2,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["releaseMetadataSha256", "candidateLockSha256", "artifactSetSha256", "builderId", "invocationId", "coreInputLockSha256", "overlayInputLockSha256"],
+        "properties": {
+          "releaseMetadataSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "candidateLockSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "artifactSetSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "builderId": {"type": "string", "format": "uri"},
+          "invocationId": {"type": "string", "minLength": 8},
+          "coreInputLockSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "overlayInputLockSha256": {"oneOf": [{"type": "null"}, {"type": "string", "pattern": "^[0-9a-f]{64}$"}]}
+        }
+      }
+    },
+    "excludedPerRunMetadata": {
+      "type": "array", "const": ["provenance.intoto.json:predicate.runDetails"]
+    }
+  }
+}

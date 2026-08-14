@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: Copyright (c) respective contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -u
+root=/ mode='' firmware='' edition=''
+while (( $# )); do
+  case "$1" in
+    --root) root="$2"; shift 2 ;;
+    --mode) mode="$2"; shift 2 ;;
+    --firmware) firmware="$2"; shift 2 ;;
+    --edition) edition="$2"; shift 2 ;;
+    *) exit 2 ;;
+  esac
+done
+if [[ -z "$mode" || -z "$firmware" || -z "$edition" ]]; then
+  request='/sys/firmware/qemu_fw_cfg/by_name/opt/org.devario/acceptance/raw'
+  [[ -r "$request" ]] || exit 0
+  IFS=' ' read -r mode firmware edition extra < "$request"
+  [[ -z "${extra:-}" ]] || exit 2
+fi
+mode="${mode#mode=}"; firmware="${firmware#firmware=}"; edition="${edition#edition=}"
+[[ "$mode" == live || "$mode" == installed ]] || exit 2
+[[ "$firmware" == bios || "$firmware" == uefi ]] || exit 2
+[[ "$edition" == community || "$edition" == managed ]] || exit 2
+
+failures=()
+fail() { failures+=("$*"); }
+root_path() { printf '%s%s\n' "${root%/}" "$1"; }
+os_release="$(root_path /etc/os-release)"; pacman_conf="$(root_path /etc/pacman.conf)"
+keyring_ready="$(root_path /var/lib/devario/shelly-keyring.ready)"
+[[ -r "$os_release" ]] || fail 'missing /etc/os-release'
+[[ -r "$pacman_conf" ]] || fail 'missing /etc/pacman.conf'
+[[ -f "$keyring_ready" && ! -L "$keyring_ready" ]] || fail 'Shelly keyring initialization did not complete'
+
+if [[ -r "$os_release" ]]; then
+  actual_edition="$(sed -nE 's/^VARIANT_ID="?([^"[:space:]]+)"?$/\1/p' "$os_release")"
+  [[ "$actual_edition" == "$edition" ]] || fail "VARIANT_ID is ${actual_edition:-missing}, expected $edition"
+fi
+
+section_siglevel() {
+  local section="$1"
+  awk -v wanted="$section" '
+    /^[[:space:]]*\[/ {
+      current=$0; gsub(/^[[:space:]]*\[|\][[:space:]]*$/, "", current); next
+    }
+    current == wanted && /^[[:space:]]*SigLevel[[:space:]]*=/ {
+      value=$0; sub(/^[^=]*=[[:space:]]*/, "", value); sub(/[[:space:]]*#.*/, "", value)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value); print value
+    }
+  ' "$pacman_conf"
+}
+section_servers() {
+  local section="$1"
+  awk -v wanted="$section" '
+    /^[[:space:]]*\[/ {current=$0; gsub(/^[[:space:]]*\[|\][[:space:]]*$/, "", current); next}
+    current == wanted && /^[[:space:]]*Server[[:space:]]*=/ {
+      value=$0; sub(/^[^=]*=[[:space:]]*/, "", value)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value); print value
+    }
+  ' "$pacman_conf"
+}
+section_count() { grep -Ec "^[[:space:]]*\\[$1\\][[:space:]]*$" "$pacman_conf"; }
+require_repository() {
+  local section="$1" count sig server
+  count="$(section_count "$section")"
+  [[ "$count" == 1 ]] || { fail "repository [$section] occurs $count times"; return; }
+  sig="$(section_siglevel "$section")"
+  [[ "$sig" == Required ]] || fail "repository [$section] must declare exactly SigLevel = Required"
+  server="$(section_servers "$section")"
+  if [[ "$(section_servers "$section" | wc -l)" != 1 \
+    || ! "$server" =~ ^https://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:[0-9]{1,5})?(/[A-Za-z0-9._~!$\&\'\(\)*+,\;=:%/-]*)?$ \
+    || "$server" == *'@'* || "$server" == *'?'* || "$server" == *'#'* || "$server" == *'\'* \
+    || "$server" == */../* || "$server" == */./* ]]; then
+    fail "repository [$section] must have exactly one credential-free HTTPS Server"
+  fi
+}
+if [[ -r "$pacman_conf" ]]; then
+  require_repository devario-core
+  if [[ "$edition" == managed ]]; then
+    require_repository devario-managed
+  elif grep -Eqi 'devario-managed|managed\.seafoam|tenant|enrollment' "$pacman_conf"; then
+    fail 'Community ALPM configuration contains managed material'
+  fi
+fi
+
+if [[ "$root" == / ]]; then
+  if [[ "$firmware" == uefi ]]; then [[ -d /sys/firmware/efi ]] || fail 'UEFI runtime was not detected'
+  else [[ ! -d /sys/firmware/efi ]] || fail 'BIOS runtime unexpectedly exposes EFI'; fi
+fi
+if [[ "$mode" == installed ]]; then
+  [[ -s "$(root_path /etc/machine-id)" ]] || fail 'installed system lacks a machine ID'
+  [[ -s "$(root_path /etc/fstab)" ]] || fail 'installed system lacks fstab'
+  [[ ! -e "$(root_path /run/archiso/bootmnt)" ]] || fail 'installed system is still an Archiso live root'
+else
+  [[ -x "$(root_path /usr/bin/calamares)" || "$root" != / ]] || fail 'live image lacks Calamares'
+fi
+
+marker="mode=$mode firmware=$firmware edition=$edition"
+if (( ${#failures[@]} )); then
+  printf 'Acceptance failure: %s\n' "${failures[@]}" >&2
+  printf 'DEVARIO_ACCEPTANCE:FAIL %s\n' "$marker"
+  status=1
+else
+  printf 'DEVARIO_ACCEPTANCE:PASS %s\n' "$marker"
+  status=0
+fi
+if [[ "$root" == / && -r /sys/firmware/qemu_fw_cfg/by_name/opt/org.devario/acceptance/raw ]]; then
+  systemctl --no-block poweroff >/dev/null 2>&1 || true
+fi
+exit "$status"

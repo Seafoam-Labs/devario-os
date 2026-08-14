@@ -2,6 +2,15 @@
 
 # Edition metadata is parsed as data. This file must never source edition.conf.
 
+devario_edition_library_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+if [[ ! -r "$devario_edition_library_dir/repository.sh" ]]; then
+  printf 'Edition error: repository contract library is missing.\n' >&2
+  return 1 2>/dev/null || exit 1
+fi
+# shellcheck source=repository.sh
+source "$devario_edition_library_dir/repository.sh"
+unset devario_edition_library_dir
+
 devario_edition_error() {
   printf 'Edition error: %s\n' "$*" >&2
   return 1
@@ -122,12 +131,46 @@ devario_load_edition_config() {
 
 devario_verify_base_lock() {
   local core_dir="$1"
+  local identity_mode="${2:-normal}"
   local lock_path="$DEVARIO_EDITION_DIR/base.lock"
-  local internal_editions_dir actual_commit locked_commit lock_line
+  local internal_editions_dir actual_commit locked_commit lock_line sentinel
   local line_count=0
 
   core_dir="$(realpath -e -- "$core_dir")"
   internal_editions_dir="$core_dir/editions"
+
+  if [[ -n "${DEVARIO_CORE_COMMIT:-}" ]]; then
+    if [[ ! "$DEVARIO_CORE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+      devario_edition_error 'DEVARIO_CORE_COMMIT is not a full lowercase commit ID'
+      return 1
+    fi
+    if [[ "$identity_mode" == action-snapshot ]]; then
+      sentinel="${DEVARIO_ACTION_SNAPSHOT_SENTINEL:-}"
+      if [[ "${DEVARIO_VALIDATED_ACTION_SNAPSHOT:-0}" != 1 \
+        || -e "$core_dir/.git" \
+        || "$(realpath -e -- "${DEVARIO_ACTION_SNAPSHOT_ROOT:-/nonexistent}" 2>/dev/null || true)" != "$core_dir" \
+        || ! -f "$sentinel" || -L "$sentinel" \
+        || "$(<"$sentinel")" != "devario_os_commit=$DEVARIO_CORE_COMMIT" ]]; then
+        devario_edition_error 'the action-snapshot identity override lacks its validation-only sentinel'
+        return 1
+      fi
+    elif [[ "${DEVARIO_CONTROLLED_NSPAWN:-0}" == 1 \
+      && "${DEVARIO_VERIFIED_SOURCE:-0}" == 1 \
+      && "${DEVARIO_RELEASE_BUILD:-0}" == 1 \
+      && "$core_dir" == /input/devario-os \
+      && ! -e "$core_dir/.git" \
+      && "${DEVARIO_INPUT_LOCK:-}" == /input/CORE-INPUT-LOCK.json \
+      && -f /input/CORE-INPUT-LOCK.json ]]; then
+      :
+    else
+      devario_edition_error 'DEVARIO_CORE_COMMIT is accepted only from a verified controlled release or immutable action snapshot'
+      return 1
+    fi
+    actual_commit="$DEVARIO_CORE_COMMIT"
+  elif [[ "$identity_mode" == action-snapshot ]]; then
+    devario_edition_error 'an action snapshot requires its platform-authenticated core commit'
+    return 1
+  fi
 
   if devario_path_is_within "$DEVARIO_EDITION_DIR" "$internal_editions_dir" \
     && [[ ! -e "$lock_path" ]]; then
@@ -152,15 +195,17 @@ devario_verify_base_lock() {
     return 1
   fi
 
-  if ! actual_commit="$(git -C "$core_dir" rev-parse --verify 'HEAD^{commit}' 2>/dev/null)"; then
-    devario_edition_error 'an external edition requires devario-os to be checked out at a commit'
+  if [[ -z "${actual_commit:-}" ]] \
+    && ! actual_commit="$(git -C "$core_dir" rev-parse --verify 'HEAD^{commit}' 2>/dev/null)"; then
+    devario_edition_error 'an external edition requires a committed devario-os checkout or its verified snapshot identity'
     return 1
   fi
   if [[ "$locked_commit" != "$actual_commit" ]]; then
     devario_edition_error "base.lock requires devario-os $locked_commit, but the checkout is $actual_commit"
     return 1
   fi
-  if [[ -n "$(git -C "$core_dir" status --porcelain --untracked-files=all)" ]]; then
+  if [[ -d "$core_dir/.git" ]] \
+    && [[ -n "$(git -C "$core_dir" status --porcelain=v1 --untracked-files=all --ignored=matching)" ]]; then
     devario_edition_error 'an external edition requires a clean devario-os checkout matching base.lock'
     return 1
   fi
@@ -327,6 +372,7 @@ devario_compose_profile() {
   local requested_edition_dir="$2"
   local staged_profile_dir="$3"
   local core_dir="$4"
+  local identity_mode="${5:-normal}"
   local package package_file replacement_path tree_name source_root staged_root
   local packages_tmp
   local -a base_packages=()
@@ -375,13 +421,24 @@ devario_compose_profile() {
   fi
 
   devario_load_edition_config "$requested_edition_dir" || return 1
-  devario_verify_base_lock "$core_dir" || return 1
+  devario_verify_base_lock "$core_dir" "$identity_mode" || return 1
   devario_read_package_list \
     "$base_profile_dir/packages.x86_64" base_packages 'base packages.x86_64' || return 1
   devario_read_package_list \
     "$DEVARIO_EDITION_DIR/packages.add" added_packages 'packages.add' || return 1
   devario_read_package_list \
     "$DEVARIO_EDITION_DIR/packages.remove" removed_packages 'packages.remove' || return 1
+  devario_load_package_sources "$DEVARIO_EDITION_DIR" added_packages || return 1
+  DEVARIO_EDITION_HAS_MANAGED=0
+  for package in "${added_packages[@]}"; do
+    if [[ "${DEVARIO_PACKAGE_ORIGINS[$package]}" == managed ]]; then
+      DEVARIO_EDITION_HAS_MANAGED=1
+    fi
+  done
+  if [[ "$DEVARIO_EDITION_ID" == community ]] && (( DEVARIO_EDITION_HAS_MANAGED )); then
+    devario_edition_error 'the Community edition cannot declare managed package origins'
+    return 1
+  fi
   devario_read_replacement_list \
     "$DEVARIO_EDITION_DIR/replacements.allow" allowed_replacements || return 1
 
@@ -412,6 +469,9 @@ devario_compose_profile() {
   done
 
   cp -a -- "$base_profile_dir/." "$staged_profile_dir/"
+  install -d -m 0755 "$staged_profile_dir/airootfs/usr/share/devario"
+  install -m 0644 "$DEVARIO_EDITION_DIR/package-sources.conf" \
+    "$staged_profile_dir/airootfs/usr/share/devario/package-sources.conf"
   packages_tmp="$(mktemp "$staged_profile_dir/.packages.x86_64.XXXXXX")"
   for package in "${base_packages[@]}"; do
     if [[ -z "${remove_set[$package]:-}" ]]; then

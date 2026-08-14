@@ -6,13 +6,14 @@ project_dir="$(cd -- "$script_dir/.." && pwd)"
 container_root="${DEVARIO_NSPAWN_ROOT:-/var/lib/machines/devario-builder}"
 container_project_dir="/build"
 edition_dir="$project_dir/editions/community"
+release_version=''
 
 usage() {
   cat <<'EOF'
-Usage: sudo ./scripts/build-iso-nspawn.sh [--edition DIRECTORY]
+Usage: sudo ./scripts/build-iso-nspawn.sh [--edition DIRECTORY] [--release-version VERSION]
 
 Prepare or reuse the Devario systemd-nspawn builder and create an ISO from the
-packages in repo/. The resulting image is written to out/ by default.
+core packages in repo/core/. The resulting image is written to out/ by default.
 An edition directory outside devario-os is mounted read-only in the builder.
 
 Environment:
@@ -20,8 +21,16 @@ Environment:
   DEVARIO_NSPAWN_WORK_DIR
                          Work directory inside the container (default: a fresh
                          directory below /var/tmp)
-  DEVARIO_REPO_URL      HTTPS production repository URL for a release image
+  DEVARIO_CORE_REPO_DIR Core repository directory (default: repo/core)
+  DEVARIO_CORE_KEYRING_DIR
+                         Core public-key bundle (default: packages/devario-keyring)
+  DEVARIO_CORE_REPO_URL Credential-free HTTPS core runtime repository URL
+  DEVARIO_MANAGED_REPO_DIR / DEVARIO_MANAGED_KEYRING_DIR / DEVARIO_MANAGED_REPO_URL
+                         Distinct inputs required by a managed edition
   DEVARIO_OUTPUT_DIR    Host ISO output directory (default: project out/)
+
+Release mode additionally requires --release-version. Development builds reject
+that option and retain their explicit Development identity.
 
 The bootstrap-related environment accepted by build-packages-nspawn.sh is also
 honored when the container must be prepared for the first time.
@@ -37,6 +46,11 @@ while (( $# )); do
         exit 2
       fi
       edition_dir="$2"
+      shift 2
+      ;;
+    --release-version)
+      if (( $# < 2 )); then echo '--release-version requires a value.' >&2; exit 2; fi
+      release_version="$2"
       shift 2
       ;;
     -h|--help)
@@ -62,6 +76,16 @@ fi
 if [[ "$host_edition_dir" == *:* || "$host_edition_dir" == *$'\n'* ]]; then
   echo 'The nspawn wrapper cannot map an edition path containing a colon or newline.' >&2
   exit 1
+fi
+
+if [[ "${DEVARIO_RELEASE_BUILD:-0}" == 1 ]]; then
+  [[ -n "$release_version" ]] || { echo 'Release builds require --release-version.' >&2; exit 2; }
+  exec "$script_dir/build-iso-controlled-nspawn.sh" --edition "$host_edition_dir" \
+    --release-version "$release_version"
+fi
+if [[ -n "$release_version" ]]; then
+  echo '--release-version is accepted only when DEVARIO_RELEASE_BUILD=1.' >&2
+  exit 2
 fi
 
 if (( EUID != 0 )); then
@@ -92,10 +116,16 @@ if [[ ! -x "$script_dir/build-iso.sh" ]]; then
   echo "The underlying ISO build script is missing or not executable." >&2
   exit 1
 fi
-if [[ ! -f "$project_dir/repo/devario.db.tar.zst" ]]; then
+requested_core_repo="${DEVARIO_CORE_REPO_DIR:-$project_dir/repo/core}"
+if [[ "$requested_core_repo" != /* ]]; then requested_core_repo="$project_dir/$requested_core_repo"; fi
+host_core_repo_dir="$(realpath -e -- "$requested_core_repo")"
+if [[ ! -f "$host_core_repo_dir/devario-core.db.tar.zst" ]]; then
   echo "The local repository is missing. Build packages before creating the ISO." >&2
   exit 1
 fi
+requested_core_keyring="${DEVARIO_CORE_KEYRING_DIR:-$project_dir/packages/devario-keyring}"
+if [[ "$requested_core_keyring" != /* ]]; then requested_core_keyring="$project_dir/$requested_core_keyring"; fi
+host_core_keyring_dir="$(realpath -e -- "$requested_core_keyring")"
 
 echo "Preparing the reusable baseline nspawn environment..."
 "$script_dir/build-packages-nspawn.sh" --prepare-only
@@ -181,12 +211,62 @@ else
   nspawn_args+=(--bind-ro="$host_edition_dir:$container_edition_dir")
 fi
 
+map_readonly_input() {
+  local host_path="$1"
+  local external_container_path="$2"
+  if [[ ! -d "$host_path" || -L "$host_path" \
+    || "$host_path" == *:* || "$host_path" == *$'\n'* ]]; then
+    echo "Repository/keyring input is unavailable or unsafe: $host_path" >&2
+    exit 1
+  fi
+  if [[ "$host_path" == "$project_dir" ]]; then
+    mapped_input_path="$container_project_dir"
+  elif [[ "$host_path" == "$project_dir/"* ]]; then
+    mapped_input_path="$container_project_dir/${host_path#"$project_dir/"}"
+  else
+    mapped_input_path="$external_container_path"
+    nspawn_args+=(--bind-ro="$host_path:$mapped_input_path")
+  fi
+}
+
+map_readonly_input "$host_core_repo_dir" /devario-core-repo
+container_core_repo_dir="$mapped_input_path"
+map_readonly_input "$host_core_keyring_dir" /devario-core-keyring
+container_core_keyring_dir="$mapped_input_path"
+nspawn_args+=(
+  --setenv="DEVARIO_CORE_REPO_DIR=$container_core_repo_dir"
+  --setenv="DEVARIO_CORE_KEYRING_DIR=$container_core_keyring_dir"
+)
+if [[ -n "${DEVARIO_MANAGED_REPO_DIR:-}" || -n "${DEVARIO_MANAGED_KEYRING_DIR:-}" ]]; then
+  [[ -n "${DEVARIO_MANAGED_REPO_DIR:-}" && -n "${DEVARIO_MANAGED_KEYRING_DIR:-}" ]] || {
+    echo 'Managed repository and keyring inputs must be supplied together.' >&2
+    exit 1
+  }
+  requested_managed_repo="$DEVARIO_MANAGED_REPO_DIR"
+  requested_managed_keyring="$DEVARIO_MANAGED_KEYRING_DIR"
+  if [[ "$requested_managed_repo" != /* ]]; then requested_managed_repo="$project_dir/$requested_managed_repo"; fi
+  if [[ "$requested_managed_keyring" != /* ]]; then requested_managed_keyring="$project_dir/$requested_managed_keyring"; fi
+  host_managed_repo_dir="$(realpath -e -- "$requested_managed_repo")"
+  host_managed_keyring_dir="$(realpath -e -- "$requested_managed_keyring")"
+  map_readonly_input "$host_managed_repo_dir" /devario-managed-repo
+  container_managed_repo_dir="$mapped_input_path"
+  map_readonly_input "$host_managed_keyring_dir" /devario-managed-keyring
+  container_managed_keyring_dir="$mapped_input_path"
+  nspawn_args+=(
+    --setenv="DEVARIO_MANAGED_REPO_DIR=$container_managed_repo_dir"
+    --setenv="DEVARIO_MANAGED_KEYRING_DIR=$container_managed_keyring_dir"
+  )
+fi
+
 nspawn_args+=(
   --setenv="DEVARIO_OUTPUT_DIR=$container_output_dir"
   --setenv="DEVARIO_WORK_DIR=$container_work_dir"
 )
-if [[ -n "${DEVARIO_REPO_URL:-}" ]]; then
-  nspawn_args+=(--setenv="DEVARIO_REPO_URL=$DEVARIO_REPO_URL")
+if [[ -n "${DEVARIO_CORE_REPO_URL:-${DEVARIO_REPO_URL:-}}" ]]; then
+  nspawn_args+=(--setenv="DEVARIO_CORE_REPO_URL=${DEVARIO_CORE_REPO_URL:-$DEVARIO_REPO_URL}")
+fi
+if [[ -n "${DEVARIO_MANAGED_REPO_URL:-}" ]]; then
+  nspawn_args+=(--setenv="DEVARIO_MANAGED_REPO_URL=$DEVARIO_MANAGED_REPO_URL")
 fi
 
 echo "Building the Devario ISO inside the nspawn environment..."

@@ -1,0 +1,11 @@
+{
+  "$schema": "./trust-policy.schema.json",
+  "schemaVersion": 1,
+  "purpose": "human-release-approval",
+  "activeFingerprint": null,
+  "approvedFingerprints": [],
+  "forbiddenFingerprints": [
+    "580E40BB6D6E8745D69D89CC6E6C90512593874C",
+    "E199A52D6C3B80057E08C7BB645354F2E56FEC5D"
+  ]
+}
