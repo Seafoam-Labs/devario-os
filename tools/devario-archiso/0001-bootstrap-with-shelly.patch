@@ -1,6 +1,38 @@
+diff --git a/.gitlab-ci.yml b/.gitlab-ci.yml
+index 0e7f709..68a7d61 100644
+--- a/.gitlab-ci.yml
++++ b/.gitlab-ci.yml
+@@ -12,8 +12,10 @@ check:
+     # future this should not be needed anymore when we can guarantee a valid
+     # keyring for longer:
+     # https://gitlab.archlinux.org/archlinux/archlinux-keyring/-/issues/4
+-    - pacman -Sy --needed --noconfirm archlinux-keyring
+-    - pacman --noconfirm -Syu --needed make shellcheck
++    - shelly sync standard --no-confirm
++    - shelly install standard --no-confirm archlinux-keyring
++    - shelly upgrade standard --no-confirm
++    - shelly install standard --no-confirm make shellcheck
+   script:
+     - make check
+   stage: check
+@@ -24,8 +26,10 @@ check:
+     reports:
+       metrics: output/metrics.txt
+   before_script:
+-    - pacman -Sy --needed --noconfirm archlinux-keyring
+-    - pacman -Syu --needed --noconfirm arch-install-scripts bash dosfstools e2fsprogs erofs-utils gnupg grub jq libarchive libisoburn mtools openssl python-docutils squashfs-tools zsync
++    - shelly sync standard --no-confirm
++    - shelly install standard --no-confirm archlinux-keyring
++    - shelly upgrade standard --no-confirm
++    - shelly install standard --no-confirm arch-install-scripts bash dosfstools e2fsprogs erofs-utils gnupg grub jq libarchive libisoburn mtools openssl python-docutils squashfs-tools zsync
+   script:
+     - ./.gitlab/ci/build_archiso.sh ${BUILD_SCRIPT_ARGS}
+   stage: build
+diff --git a/archiso/mkarchiso b/archiso/mkarchiso
+index 515a804..aeb5155 100755
 --- a/archiso/mkarchiso
 +++ b/archiso/mkarchiso
-@@ -31,6 +31,7 @@
+@@ -31,6 +31,7 @@ iso_version=""
  install_dir=""
  arch=""
  pacman_conf=""
@@ -8,7 +40,7 @@
  packages=""
  bootstrap_packages=""
  bootstrap_parent=""
-@@ -91,7 +92,7 @@
+@@ -91,7 +92,7 @@ usage: ${app_name} [options] <profile_dir>
    options:
       -A <application> Set an application name for the ISO
                        Default: '${iso_application}'
@@ -17,7 +49,7 @@
                        Default: '${pacman_conf}'
       -D <install_dir> Set an install_dir. All files will be located here.
                        Default: '${install_dir}'
-@@ -144,7 +145,7 @@
+@@ -144,7 +145,7 @@ _show_config() {
      _msg_info "               GPG signer:   ${gpg_sender:-None}"
      _msg_info "Code signing certificates:   ${cert_list[*]:-None}"
      _msg_info "                  Profile:   ${profile}"
@@ -26,7 +58,7 @@
      _msg_info "          Image file name:   ${image_name:-None}"
      _msg_info "         ISO volume label:   ${iso_label}"
      _msg_info "            ISO publisher:   ${iso_publisher}"
-@@ -156,21 +157,21 @@
+@@ -156,21 +157,21 @@ _show_config() {
  
  # Cleanup airootfs
  _cleanup_pacstrap_dir() {
@@ -36,14 +68,17 @@
      # Delete all files in /boot
      [[ -d "${pacstrap_dir}/boot" ]] && _unshare find "${pacstrap_dir}/boot" -mindepth 1 -delete
 -    # Delete pacman database sync cache files (*.tar.gz)
-+    # Delete ALPM database sync cache files (*.tar.gz)
-     [[ -d "${pacstrap_dir}/var/lib/pacman" ]] && _unshare find "${pacstrap_dir}/var/lib/pacman" -maxdepth 1 -type f -delete
+-    [[ -d "${pacstrap_dir}/var/lib/pacman" ]] && _unshare find "${pacstrap_dir}/var/lib/pacman" -maxdepth 1 -type f -delete
 -    # Delete pacman database sync cache
-+    # Delete ALPM database sync cache
-     [[ -d "${pacstrap_dir}/var/lib/pacman/sync" ]] && _unshare find "${pacstrap_dir}/var/lib/pacman/sync" -delete
+-    [[ -d "${pacstrap_dir}/var/lib/pacman/sync" ]] && _unshare find "${pacstrap_dir}/var/lib/pacman/sync" -delete
 -    # Delete pacman package cache
+-    [[ -d "${pacstrap_dir}/var/cache/pacman/pkg" ]] && _unshare find "${pacstrap_dir}/var/cache/pacman/pkg" -type f -delete
++    # Delete ALPM database sync cache files (*.tar.gz)
++    [[ -d "${pacstrap_dir}/var/lib/shelly" ]] && _unshare find "${pacstrap_dir}/var/lib/shelly" -maxdepth 1 -type f -delete
++    # Delete ALPM database sync cache
++    [[ -d "${pacstrap_dir}/var/lib/shelly/sync" ]] && _unshare find "${pacstrap_dir}/var/lib/shelly/sync" -delete
 +    # Delete the package cache
-     [[ -d "${pacstrap_dir}/var/cache/pacman/pkg" ]] && _unshare find "${pacstrap_dir}/var/cache/pacman/pkg" -type f -delete
++    [[ -d "${pacstrap_dir}/var/cache/shelly/pkg" ]] && _unshare find "${pacstrap_dir}/var/cache/shelly/pkg" -type f -delete
      # Delete all log files, keeps empty dirs.
      [[ -d "${pacstrap_dir}/var/log" ]] && _unshare find "${pacstrap_dir}/var/log" -type f -delete
      # Delete all temporary files and dirs
@@ -53,7 +88,7 @@
      _unshare find "${work_dir}" \( -name '*.pacnew' -o -name '*.pacsave' -o -name '*.pacorig' \) -delete
      # Create /etc/machine-id with special value 'uninitialized': the final id is
      # generated on first boot, systemd's first-boot mechanism applies (see machine-id(5))
-@@ -282,29 +283,69 @@
+@@ -282,29 +283,69 @@ _run_once() {
      fi
  }
  
@@ -86,10 +121,10 @@
 +    local root="$1"
 +
 +    install -d -m 0755 -- \
-+        "${root}/var/lib/pacman" \
-+        "${root}/var/cache/pacman/pkg" \
++        "${root}/var/lib/shelly" \
++        "${root}/var/cache/shelly/pkg" \
 +        "${root}/var/log" \
-+        "${root}/etc/pacman.d"
++        "${root}/etc/shelly.d"
 +    install -d -m 0555 -- "${root}/run" "${root}/dev" "${root}/sys" "${root}/proc"
 +    install -d -m 1777 -- "${root}/tmp"
 +
@@ -106,10 +141,6 @@
 +    _devario_chroot_add_mount /run "${root}/run" --bind --make-private
 +    _devario_chroot_add_mount tmp "${root}/tmp" -t tmpfs -o mode=1777,strictatime,nodev,nosuid
 +}
-+
-+# Set up a custom ALPM configuration for Shelly's isolated target transaction.
-+_make_pacman_conf() {
-+    local generated_config="${work_dir}/${buildmode}.pacman.conf"
  
 -    _msg_info "Copying custom pacman.conf to work directory..."
 -    _msg_info "Using pacman CacheDir: ${_cache_dirs}"
@@ -120,20 +151,24 @@
 -    pacman-conf --config "${pacman_conf}" \
 -        | sed "/CacheDir/d;/DBPath/d;/HookDir/d;/LogFile/d;/RootDir/d;/\[options\]/a CacheDir = ${_cache_dirs}
 -        /\[options\]/a HookDir = ${pacstrap_dir}/etc/pacman.d/hooks/" >"${work_dir}/${buildmode}.pacman.conf"
++# Set up a custom ALPM configuration for Shelly's isolated target transaction.
++_make_pacman_conf() {
++    local generated_config="${work_dir}/${buildmode}.shelly.conf"
++
 +    _msg_info "Preparing an isolated Shelly ALPM configuration..."
 +    awk \
 +        -v root="${pacstrap_dir}" \
-+        -v database="${pacstrap_dir}/var/lib/pacman" \
-+        -v hooks="${pacstrap_dir}/etc/pacman.d/hooks" \
++        -v database="${pacstrap_dir}/var/lib/shelly" \
++        -v hooks="${pacstrap_dir}/etc/shelly.d/hooks" \
 +        -v logfile="${pacstrap_dir}/var/log/shelly.log" \
-+        -v gpgdir="${DEVARIO_BUILD_GPGDIR:-/etc/pacman.d/gnupg}" \
++        -v gpgdir="${DEVARIO_BUILD_GPGDIR:-/etc/shelly.d/gnupg}" \
 +        '
 +        tolower($0) ~ /^[[:space:]]*(rootdir|dbpath|cachedir|hookdir|logfile|gpgdir)[[:space:]]*=/ { next }
 +        { print }
 +        tolower($0) ~ /^\[options\][[:space:]]*$/ {
 +            print "RootDir = " root
 +            print "DBPath = " database
-+            print "CacheDir = /var/cache/pacman/pkg"
++            print "CacheDir = /var/cache/shelly/pkg"
 +            print "HookDir = " hooks
 +            print "HookDir = " root "/usr/share/libalpm/hooks"
 +            print "LogFile = " logfile
@@ -144,7 +179,7 @@
  }
  
  # Prepare working directory and copy custom root file system files.
-@@ -342,12 +382,7 @@
+@@ -342,12 +383,7 @@ _make_custom_airootfs() {
  
  # Install desired packages to the root file system
  _make_packages() {
@@ -154,11 +189,11 @@
 -    if (( EUID != 0 )); then
 -        _pacstrap_options=(-N "${_pacstrap_options[@]}")
 -    fi
-+    local generated_config="${work_dir}/${buildmode}.pacman.conf"
++    local generated_config="${work_dir}/${buildmode}.shelly.conf"
  
      _msg_info "Installing packages to '${pacstrap_dir}/'..."
  
-@@ -364,11 +399,27 @@
+@@ -364,11 +400,27 @@ _make_packages() {
          export ARCHISO_TLSCA_FD
      fi
  
@@ -191,7 +226,7 @@
      fi
  
      if [[ -v cert_list[0] ]]; then
-@@ -1219,9 +1270,17 @@
+@@ -1219,9 +1271,17 @@ _validate_requirements_airootfs_image_type_erofs() {
  }
  
  _validate_common_requirements_buildmode_all() {
@@ -211,7 +246,7 @@
      fi
      if ! command -v find &>/dev/null; then
          (( validation_error=validation_error+1 ))
-@@ -1464,10 +1523,10 @@
+@@ -1464,10 +1524,10 @@ _build_bootstrap_image() {
  
  # Build ISO
  _build_iso_image() {
@@ -224,7 +259,7 @@
          _unshare rm -rf -- "${work_dir:?}/${arch}/airootfs"
      fi
  
-@@ -1557,7 +1616,7 @@
+@@ -1557,7 +1617,7 @@ _validate_options() {
  
      _msg_info "Validating options..."
  
@@ -233,7 +268,16 @@
      if [[ ! -e "${pacman_conf}" ]]; then
          (( validation_error=validation_error+1 ))
          _msg_error "File '${pacman_conf}' does not exist." 0
-@@ -1718,17 +1777,36 @@
+@@ -1613,7 +1673,7 @@ _set_overrides() {
+     if [[ -v override_pacman_conf ]]; then
+         pacman_conf="$override_pacman_conf"
+     elif [[ -z "$pacman_conf" ]]; then
+-        pacman_conf="/etc/pacman.conf"
++        pacman_conf="/etc/shelly.conf"
+     fi
+     pacman_conf="$(realpath -- "$pacman_conf")"
+     [[ ! -v override_pkg_list ]] || pkg_list+=("${override_pkg_list[@]}")
+@@ -1718,17 +1778,36 @@ _make_version() {
  }
  
  _make_pkglist() {
@@ -241,7 +285,7 @@
 +
      _msg_info "Creating a list of installed packages on live-enviroment..."
 +    inventory_json="$(
-+        SHELLY_ALPM_CONFIG="${work_dir}/${buildmode}.pacman.conf" \
++        SHELLY_ALPM_CONFIG="${work_dir}/${buildmode}.shelly.conf" \
 +            "${devario_shelly}" list standard --show-hidden --json
 +    )"
      case "${buildmode}" in
@@ -273,41 +317,48 @@
      _msg_info "Done!"
  }
  
---- a/.gitlab-ci.yml
-+++ b/.gitlab-ci.yml
-@@ -15,2 +15,4 @@
--    - pacman -Sy --needed --noconfirm archlinux-keyring
--    - pacman --noconfirm -Syu --needed make shellcheck
-+    - shelly sync standard --no-confirm
-+    - shelly install standard --no-confirm archlinux-keyring
-+    - shelly upgrade standard --no-confirm
-+    - shelly install standard --no-confirm make shellcheck
-@@ -22,12 +24,14 @@
- .build:
-   artifacts:
-     reports:
-       metrics: output/metrics.txt
-   before_script:
--    - pacman -Sy --needed --noconfirm archlinux-keyring
--    - pacman -Syu --needed --noconfirm arch-install-scripts bash dosfstools e2fsprogs erofs-utils gnupg grub jq libarchive libisoburn mtools openssl python-docutils squashfs-tools zsync
-+    - shelly sync standard --no-confirm
-+    - shelly install standard --no-confirm archlinux-keyring
-+    - shelly upgrade standard --no-confirm
-+    - shelly install standard --no-confirm arch-install-scripts bash dosfstools e2fsprogs erofs-utils gnupg grub jq libarchive libisoburn mtools openssl python-docutils squashfs-tools zsync
-   script:
-     - ./.gitlab/ci/build_archiso.sh ${BUILD_SCRIPT_ARGS}
-   stage: build
-   tags:
-     - vm
+diff --git a/configs/releng/airootfs/etc/systemd/system/etc-pacman.d-gnupg.mount b/configs/releng/airootfs/etc/systemd/system/etc-pacman.d-gnupg.mount
+deleted file mode 100644
+index 038961e..0000000
+--- a/configs/releng/airootfs/etc/systemd/system/etc-pacman.d-gnupg.mount
++++ /dev/null
+@@ -1,8 +0,0 @@
+-[Unit]
+-Description=Temporary /etc/pacman.d/gnupg directory
+-
+-[Mount]
+-What=tmpfs
+-Where=/etc/pacman.d/gnupg
+-Type=tmpfs
+-Options=mode=0755,noswap
+diff --git a/configs/releng/airootfs/etc/systemd/system/etc-shelly.d-gnupg.mount b/configs/releng/airootfs/etc/systemd/system/etc-shelly.d-gnupg.mount
+new file mode 100644
+index 0000000..d47dc90
+--- /dev/null
++++ b/configs/releng/airootfs/etc/systemd/system/etc-shelly.d-gnupg.mount
+@@ -0,0 +1,8 @@
++[Unit]
++Description=Temporary /etc/shelly.d/gnupg directory
++
++[Mount]
++What=tmpfs
++Where=/etc/shelly.d/gnupg
++Type=tmpfs
++Options=mode=0755,noswap
+diff --git a/configs/releng/airootfs/etc/systemd/system/pacman-init.service b/configs/releng/airootfs/etc/systemd/system/pacman-init.service
+index b824884..80d45dc 100644
 --- a/configs/releng/airootfs/etc/systemd/system/pacman-init.service
 +++ b/configs/releng/airootfs/etc/systemd/system/pacman-init.service
 @@ -1,15 +1,15 @@
  [Unit]
 -Description=Initializes Pacman keyring
+-Requires=etc-pacman.d-gnupg.mount
+-After=etc-pacman.d-gnupg.mount time-sync.target
+-BindsTo=etc-pacman.d-gnupg.mount
 +Description=Initializes the package signing keyring with Shelly
- Requires=etc-pacman.d-gnupg.mount
- After=etc-pacman.d-gnupg.mount time-sync.target
- BindsTo=etc-pacman.d-gnupg.mount
++Requires=etc-shelly.d-gnupg.mount
++After=etc-shelly.d-gnupg.mount time-sync.target
++BindsTo=etc-shelly.d-gnupg.mount
  Before=archlinux-keyring-wkd-sync.service
  
  [Service]

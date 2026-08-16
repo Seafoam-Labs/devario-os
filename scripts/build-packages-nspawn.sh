@@ -292,6 +292,25 @@ if (( ! release_build )) && [[ ! -s "$container_root/etc/pacman.d/mirrorlist" ]]
     "$container_root/etc/pacman.d/mirrorlist"
 fi
 
+# Official Arch bootstrap roots expose their ALPM state through legacy paths.
+# Seed Shelly's configuration and bridge the new paths until the Devario
+# runtime package can perform the durable installed-system migration.
+install -Dm644 "$project_dir/packages/devario-alpm-runtime/shelly.conf" \
+  "$container_root/etc/shelly.conf"
+install -d -m 0755 \
+  "$container_root/etc/shelly.d" \
+  "$container_root/var/cache/shelly"
+legacy_database="$container_root/var/lib/pacman"
+legacy_database_name="${legacy_database##*/}"
+[[ -e "$container_root/var/lib/shelly" ]] || \
+  ln -s "$legacy_database_name" "$container_root/var/lib/shelly"
+[[ -e "$container_root/var/cache/shelly/pkg" ]] || \
+  ln -s ../pacman/pkg "$container_root/var/cache/shelly/pkg"
+[[ -e "$container_root/etc/shelly.d/gnupg" ]] || \
+  ln -s ../pacman.d/gnupg "$container_root/etc/shelly.d/gnupg"
+[[ -e "$container_root/etc/shelly.d/hooks" ]] || \
+  ln -s ../pacman.d/hooks "$container_root/etc/shelly.d/hooks"
+
 # The current locally trusted Shelly binary is only a bootstrap tool. It is
 # replaced by the package freshly compiled against the official Arch userspace.
 echo "Installing the Shelly bootstrap into the container..."
@@ -305,7 +324,7 @@ run_container_root /usr/bin/shelly sync standard --no-confirm
 if (( release_build )); then
   for repository_name in core extra; do
     if ! cmp -s "$arch_snapshot_dir/$repository_name.db" \
-      "$container_root/var/lib/pacman/sync/$repository_name.db"; then
+      "$container_root/var/lib/shelly/sync/$repository_name.db"; then
       echo "Shelly resolved against unexpected $repository_name database bytes." >&2
       exit 1
     fi
@@ -474,7 +493,7 @@ if (( release_build )); then
   container_release_work=''
   for repository_name in core extra; do
     cmp -s "$arch_snapshot_dir/$repository_name.db" \
-      "$container_root/var/lib/pacman/sync/$repository_name.db" || {
+      "$container_root/var/lib/shelly/sync/$repository_name.db" || {
       echo "Prepared builder drifted from locked $repository_name database." >&2
       exit 1
     }

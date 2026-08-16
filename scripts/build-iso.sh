@@ -96,7 +96,7 @@ if [[ "$actual_archiso_sha256" != "$archiso_archive_sha256" ]]; then
   exit 1
 fi
 
-if [[ ! -f "$profile_dir/pacman.runtime.conf" ]]; then
+if [[ ! -f "$profile_dir/shelly.runtime.conf" ]]; then
   echo "The installed-system package-manager template is missing." >&2
   exit 1
 fi
@@ -420,13 +420,13 @@ sed \
   -e "s|@DEVARIO_CORE_RUNTIME_SIGLEVEL@|$core_runtime_siglevel|g" \
   -e "s|@DEVARIO_CORE_RUNTIME_REPO@|$core_runtime_server_escaped|g" \
   -e "s|@DEVARIO_MANAGED_RUNTIME_REPOSITORY@|$managed_runtime_repository|g" \
-  "$staged_profile/pacman.runtime.conf" \
-  > "$staged_profile/airootfs/etc/pacman.conf"
+  "$staged_profile/shelly.runtime.conf" \
+  > "$staged_profile/airootfs/etc/shelly.conf"
 
 sed \
   -e "s|@DEVARIO_CORE_REPO@|$(escape_sed "$staged_core_repo")|g" \
   -e "s|@DEVARIO_MANAGED_BUILD_REPOSITORY@|$managed_build_repository|g" \
-  "$staged_profile/pacman.conf" > "$generated_conf"
+  "$staged_profile/shelly.build.conf" > "$generated_conf"
 
 if (( release_build )); then
   build_record_dir="$staged_profile/airootfs/usr/share/devario"
@@ -469,7 +469,7 @@ set +e
 GPGME_DEBUG="9:$gpgme_trace" \
 DEVARIO_SHELLY="$devario_shelly" \
 DEVARIO_BUILD_GPGDIR="$build_gpgdir" \
-DEVARIO_PACMAN_CONF="$generated_conf" \
+DEVARIO_SHELLY_CONF="$generated_conf" \
 DEVARIO_EDITION_ISO_NAME="$DEVARIO_EDITION_ISO_NAME" \
 DEVARIO_EDITION_ISO_LABEL_PREFIX="$DEVARIO_EDITION_ISO_LABEL_PREFIX" \
 DEVARIO_EDITION_ISO_PUBLISHER="$DEVARIO_EDITION_ISO_PUBLISHER" \

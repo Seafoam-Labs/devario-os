@@ -98,12 +98,16 @@ construction tools. Every package-manager hook exposed to makepkg points to
 operations. The build script forbids dependency, removal, and install modes
 that could bypass that adapter.
 
-Some historical names remain because they are ALPM ecosystem interfaces consumed by Shelly and Archiso:
+Shelly owns its runtime configuration and mutable package state:
 
-- `/etc/pacman.conf`
-- `/etc/pacman.d/hooks`, `/etc/pacman.d/gnupg`, and the Arch mirrorlist
+- `/etc/shelly.conf`
+- `/etc/shelly.d/hooks` and `/etc/shelly.d/gnupg`
+- `/var/lib/shelly` and `/var/cache/shelly/pkg`
+
+Some historical names remain only at upstream Arch compatibility boundaries:
+
+- `/etc/pacman.d/mirrorlist`
 - `/usr/share/pacman/keyrings`, where Arch and Devario distribute public trust roots
-- `/var/lib/pacman` and `/var/cache/pacman/pkg`
 - Arch package archives, repository databases, signatures, and ALPM hooks
 - Archiso's `pacman_conf` profile setting
 
@@ -111,7 +115,7 @@ Their presence does not mean `/usr/bin/pacman` or `/usr/bin/pacman-key` is prese
 
 `devario-alpm-runtime` also advertises a versioned virtual `pacman` provider because `archlinux-keyring` currently depends on that package name. It conflicts with and replaces the real package, but it does not contain either Pacman executable. This compatibility metadata is checked separately from the image-content rule.
 
-The packaged Shelly source is patched at build time because upstream 3.0.2 still delegated keyring operations and pacfile ownership lookup to Pacman programs. Devario routes keyring actions through `shelly-key` or GnuPG, reads ownership information directly from the local ALPM database, and supports `SHELLY_ALPM_CONFIG` for isolated image roots. The package build and artifact validator both enforce this boundary.
+The packaged Shelly source is patched at build time because upstream 3.0.6 still delegates keyring and repository operations and pacfile ownership lookup to Pacman programs. Devario routes keyring actions through `shelly-key` or GnuPG, reads ownership information directly from `/var/lib/shelly`, defaults to `/etc/shelly.conf`, and supports `SHELLY_ALPM_CONFIG` for isolated image roots. The package build and artifact validator enforce this boundary. Existing installations are bridged during the package upgrade and materialized under the new paths by `shelly-storage-migrate.service` at the following boot. Verified legacy data is retained under `/var/lib/devario/shelly-path-migration/legacy`; `/usr/lib/devario/shelly-storage-migrate --rollback` can recreate current compatibility state during the rollback window.
 
 ## Using Shelly
 
@@ -381,7 +385,7 @@ The closed output also retains `CORE-INPUT-LOCK.json`,
 Release-mode ISO construction rejects non-HTTPS repository URLs and unsigned
 artifacts, then verifies every package and repository database against the
 active production signer in the packaged rotation-safe public bundle. It
-writes a runtime `/etc/pacman.conf` requiring signatures. Replace the example
+writes a runtime `/etc/shelly.conf` requiring signatures. Replace the example
 URLs with the real immutable/repository endpoints.
 
 Build managed packages through the core-controlled external-package interface;
@@ -484,7 +488,7 @@ Before publishing an image, verify that:
 
 ```text
 archiso/                         Archiso profile and live filesystem overlay
-archiso/pacman.runtime.conf      Installed-system ALPM configuration template
+archiso/shelly.runtime.conf      Installed-system Shelly configuration template
 docs/                            High-level product and architecture documentation
 packages/calamares/              Upstream Calamares package
 packages/ckbcomp/                Calamares keyboard-layout compiler helper

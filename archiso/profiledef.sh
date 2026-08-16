@@ -12,7 +12,7 @@ bootmodes=(
   'bios.syslinux'
   'uefi.systemd-boot'
 )
-pacman_conf="${DEVARIO_PACMAN_CONF:-pacman.conf}"
+pacman_conf="${DEVARIO_SHELLY_CONF:-shelly.build.conf}"
 airootfs_image_type="squashfs"
 airootfs_image_tool_options=('-comp' 'xz' '-Xbcj' 'x86' '-b' '1M' '-Xdict-size' '1M')
 file_permissions=(

@@ -2,14 +2,17 @@
 
 pkgname=devario-alpm-runtime
 pkgver=7.1.0.r9.g54d9411
-pkgrel=1
+pkgrel=2
 pkgdesc="The libalpm runtime and configuration used by Shelly (without Pacman executables)"
 arch=('x86_64')
 url="https://gitlab.archlinux.org/pacman/pacman"
 license=('GPL-2.0-or-later')
 depends=(
   'bash'
+  'coreutils'
   'curl' 'libcurl.so'
+  'findutils'
+  'gawk'
   'glibc'
   'gnupg'
   'gpgme' 'libgpgme.so'
@@ -29,17 +32,24 @@ _source_dir="pacman-${_upstream_commit}"
 provides=("pacman=${pkgver}" 'libalpm.so')
 conflicts=('pacman')
 replaces=('pacman')
-backup=('etc/pacman.conf')
+backup=('etc/shelly.conf')
+install='devario-alpm-runtime.install'
 
 source=(
   "pacman-${pkgver}.tar.gz::https://gitlab.archlinux.org/pacman/pacman/-/archive/${_upstream_commit}/pacman-${_upstream_commit}.tar.gz"
   '0001-libalpm-invalidate-curl-data-in-child.patch'
-  'pacman.conf'
+  'shelly.conf'
+  'shelly-storage-migrate'
+  'shelly-storage-migrate.service'
+  'devario-alpm-runtime.install'
 )
 sha256sums=(
   '871a9616e5c82e265e4b2ff9eb4d1b4ae4e37bcc1387a48d04992a7b10af7336'
   '9a734e5d75be603d58aa92e8d29a15466b3ac2af6b7d6f6728dd5c3e5ed8758d'
-  'f5e1532f0cd037a7b249ce53b0c678dfc5760afc2b72f41ecb10cbee4d35dd30'
+  'ccbd27f25c9d7339a02092291fd4dacf30a3e70545cf40b7c9444fc831fb0c56'
+  '0fafdbb0f41e471dea9ce0a5f0b79bd216b443926f7f4c99d6b11d9f536d5b52'
+  'f7df4b2ed5e8db335dea4c44912a4f18f843742d14bdae584453d6c5218d7aa9'
+  '2a594dab826f2599528d8a96b388fadd163a9df079e579756365a24df507cb72'
 )
 
 prepare() {
@@ -97,18 +107,24 @@ package() {
   done
 
   install -Dm644 \
-    "$srcdir/pacman.conf" \
-    "$pkgdir/etc/pacman.conf"
+    "$srcdir/shelly.conf" \
+    "$pkgdir/etc/shelly.conf"
+  install -Dm755 \
+    "$srcdir/shelly-storage-migrate" \
+    "$pkgdir/usr/lib/devario/shelly-storage-migrate"
+  install -Dm644 \
+    "$srcdir/shelly-storage-migrate.service" \
+    "$pkgdir/usr/lib/systemd/system/shelly-storage-migrate.service"
   install -Dm644 \
     "$srcdir/${_source_dir}/COPYING" \
     "$pkgdir/usr/share/licenses/$pkgname/COPYING"
 
   install -dm755 \
-    "$pkgdir/etc/pacman.d/gnupg" \
-    "$pkgdir/etc/pacman.d/hooks" \
+    "$pkgdir/etc/shelly.d/gnupg" \
+    "$pkgdir/etc/shelly.d/hooks" \
     "$pkgdir/usr/share/libalpm/hooks" \
-    "$pkgdir/var/cache/pacman/pkg" \
-    "$pkgdir/var/lib/pacman"
+    "$pkgdir/var/cache/shelly/pkg" \
+    "$pkgdir/var/lib/shelly"
 
   printf '%s\n' 'u alpm - "Arch Linux Package Management" -' | \
     install -Dm644 /dev/stdin "$pkgdir/usr/lib/sysusers.d/alpm.conf"
@@ -118,6 +134,9 @@ package() {
   install -dm755 "$wantsdir"
   for unit in dirmngr gpg-agent gpg-agent-browser gpg-agent-extra gpg-agent-ssh keyboxd; do
     ln -s "../${unit}@.socket" \
-      "$wantsdir/${unit}@etc-pacman.d-gnupg.socket"
+      "$wantsdir/${unit}@etc-shelly.d-gnupg.socket"
   done
+  install -dm755 "$pkgdir/usr/lib/systemd/system/multi-user.target.wants"
+  ln -s ../shelly-storage-migrate.service \
+    "$pkgdir/usr/lib/systemd/system/multi-user.target.wants/shelly-storage-migrate.service"
 }

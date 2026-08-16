@@ -2,86 +2,109 @@ From: Devario maintainers
 Subject: [PATCH] use native key and database helpers at runtime
 
 Devario intentionally does not install the pacman or pacman-key executables.
-Use Shelly's own key helper for supported keyring operations, invoke GnuPG
-directly for network key operations, and resolve pacfile ownership from the
-local ALPM database instead of spawning pacman -Qoq.
+Use Shelly's own key helper for supported keyring and repository operations and
+invoke GnuPG directly for network key operations. Resolve pacfile ownership
+from the local ALPM database instead of spawning pacman -Qoq.
 
---- a/Shelly.Cli.Zig/src/cli/catalog.zig
-+++ b/Shelly.Cli.Zig/src/cli/catalog.zig
-@@ -574,7 +574,7 @@
+diff --git a/Shelly.Cli.Zig/src/cli/catalog/keyring.zig b/Shelly.Cli.Zig/src/cli/catalog/keyring.zig
+index d9cf2001c7688cfc37013fe634fd3366c44d9673..07982b64d78e3f5d4ffae3cd54985c130558e944 100644
+--- a/Shelly.Cli.Zig/src/cli/catalog/keyring.zig
++++ b/Shelly.Cli.Zig/src/cli/catalog/keyring.zig
+@@ -9,28 +9,28 @@ pub const variants = [_]types.Variant{
+         .name = "init",
          .type_code = 'i',
-         .help = .{
-             .description = "Initialize the pacman keyring.",
--            .implementation = "pacman-key --init",
-+            .implementation = "/usr/bin/shelly-key --init",
-         },
+         .description = "Initialize the pacman keyring.",
+-        .implementation = "pacman-key --init",
++        .implementation = "/usr/bin/shelly-key --init",
      },
      .{
-@@ -584,7 +584,7 @@
+         .action = .keyring,
+         .name = "list",
          .type_code = 'l',
-         .help = .{
-             .description = "List keys in the pacman keyring.",
--            .implementation = "pacman-key --list-keys",
-+            .implementation = "/usr/bin/shelly-key --list-keys",
-         },
+         .description = "List keys in the pacman keyring.",
+-        .implementation = "pacman-key --list-keys",
++        .implementation = "/usr/bin/shelly-key --list-keys",
      },
      .{
-@@ -594,7 +594,7 @@
+         .action = .keyring,
+         .name = "refresh",
          .type_code = 'r',
-         .help = .{
-             .description = "Refresh pacman keyring keys from the configured keyserver.",
--            .implementation = "pacman-key --refresh-keys",
-+            .implementation = "/usr/bin/gpg --homedir /etc/pacman.d/gnupg --refresh-keys",
-         },
+         .description = "Refresh pacman keyring keys from the configured keyserver.",
+-        .implementation = "pacman-key --refresh-keys",
++        .implementation = "/usr/bin/gpg --homedir /etc/pacman.d/gnupg --refresh-keys",
      },
      .{
-@@ -604,7 +604,7 @@
+         .action = .keyring,
+         .name = "lsign",
          .type_code = 's',
-         .help = .{
-             .description = "Locally sign one or more keys in the pacman keyring.",
--            .implementation = "pacman-key --lsign-key for each requested key",
-+            .implementation = "/usr/bin/shelly-key --lsign-key for each requested key",
-         },
-     },
-     .{
-@@ -614,7 +614,7 @@
+         .description = "Locally sign one or more keys in the pacman keyring.",
+-        .implementation = "pacman-key --lsign-key for each requested key",
++        .implementation = "/usr/bin/shelly-key --lsign-key for each requested key",
+         .arguments = &.{repeatedArgument(
+             "keys",
+             1,
+@@ -42,7 +42,7 @@ pub const variants = [_]types.Variant{
+         .name = "populate",
          .type_code = 'p',
-         .help = .{
-             .description = "Populate the pacman keyring with default or named distribution keys.",
--            .implementation = "pacman-key --populate",
-+            .implementation = "/usr/bin/shelly-key --populate",
-         },
-     },
-     .{
-@@ -624,7 +624,7 @@
+         .description = "Populate the pacman keyring with default or named distribution keys.",
+-        .implementation = "pacman-key --populate",
++        .implementation = "/usr/bin/shelly-key --populate",
+         .arguments = &.{repeatedArgument(
+             "keys",
+             0,
+@@ -54,7 +54,7 @@ pub const variants = [_]types.Variant{
+         .name = "recv",
          .type_code = 'v',
-         .help = .{
-             .description = "Receive one or more keys from the configured or requested keyserver.",
--            .implementation = "pacman-key --recv-keys [keys...] [--keyserver server]",
-+            .implementation = "/usr/bin/gpg --homedir /etc/pacman.d/gnupg [--keyserver server] --recv-keys [keys...]",
+         .description = "Receive one or more keys from the configured or requested keyserver.",
+-        .implementation = "pacman-key --recv-keys [keys...] [--keyserver server]",
++        .implementation = "/usr/bin/gpg --homedir /etc/pacman.d/gnupg [--keyserver server] --recv-keys [keys...]",
+         .arguments = &.{repeatedArgument(
+             "keys",
+             1,
+diff --git a/Shelly.Cli.Zig/src/cli/catalog/repository.zig b/Shelly.Cli.Zig/src/cli/catalog/repository.zig
+index c217e320cf157c0cacc4d53a2b17aa841e09b6b6..20c354823a6e616a583e19f651ee95e7843c1233 100644
+--- a/Shelly.Cli.Zig/src/cli/catalog/repository.zig
++++ b/Shelly.Cli.Zig/src/cli/catalog/repository.zig
+@@ -10,7 +10,7 @@ pub const variants = [_]types.Variant{
+         .name = "repository",
+         .type_code = 'r',
+         .description = "Add, remove, or list pacman.conf ALPM repositories; optionally locally sign a key and refresh databases.",
+-        .implementation = "Zigalpm.AlpmManager.add_repository / remove_repository / get_repository_names; pacman-key --lsign-key; Zigalpm.AlpmManager.sync",
++        .implementation = "Zigalpm.AlpmManager.add_repository / remove_repository / get_repository_names; /usr/bin/shelly-key --lsign-key; Zigalpm.AlpmManager.sync",
+         .arguments = &.{
+             optionalArgument("name", "Repository (database) name, e.g. my-repo"),
+             optionalArgument("url", "Server URL; required for --add, e.g. 'https://my-repo.ee/$arch/$repo', ignored for --remove/--list"),
+@@ -20,7 +20,7 @@ pub const variants = [_]types.Variant{
+             flag("--remove", &.{"-x"}, "Remove the named repository"),
+             flag("--list", &.{"-l"}, "List configured repositories"),
+             flag("--no-sync", &.{"-n"}, "Skip the final database refresh"),
+-            stringOption("--lsign-key", &.{"-s"}, "Key to locally sign with pacman-key before adding", false),
++            stringOption("--lsign-key", &.{"-s"}, "Key to locally sign with shelly-key before adding", false),
          },
      },
-     .{
+ };
+diff --git a/Shelly.Cli.Zig/src/commands/keyring.zig b/Shelly.Cli.Zig/src/commands/keyring.zig
+index ac2988b0e6d820cbd5287cfed61a0ad508603a81..12e174dd7c12e61dea03ba1c72406083fc3206f8 100644
 --- a/Shelly.Cli.Zig/src/commands/keyring.zig
 +++ b/Shelly.Cli.Zig/src/commands/keyring.zig
-@@ -7,6 +7,7 @@
+@@ -8,6 +8,7 @@ const elevation = @import("../runtime/elevation.zig");
  const spec = @import("../cli/spec.zig");
- 
+
  const command_prefix = "shelly keyring ";
 +const keyring_directory = "/etc/pacman.d/gnupg";
- 
+
  const Action = enum {
      init,
-@@ -31,7 +32,7 @@
-     ) anyerror!u8,
+@@ -29,7 +30,7 @@ const Real = struct {
+         context: *runtime.RuntimeContext,
+         arguments: []const []const u8,
+     ) !u8 {
+-        return runPacmanKey(context, arguments);
++        return runKeyTool(context, arguments);
+     }
  };
- 
--const real_runner: Runner = .{ .call = runPacmanKey };
-+const real_runner: Runner = .{ .call = runKeyTool };
- 
- pub fn dispatch(
-     context: *runtime.RuntimeContext,
-@@ -64,7 +65,7 @@
+
+@@ -64,7 +65,7 @@ fn executeWithRunner(
      const result = runAction(context, invocation, action, runner) catch |err| {
          const message = try std.fmt.allocPrint(
              context.allocator,
@@ -90,31 +113,29 @@ local ALPM database instead of spawning pacman -Qoq.
              .{err},
          );
          defer context.allocator.free(message);
-@@ -96,15 +97,19 @@
-     runner: Runner,
- ) !RunOutcome {
+@@ -96,14 +97,17 @@ fn runAction(
+     runner: anytype,
+ ) anyerror!RunOutcome {
      switch (action) {
--        .init => return .{ .exit_code = try runner.call(runner.data, context, &.{ "pacman-key", "--init" }) },
--        .list => return .{ .exit_code = try runner.call(runner.data, context, &.{ "pacman-key", "--list-keys" }) },
--        .refresh => return .{ .exit_code = try runner.call(runner.data, context, &.{ "pacman-key", "--refresh-keys" }) },
-+        .init => return .{ .exit_code = try runner.call(runner.data, context, &.{ "/usr/bin/shelly-key", "--init" }) },
-+        .list => return .{ .exit_code = try runner.call(runner.data, context, &.{ "/usr/bin/shelly-key", "--list-keys" }) },
+-        .init => return .{ .exit_code = try runner.call(context, &.{ "pacman-key", "--init" }) },
+-        .list => return .{ .exit_code = try runner.call(context, &.{ "pacman-key", "--list-keys" }) },
+-        .refresh => return .{ .exit_code = try runner.call(context, &.{ "pacman-key", "--refresh-keys" }) },
++        .init => return .{ .exit_code = try runner.call(context, &.{ "/usr/bin/shelly-key", "--init" }) },
++        .list => return .{ .exit_code = try runner.call(context, &.{ "/usr/bin/shelly-key", "--list-keys" }) },
 +        .refresh => return .{ .exit_code = try runner.call(
-+            runner.data,
 +            context,
 +            &.{ "/usr/bin/gpg", "--homedir", keyring_directory, "--refresh-keys" },
 +        ) },
          .lsign => {
              for (invocation.positionals) |key| {
                  const exit_code = try runner.call(
-                     runner.data,
                      context,
 -                    &.{ "pacman-key", "--lsign-key", key },
 +                    &.{ "/usr/bin/shelly-key", "--lsign-key", key },
                  );
                  if (exit_code != 0) return .{ .exit_code = exit_code, .failed_key = key };
              }
-@@ -113,7 +118,7 @@
+@@ -112,7 +116,7 @@ fn runAction(
          .populate => {
              const arguments = try context.allocator.alloc([]const u8, invocation.positionals.len + 2);
              defer context.allocator.free(arguments);
@@ -122,8 +143,8 @@ local ALPM database instead of spawning pacman -Qoq.
 +            arguments[0] = "/usr/bin/shelly-key";
              arguments[1] = "--populate";
              @memcpy(arguments[2..], invocation.positionals);
-             return .{ .exit_code = try runner.call(runner.data, context, arguments) };
-@@ -122,22 +127,26 @@
+             return .{ .exit_code = try runner.call(context, arguments) };
+@@ -121,22 +125,26 @@ fn runAction(
              const keyserver = optionValue(invocation, "--keyserver");
              const arguments = try context.allocator.alloc(
                  []const u8,
@@ -147,26 +168,26 @@ local ALPM database instead of spawning pacman -Qoq.
              }
 +            arguments[next] = "--recv-keys";
 +            @memcpy(arguments[next + 1 ..], invocation.positionals);
-             return .{ .exit_code = try runner.call(runner.data, context, arguments) };
+             return .{ .exit_code = try runner.call(context, arguments) };
          },
      }
  }
- 
+
 -fn runPacmanKey(
 +fn runKeyTool(
-     _: ?*anyopaque,
      context: *runtime.RuntimeContext,
      arguments: []const []const u8,
-@@ -300,19 +309,19 @@
+ ) !u8 {
+@@ -298,19 +306,19 @@ test "keyring catalog exposes top-level actions and recv keyserver help" {
      try std.testing.expect(missing_key == .failure);
  }
- 
+
 -test "keyring maps every action to structured pacman-key arguments" {
 +test "keyring maps every action to native helper arguments" {
      var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
      defer arena.deinit();
      const manifest = try spec.Manifest.load(arena.allocator());
- 
+
      const expected_calls = [_][]const []const u8{
 -        &.{ "pacman-key", "--init" },
 -        &.{ "pacman-key", "--list-keys" },
@@ -185,9 +206,42 @@ local ALPM database instead of spawning pacman -Qoq.
      };
      const Capture = struct {
          expected: []const []const []const u8,
+diff --git a/Shelly.Cli.Zig/src/commands/repository.zig b/Shelly.Cli.Zig/src/commands/repository.zig
+index 2139f1763e5270dc3abedfa82c14b9ead37bb1e4..c2d280bdf0c714fdc3e3963bae6a4d005649f5cd 100644
+--- a/Shelly.Cli.Zig/src/commands/repository.zig
++++ b/Shelly.Cli.Zig/src/commands/repository.zig
+@@ -18,7 +18,7 @@ const Real = struct {
+         context: *runtime.RuntimeContext,
+         key: []const u8,
+     ) !u8 {
+-        return runPacmanKey(context, &.{ "pacman-key", "--lsign-key", key });
++        return runKeyTool(context, &.{ "/usr/bin/shelly-key", "--lsign-key", key });
+     }
+
+     fn list(
+@@ -176,7 +176,7 @@ fn executeMutation(
+             if (lsign_code != 0) {
+                 const message = try std.fmt.allocPrint(
+                     context.allocator,
+-                    "Failed to locally sign key {s} (pacman-key exited with code {d}).",
++                    "Failed to locally sign key {s} (shelly-key exited with code {d}).",
+                     .{ key, lsign_code },
+                 );
+                 defer context.allocator.free(message);
+@@ -424,7 +424,7 @@ fn syncReal(
+     try manager.sync(true);
+ }
+
+-fn runPacmanKey(
++fn runKeyTool(
+     context: *runtime.RuntimeContext,
+     arguments: []const []const u8,
+ ) !u8 {
+diff --git a/Shelly.PackageManager/src/alpm/pacfile_manager.zig b/Shelly.PackageManager/src/alpm/pacfile_manager.zig
+index 6512242a0fc28541dc3aa4e01ee4d04e4d20214e..0246db9dc14f9ab53a3e3d2d60d070b7bee12cf1 100644
 --- a/Shelly.PackageManager/src/alpm/pacfile_manager.zig
 +++ b/Shelly.PackageManager/src/alpm/pacfile_manager.zig
-@@ -124,7 +124,6 @@
+@@ -124,7 +124,6 @@ pub const Options = struct {
      find_paths: []const []const u8 = &default_find_paths,
      temporary_directory: []const u8 = "/tmp",
      locate_command: []const u8 = "locate",
@@ -195,7 +249,7 @@ local ALPM database instead of spawning pacman -Qoq.
      bsdtar_command: []const u8 = "bsdtar",
      diff_program: []const []const u8 = &default_diff_program,
      merge_program: []const []const u8 = &default_merge_program,
-@@ -553,32 +552,54 @@
+@@ -553,32 +552,54 @@ pub const PacfileManager = struct {
      fn packageOwner(self: *PacfileManager, original_path: []const u8) Error![]u8 {
          const logical_path = try self.logicalPath(original_path);
          defer self.allocator.free(logical_path);
@@ -272,12 +326,12 @@ local ALPM database instead of spawning pacman -Qoq.
 -        return self.allocator.dupe(u8, owner) catch return Error.OutOfMemory;
 +        return Error.PackageOwnerNotFound;
      }
- 
+
      fn collectCacheEntries(
-@@ -758,6 +779,32 @@
+@@ -758,6 +779,32 @@ fn safeRelativePath(path: []const u8) bool {
      return true;
  }
- 
+
 +fn sectionContains(contents: []const u8, section: []const u8, expected: []const u8) bool {
 +    var lines = std.mem.splitScalar(u8, contents, '\n');
 +    var in_section = false;
@@ -307,7 +361,7 @@ local ALPM database instead of spawning pacman -Qoq.
  fn isDecimal(text: []const u8) bool {
      if (text.len == 0) return false;
      for (text) |character| if (!std.ascii.isDigit(character)) return false;
-@@ -907,6 +954,17 @@
+@@ -907,6 +954,17 @@ test "three-way merge is reviewable and applies with a backup" {
      const work = try std.fs.path.join(testing.allocator, &.{ root, "work" });
      defer testing.allocator.free(work);
      try std.Io.Dir.cwd().createDirPath(testing.io, cache);
@@ -322,13 +376,13 @@ local ALPM database instead of spawning pacman -Qoq.
 +    defer testing.allocator.free(desc_db);
 +    try std.Io.Dir.cwd().writeFile(testing.io, .{ .sub_path = files_db, .data = "%FILES%\nexample.conf\n\n" });
 +    try std.Io.Dir.cwd().writeFile(testing.io, .{ .sub_path = desc_db, .data = "%NAME%\nexample\n\n" });
- 
+
      inline for (.{ "example-1.0-1-x86_64.pkg.tar.zst", "example-2.0-1-x86_64.pkg.tar.zst" }) |name| {
          const archive = try std.fs.path.join(testing.allocator, &.{ cache, name });
-@@ -921,21 +979,19 @@
+@@ -921,21 +979,19 @@ test "three-way merge is reviewable and applies with a backup" {
      try std.Io.Dir.cwd().writeFile(testing.io, .{ .sub_path = original, .data = "local\n" });
      try std.Io.Dir.cwd().writeFile(testing.io, .{ .sub_path = pacnew, .data = "package\n" });
- 
+
 -    const owner_tool = try std.fs.path.join(testing.allocator, &.{ root, "owner-tool" });
 -    defer testing.allocator.free(owner_tool);
      const extract_tool = try std.fs.path.join(testing.allocator, &.{ root, "extract-tool" });

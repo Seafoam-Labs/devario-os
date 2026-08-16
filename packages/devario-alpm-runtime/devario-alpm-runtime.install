@@ -1,0 +1,20 @@
+pre_upgrade() {
+  install -d -m 0755 /var/lib/devario/shelly-path-migration
+  if [[ -f /etc/pacman.conf && ! -L /etc/pacman.conf ]]; then
+    install -m 0600 /etc/pacman.conf \
+      /var/lib/devario/shelly-path-migration/pacman.conf
+  fi
+}
+
+post_upgrade() {
+  /usr/lib/devario/shelly-storage-migrate --prepare
+}
+
+post_install() {
+  if [[ -d /var/lib/pacman/local && ! -L /var/lib/pacman ]]; then
+    /usr/lib/devario/shelly-storage-migrate --prepare
+  else
+    install -d -m 0755 /var/lib/devario/shelly-path-migration
+    install -m 0644 /dev/null /var/lib/devario/shelly-path-migration/complete
+  fi
+}

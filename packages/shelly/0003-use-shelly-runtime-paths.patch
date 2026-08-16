@@ -1,0 +1,340 @@
+From: Devario maintainers
+Subject: [PATCH] Move Shelly runtime state to Shelly-owned paths
+
+Use Shelly-owned configuration, keyring, hook, database, and cache paths for
+all production defaults while preserving the isolated configuration override.
+
+diff --git a/Shelly.Cli.Zig/src/cli/catalog/keyring.zig b/Shelly.Cli.Zig/src/cli/catalog/keyring.zig
+index 07982b64d78e3f5d4ffae3cd54985c130558e944..569c21a3955b20a445ec1329c5b780551bb88569 100644
+--- a/Shelly.Cli.Zig/src/cli/catalog/keyring.zig
++++ b/Shelly.Cli.Zig/src/cli/catalog/keyring.zig
+@@ -23,7 +23,7 @@ pub const variants = [_]types.Variant{
+         .name = "refresh",
+         .type_code = 'r',
+         .description = "Refresh pacman keyring keys from the configured keyserver.",
+-        .implementation = "/usr/bin/gpg --homedir /etc/pacman.d/gnupg --refresh-keys",
++        .implementation = "/usr/bin/gpg --homedir /etc/shelly.d/gnupg --refresh-keys",
+     },
+     .{
+         .action = .keyring,
+@@ -54,7 +54,7 @@ pub const variants = [_]types.Variant{
+         .name = "recv",
+         .type_code = 'v',
+         .description = "Receive one or more keys from the configured or requested keyserver.",
+-        .implementation = "/usr/bin/gpg --homedir /etc/pacman.d/gnupg [--keyserver server] --recv-keys [keys...]",
++        .implementation = "/usr/bin/gpg --homedir /etc/shelly.d/gnupg [--keyserver server] --recv-keys [keys...]",
+         .arguments = &.{repeatedArgument(
+             "keys",
+             1,
+diff --git a/Shelly.Cli.Zig/src/commands/downgrade.zig b/Shelly.Cli.Zig/src/commands/downgrade.zig
+index 5ad5863fb80b6315fabef95e7cff4136d0a30fe3..e54e38ad650a4c8e3112569604c541f55641df59 100644
+--- a/Shelly.Cli.Zig/src/commands/downgrade.zig
++++ b/Shelly.Cli.Zig/src/commands/downgrade.zig
+@@ -652,7 +652,7 @@ test "downgrade lists candidates as C sharp compatible JSON and UI records" {
+     const manifest = try spec.Manifest.load(tc.arena.allocator());
+     var candidates = [_]Zigalpm.alpm.DowngradeCandidate{
+         testCandidate("demo", "2.0", "1", "2.0-1", "x86_64", "demo-2.0-1-x86_64.pkg.tar.zst", "https://archive.example/demo-2.0-1-x86_64.pkg.tar.zst", .arch_linux, true),
+-        testCandidate("demo", "1.0", "2", "1.0-2", "x86_64", "demo-1.0-2-x86_64.pkg.tar.zst", "/var/cache/pacman/pkg/demo-1.0-2-x86_64.pkg.tar.zst", .local_cache, false),
++        testCandidate("demo", "1.0", "2", "1.0-2", "x86_64", "demo-1.0-2-x86_64.pkg.tar.zst", "/var/cache/shelly/pkg/demo-1.0-2-x86_64.pkg.tar.zst", .local_cache, false),
+     };
+     var capture: TestRunner = .{ .candidates = &candidates };
+ 
+diff --git a/Shelly.Cli.Zig/src/commands/keyring.zig b/Shelly.Cli.Zig/src/commands/keyring.zig
+index 12e174dd7c12e61dea03ba1c72406083fc3206f8..538be757ad14dea2b5992ec60cf2b5eb1318d615 100644
+--- a/Shelly.Cli.Zig/src/commands/keyring.zig
++++ b/Shelly.Cli.Zig/src/commands/keyring.zig
+@@ -8,7 +8,7 @@ const elevation = @import("../runtime/elevation.zig");
+ const spec = @import("../cli/spec.zig");
+ 
+ const command_prefix = "shelly keyring ";
+-const keyring_directory = "/etc/pacman.d/gnupg";
++const keyring_directory = "/etc/shelly.d/gnupg";
+ 
+ const Action = enum {
+     init,
+diff --git a/Shelly.Cli.Zig/src/commands/pacfiles.zig b/Shelly.Cli.Zig/src/commands/pacfiles.zig
+index 308d776dbb78950708d483a92b10a503d9bd9337..cde7f2f04c8458a8b9fbf837774c91bdca09cccf 100644
+--- a/Shelly.Cli.Zig/src/commands/pacfiles.zig
++++ b/Shelly.Cli.Zig/src/commands/pacfiles.zig
+@@ -35,10 +35,11 @@ pub fn run(
+         return 1;
+     }
+ 
++    const config_path = context.environ.getPosix("SHELLY_ALPM_CONFIG") orelse "/etc/shelly.conf";
+     var config = try Zigalpm.alpm.configuration.Configuration.parse(
+         context.allocator,
+         context.io,
+-        "/etc/pacman.conf",
++        config_path,
+     );
+     defer config.deinitialize();
+ 
+diff --git a/Shelly.Cli.Zig/src/commands/utility.zig b/Shelly.Cli.Zig/src/commands/utility.zig
+index a07d32d29b7c7c72209092412b558bb8c9c30126..39bd62fbfd535594323662322c964836db0bfab0 100644
+--- a/Shelly.Cli.Zig/src/commands/utility.zig
++++ b/Shelly.Cli.Zig/src/commands/utility.zig
+@@ -12,7 +12,7 @@ const spec = @import("../cli/spec.zig");
+ const xdg = @import("../runtime/xdg.zig");
+ 
+ const command_path = "shelly utility utility";
+-const default_database_directory = "/var/lib/pacman";
++const default_database_directory = "/var/lib/shelly";
+ 
+ const Operation = union(enum) {
+     fix_permissions,
+diff --git a/Shelly.Key/src/cli.zig b/Shelly.Key/src/cli.zig
+index 30d7b6761452b6ac841719f89e0d27587149aa4a..90cd52b1a08b25ffe75f8aef93e24275afa4ebe9 100644
+--- a/Shelly.Key/src/cli.zig
++++ b/Shelly.Key/src/cli.zig
+@@ -169,7 +169,7 @@ pub fn printHelp(writer: *std.Io.Writer) !void {
+         \\Usage: {s} [OPTIONS] operation [targets]
+         \\
+         \\Operations:
+-        \\  --init [dir]              Initialize the pacman keyring (default: {s})
++        \\  --init [dir]              Initialize the package keyring (default: {s})
+         \\  --populate [keyring...]   Reload keys from the given keyrings, or every
+         \\                            keyring found in the source directory
+         \\  -u, --updatedb            Update the trust database
+@@ -483,7 +483,7 @@ test "printHelp prints the expected usage text" {
+         \\Usage: shelly-key [OPTIONS] operation [targets]
+         \\
+         \\Operations:
+-        \\  --init [dir]              Initialize the pacman keyring (default: /etc/pacman.d/gnupg)
++        \\  --init [dir]              Initialize the package keyring (default: /etc/shelly.d/gnupg)
+         \\  --populate [keyring...]   Reload keys from the given keyrings, or every
+         \\                            keyring found in the source directory
+         \\  -u, --updatedb            Update the trust database
+@@ -494,7 +494,7 @@ test "printHelp prints the expected usage text" {
+         \\  --lsign-key <ids...>      Locally sign keys with your master key
+         \\
+         \\Options:
+-        \\  --gpgdir <dir>            Set the GnuPG directory (default: /etc/pacman.d/gnupg)
++        \\  --gpgdir <dir>            Set the GnuPG directory (default: /etc/shelly.d/gnupg)
+         \\  --populate-from <dir>     Set the source directory for --populate
+         \\                            (default: /usr/share/pacman/keyrings)
+         \\  -h, --help                Show this help message
+diff --git a/Shelly.Key/src/keyring/keyring.zig b/Shelly.Key/src/keyring/keyring.zig
+index dfde082234383c7fc63fcfa0e8f18d97b9c0a9ec..00bf2c1f1f3a0230df73575f31b7e1c1e684f5df 100644
+--- a/Shelly.Key/src/keyring/keyring.zig
++++ b/Shelly.Key/src/keyring/keyring.zig
+@@ -8,7 +8,7 @@ const keydir = @import("keydir.zig");
+ const keyfiles = @import("keyfiles.zig");
+ 
+ /// Default keyring location, used when `--init` is invoked without a path.
+-pub const default_gpgdir = "/etc/pacman.d/gnupg";
++pub const default_gpgdir = "/etc/shelly.d/gnupg";
+ 
+ /// Default source directory for `--populate`, used when `--populate-from` is not given.
+ pub const default_populate_from = "/usr/share/pacman/keyrings";
+@@ -42,7 +42,7 @@ pub fn init(
+ 
+     try keydir.ensureKeyringDir(base, io, keyring_path);
+     // GnuPG selects its public-key storage format on first use. Match
+-    // pacman-key by creating pubring.gpg before invoking GnuPG so libalpm can
++    // the legacy helper by creating pubring.gpg before invoking GnuPG so libalpm can
+     // read the resulting keyring directly.
+     try keyfiles.ensureAlpmKeyringFiles(base, io, keyring_path);
+ 
+diff --git a/Shelly.PackageManager/src/alpm/archive_manager.zig b/Shelly.PackageManager/src/alpm/archive_manager.zig
+index d710c2e967a72564df082d398a2a7cdab8c3deca..03fcf7854c1a66ed4de1213b0edb49f9afaf3734 100644
+--- a/Shelly.PackageManager/src/alpm/archive_manager.zig
++++ b/Shelly.PackageManager/src/alpm/archive_manager.zig
+@@ -102,7 +102,7 @@ pub const PreparedPackage = struct {
+ };
+ 
+ pub const Options = struct {
+-    cache_directory_fallback: []const u8 = "/var/cache/pacman/pkg",
++    cache_directory_fallback: []const u8 = "/var/cache/shelly/pkg",
+     temporary_directory: []const u8 = "/tmp",
+     arch_linux_base_url: []const u8 = arch_linux_archive,
+     cachyos_base_url: []const u8 = cachyos_archive,
+diff --git a/Shelly.PackageManager/src/alpm/cache_manager.zig b/Shelly.PackageManager/src/alpm/cache_manager.zig
+index 60ef51c234e9e543319cba16f9542a4162f1a6bc..ba8c6b94d6a783631050fcaa2e2aeab9cf990b0f 100644
+--- a/Shelly.PackageManager/src/alpm/cache_manager.zig
++++ b/Shelly.PackageManager/src/alpm/cache_manager.zig
+@@ -21,7 +21,7 @@ pub const InstalledFilter = enum {
+ };
+ 
+ pub const Options = struct {
+-    cache_directory: []const u8 = "/var/cache/pacman/pkg",
++    cache_directory: []const u8 = "/var/cache/shelly/pkg",
+     handle: libalpm.Handle = null,
+ };
+ 
+diff --git a/Shelly.PackageManager/src/alpm/configuration.zig b/Shelly.PackageManager/src/alpm/configuration.zig
+index a278438140c4a79f5651eb05c4a2fcc466cbfc79..785cbc15354bf57fd87b2cbf7ff2903e6b1535c7 100644
+--- a/Shelly.PackageManager/src/alpm/configuration.zig
++++ b/Shelly.PackageManager/src/alpm/configuration.zig
+@@ -73,10 +73,10 @@ pub const Configuration = struct {
+             var conf = Config{
+                 .arena = arena,
+                 .root_directory = "/",
+-                .database_path = "/var/lib/pacman",
+-                .cache_directory = "/var/cache/pacman/pkg",
++                .database_path = "/var/lib/shelly",
++                .cache_directory = "/var/cache/shelly/pkg",
+                 .log_file = "/var/log/shelly.log",
+-                .gpg_directory = "/etc/pacman.d/gnupg",
++                .gpg_directory = "/etc/shelly.d/gnupg",
+                 .hook_directory = .empty,
+                 .hold_packages = .empty,
+                 .transfer_command = "/usr/bin/curl -L -C - -f -o %o %u",
+@@ -96,7 +96,7 @@ pub const Configuration = struct {
+                 .remote_file_signature_level = sig(.{ .package = true }) | sig(.{ .database = true }),
+             };
+             try conf.hook_directory.append(alloc, "/usr/share/libalpm/hooks");
+-            try conf.hook_directory.append(alloc, "/etc/pacman.d/hooks");
++            try conf.hook_directory.append(alloc, "/etc/shelly.d/hooks");
+             try conf.hold_packages.append(alloc, "pacman");
+             try conf.hold_packages.append(alloc, "glibc");
+             try conf.hold_packages.append(alloc, "shelly");
+@@ -985,7 +985,7 @@ test "empty input yields defaults" {
+     defer conf.deinitialize();
+ 
+     try testing.expectEqualStrings("/", conf.root_directory);
+-    try testing.expectEqualStrings("/var/lib/pacman", conf.database_path);
++    try testing.expectEqualStrings("/var/lib/shelly", conf.database_path);
+     try testing.expectEqual(@as(usize, 0), conf.repositories.items.len);
+     try testing.expectEqual(@as(usize, 3), conf.hold_packages.items.len);
+     try testing.expectEqual(sig(.{ .package = true }) | sig(.{ .database = true }) | sig(.{ .database_optional = true }), conf.signature_level);
+@@ -996,7 +996,7 @@ test "parses options section" {
+         \\# a comment
+         \\[options]
+         \\RootDir = /mnt/target
+-        \\DBPath  = /mnt/target/var/lib/pacman
++        \\DBPath  = /mnt/target/var/lib/shelly
+         \\Architecture = x86_64
+         \\IgnorePkg = linux nvidia
+         \\CheckSpace
+@@ -1006,7 +1006,7 @@ test "parses options section" {
+     defer conf.deinitialize();
+ 
+     try testing.expectEqualStrings("/mnt/target", conf.root_directory);
+-    try testing.expectEqualStrings("/mnt/target/var/lib/pacman", conf.database_path);
++    try testing.expectEqualStrings("/mnt/target/var/lib/shelly", conf.database_path);
+     try testing.expectEqualStrings("x86_64", conf.architecture);
+     try testing.expectEqual(@as(usize, 2), conf.ignore_package.items.len);
+     try testing.expectEqualStrings("linux", conf.ignore_package.items[0]);
+diff --git a/Shelly.PackageManager/src/alpm/manager.zig b/Shelly.PackageManager/src/alpm/manager.zig
+index 5edd4760d79e4de11e253ea0875a627270f98596..dbc0eae08c7d70892cabfe4fcc7611145fa11a4b 100644
+--- a/Shelly.PackageManager/src/alpm/manager.zig
++++ b/Shelly.PackageManager/src/alpm/manager.zig
+@@ -192,7 +192,7 @@ pub const Manager = struct {
+         return @enumFromInt(default_download_address_family_policy.load(.acquire));
+     }
+ 
+-    /// If null is passed for config it will use the default /etc/pacman.conf.
++    /// If null is passed for config it will use the default /etc/shelly.conf.
+     /// The caller owns the returned manager and must call deinit when finished.
+     pub fn init(
+         allocator: std.mem.Allocator,
+@@ -200,7 +200,7 @@ pub const Manager = struct {
+         options: InitOptions,
+     ) InitError!*Manager {
+         const config_path = options.config_path orelse
+-            (environ.getPosix("SHELLY_ALPM_CONFIG") orelse "/etc/pacman.conf");
++            (environ.getPosix("SHELLY_ALPM_CONFIG") orelse "/etc/shelly.conf");
+         const self = allocator.create(Manager) catch return InitError.InitFailed;
+         errdefer allocator.destroy(self);
+ 
+@@ -2992,7 +2992,7 @@ pub const Manager = struct {
+             .DiskSpace => try details.appendSlice(self.allocator, "Not enough disk space\n Why is your disk so small?\n"),
+             .HandleNull => try details.appendSlice(self.allocator, "Lost the handle. Kinda like a plot but more important.\n"),
+             .HandleNotNull => try details.appendSlice(self.allocator, "Handle is not null. Normally you would want this but at this point I'm unsure.\n"),
+-            .HandleLock => try details.appendSlice(self.allocator, "You have a db.lck. It's at /var/lib/pacman/db.lck. You should probably delete that.\n"),
++            .HandleLock => try details.appendSlice(self.allocator, "You have a db.lck. It's at /var/lib/shelly/db.lck. You should probably delete that.\n"),
+             .DbOpen => try details.appendSlice(self.allocator, "Failed to open the database.\n"),
+             .DbCreate => try details.appendSlice(self.allocator, "Failed to create the database.\n"),
+             .DbNull => try details.appendSlice(self.allocator, "Database is null.\n"),
+@@ -4606,7 +4606,7 @@ test "handleErrorMessage emits the expected database lock error" {
+ 
+     try testing.expectEqualStrings(
+         "unable to lock database\n" ++
+-            "You have a db.lck. It's at /var/lib/pacman/db.lck. You should probably delete that.\n",
++            "You have a db.lck. It's at /var/lib/shelly/db.lck. You should probably delete that.\n",
+         cap.text(),
+     );
+ }
+diff --git a/Shelly.PackageManager/src/alpm/manager_test.zig b/Shelly.PackageManager/src/alpm/manager_test.zig
+index bc7cd20a7ab36e223f7d02ba0daba7bcb800490b..e63e73ac3f10e5a26daf7e605674184dd1add47a 100644
+--- a/Shelly.PackageManager/src/alpm/manager_test.zig
++++ b/Shelly.PackageManager/src/alpm/manager_test.zig
+@@ -130,7 +130,7 @@ const RemoveEventCapture = struct {
+ // These exercise the full path: parse a config, initialize libalpm, register a
+ // sync database, and download it over the network. Everything is confined to a
+ // unique temporary directory whose `DBPath` is redirected away from the host's
+-// real /var/lib/pacman, and the workspace is deleted once each test finishes.
++// real /var/lib/shelly, and the workspace is deleted once each test finishes.
+ // ---------------------------------------------------------------------------
+ 
+ // A throwaway pacman configuration written to disk under a unique temp root.
+@@ -1111,10 +1111,10 @@ const LocalDbTestWorkspace = struct {
+     real_db_path: []const u8,
+ 
+     // The real system database whose `local` directory holds installed packages.
+-    const system_db_path = "/var/lib/pacman";
++    const system_db_path = "/var/lib/shelly";
+ 
+     // Returns null (skip) when the real local database is unavailable, e.g. on
+-    // non-Arch hosts or CI without a populated /var/lib/pacman/local.
++    // non-Devario hosts or CI without a populated /var/lib/shelly/local.
+     fn create(allocator: std.mem.Allocator, io: std.Io) !?LocalDbTestWorkspace {
+         const real_local = try std.fmt.allocPrint(allocator, "{s}/local", .{system_db_path});
+         defer allocator.free(real_local);
+@@ -1299,8 +1299,8 @@ test "get_foreign_packages excludes repository packages after a non-root sync" {
+     const io = threaded.io();
+ 
+     // Skip gracefully when there is no real system database to link against.
+-    const sys_config = "/etc/pacman.conf";
+-    _ = std.Io.Dir.cwd().statFile(io, "/var/lib/pacman/local", .{}) catch return;
++    const sys_config = "/etc/shelly.conf";
++    _ = std.Io.Dir.cwd().statFile(io, "/var/lib/shelly/local", .{}) catch return;
+ 
+     // A unique temp root plays the role of the C# `tempPath` cache directory.
+     const anchor: u8 = 0;
+@@ -1897,7 +1897,7 @@ test "get_updates_available returns updates when installed packages have newer v
+     const io = threaded.io();
+ 
+     // Skip gracefully when there is no real system database to link against.
+-    _ = std.Io.Dir.cwd().statFile(io, "/var/lib/pacman/local", .{}) catch return;
++    _ = std.Io.Dir.cwd().statFile(io, "/var/lib/shelly/local", .{}) catch return;
+ 
+     // A unique temp root plays the role of the C# `tempPath` cache directory.
+     const anchor: u8 = 0;
+@@ -1908,7 +1908,7 @@ test "get_updates_available returns updates when installed packages have newer v
+     defer std.Io.Dir.cwd().deleteTree(io, temp_root) catch {};
+ 
+     // Initialize against the real system configuration with a throwaway temp root.
+-    const mgr = Manager.init(allocator, testing.environ, .{ .config_path = "/etc/pacman.conf", .temp_root_path = temp_root }) catch return;
++    const mgr = Manager.init(allocator, testing.environ, .{ .config_path = "/etc/shelly.conf", .temp_root_path = temp_root }) catch return;
+     defer mgr.deinit();
+ 
+     // Download the remote databases so alpm_sync_get_new_version can compare
+diff --git a/Shelly.PackageManager/src/alpm/pacfile_manager.zig b/Shelly.PackageManager/src/alpm/pacfile_manager.zig
+index 0246db9dc14f9ab53a3e3d2d60d070b7bee12cf1..fd9a1ef03ac8929094644a44091443e9aab4a394 100644
+--- a/Shelly.PackageManager/src/alpm/pacfile_manager.zig
++++ b/Shelly.PackageManager/src/alpm/pacfile_manager.zig
+@@ -118,8 +118,8 @@ pub const Pacfile = struct {
+ 
+ pub const Options = struct {
+     root_directory: []const u8 = "/",
+-    database_path: []const u8 = "/var/lib/pacman",
+-    cache_directory: []const u8 = "/var/cache/pacman/pkg",
++    database_path: []const u8 = "/var/lib/shelly",
++    cache_directory: []const u8 = "/var/cache/shelly/pkg",
+     additional_cache_directories: []const []const u8 = &.{},
+     find_paths: []const []const u8 = &default_find_paths,
+     temporary_directory: []const u8 = "/tmp",
+diff --git a/Shelly.Ui.Gtk/src/pages/transaction_page.zig b/Shelly.Ui.Gtk/src/pages/transaction_page.zig
+index 9d5ce23a3eb11692be338cd9aa64a364d03c8843..887be7682ec70664d5f18b5d11a1f8018f2ebda6 100644
+--- a/Shelly.Ui.Gtk/src/pages/transaction_page.zig
++++ b/Shelly.Ui.Gtk/src/pages/transaction_page.zig
+@@ -1077,7 +1077,7 @@ test "AUR build lifecycle selects indeterminate and terminal row states" {
+ test "progress console lines include backend stage and percentage" {
+     const database_line = try TransactionPage.formatAlpmProgress(std.testing.allocator, .{
+         .progress_type = "DatabaseDownload",
+-        .package_name = "/var/lib/pacman/sync/extra.db",
++        .package_name = "/var/lib/shelly/sync/extra.db",
+         .message = @as(?[]const u8, null),
+         .stage = @as(?[]const u8, "download"),
+         .percent = 52,

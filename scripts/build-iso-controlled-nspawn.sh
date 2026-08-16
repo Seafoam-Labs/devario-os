@@ -70,7 +70,7 @@ run_root /usr/bin/shelly sync standard --no-confirm
 run_root /usr/bin/shelly install standard --no-confirm archiso limine squashfs-tools libarchive
 snapshot_id="${arch_snapshot_url#https://archive.archlinux.org/repos/}"; snapshot_id="${snapshot_id%/}"; snapshot_id="${snapshot_id//\//-}"
 snapshot_dir="$bootstrap_cache/arch-snapshot-$snapshot_id"
-for name in core extra; do cmp -s "$snapshot_dir/$name.db" "$container_root/var/lib/pacman/sync/$name.db" || { echo "ISO builder $name DB drifted." >&2; exit 1; }; done
+for name in core extra; do cmp -s "$snapshot_dir/$name.db" "$container_root/var/lib/shelly/sync/$name.db" || { echo "ISO builder $name DB drifted." >&2; exit 1; }; done
 
 temp="$(mktemp -d /tmp/devario-iso-nspawn.XXXXXX)"; container_work=''
 cleanup(){ if [[ -n "$container_work" && "$container_work" == /var/tmp/devario-iso.* ]]; then run_root /usr/bin/rm -rf -- "$container_work" >/dev/null 2>&1 || true; fi; rm -rf -- "$temp"; }; trap cleanup EXIT

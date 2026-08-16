@@ -76,8 +76,8 @@ note() {
 required_files=(
   "$profile_dir/profiledef.sh"
   "$profile_dir/packages.x86_64"
-  "$profile_dir/pacman.conf"
-  "$profile_dir/pacman.runtime.conf"
+  "$profile_dir/shelly.build.conf"
+  "$profile_dir/shelly.runtime.conf"
   "$profile_dir/airootfs/etc/calamares/settings.conf"
   "$profile_dir/airootfs/etc/calamares/modules/unpackfs.conf"
   "$profile_dir/airootfs/etc/calamares/modules/partition.conf"
@@ -217,6 +217,7 @@ required_files=(
   "$project_dir/tests/test-core-input-lock-semantics.sh"
   "$project_dir/tests/test-controlled-builder-closure.sh"
   "$project_dir/tests/test-image-boundary.sh"
+  "$project_dir/tests/test-shelly-storage-migration.sh"
 )
 
 for path in "${required_files[@]}"; do
@@ -249,6 +250,8 @@ done < <(
   printf '%s\n' "$project_dir/tests/fixtures/gpu-driver-setup/mock-modprobe"
   printf '%s\n' "$project_dir/tests/test-gpu-driver-setup.sh"
   printf '%s\n' "$project_dir/tests/test-prepare-target-kernel.sh"
+  printf '%s\n' "$project_dir/packages/devario-alpm-runtime/shelly-storage-migrate"
+  printf '%s\n' "$project_dir/packages/devario-alpm-runtime/devario-alpm-runtime.install"
 )
 
 while IFS= read -r python_file; do
@@ -292,7 +295,8 @@ for boundary_test in \
   test-release-identity.sh \
   test-core-input-lock-semantics.sh \
   test-controlled-builder-closure.sh \
-  test-image-boundary.sh; do
+  test-image-boundary.sh \
+  test-shelly-storage-migration.sh; do
   if ! bash "$project_dir/tests/$boundary_test"; then
     fail "controlled-build/boundary test failed: $boundary_test"
   fi
@@ -639,6 +643,10 @@ if ! grep -Eq "['\"]libalpm\\.so=16-64['\"]" \
   fail "Shelly must depend on the libalpm.so.16 ABI"
 fi
 
+if ! grep -Fxq 'pkgver=3.0.6' "$project_dir/packages/shelly/PKGBUILD"; then
+  fail "the Community Shelly package must track upstream 3.0.6"
+fi
+
 if grep -Eq "['\"]pacman([<>=][^'\"]*)?['\"]" \
   "$project_dir/packages/shelly/PKGBUILD"; then
   fail "Shelly must not depend on or provide the pacman package"
@@ -647,6 +655,8 @@ fi
 if ! grep -Fq "'0001-remove-pacman-runtime-processes.patch'" \
   "$project_dir/packages/shelly/PKGBUILD" \
   || ! grep -Fq '/usr/bin/shelly-key' \
+    "$project_dir/packages/shelly/0001-remove-pacman-runtime-processes.patch" \
+  || ! grep -Fq 'Shelly.Cli.Zig/src/commands/repository.zig' \
     "$project_dir/packages/shelly/0001-remove-pacman-runtime-processes.patch" \
   || ! grep -Fq 'local ALPM database instead of spawning pacman -Qoq' \
     "$project_dir/packages/shelly/0001-remove-pacman-runtime-processes.patch"; then
@@ -658,9 +668,20 @@ if ! grep -Fq "'0002-support-alternate-alpm-config.patch'" \
   || ! grep -Fq 'SHELLY_ALPM_CONFIG' \
     "$project_dir/packages/shelly/0002-support-alternate-alpm-config.patch" \
   || ! grep -Fq \
-    "'fbb576820df35ffb5f48f41a2333044411f5b75c79937917f6a44c2f3a087ad7'" \
+    "'6a071600b6977e94e7447dc424bf825034ec2fec0d048f9b5c0ecb4aa8023b5c'" \
     "$project_dir/packages/shelly/PKGBUILD"; then
   fail "Shelly must provide checksummed alternate ALPM config support"
+fi
+if ! grep -Fq "'0003-use-shelly-runtime-paths.patch'" \
+  "$project_dir/packages/shelly/PKGBUILD" \
+  || ! grep -Fq '/etc/shelly.conf' \
+    "$project_dir/packages/shelly/0003-use-shelly-runtime-paths.patch" \
+  || ! grep -Fq '/var/lib/shelly' \
+    "$project_dir/packages/shelly/0003-use-shelly-runtime-paths.patch" \
+  || ! grep -Fq \
+    "'9aac5c555c3d035cda18e0c06b0cdfd2881a5257f69db6aead875f455cedb74b'" \
+    "$project_dir/packages/shelly/PKGBUILD"; then
+  fail "Shelly must provide checksummed Shelly-owned runtime path defaults"
 fi
 
 makepkg_adapter="$project_dir/scripts/makepkg-shelly-adapter.sh"
@@ -830,15 +851,15 @@ for runtime_placeholder in \
   '@DEVARIO_CORE_RUNTIME_SIGLEVEL@' \
   '@DEVARIO_CORE_RUNTIME_REPO@' \
   '@DEVARIO_MANAGED_RUNTIME_REPOSITORY@'; do
-  if ! grep -Fq "$runtime_placeholder" "$profile_dir/pacman.runtime.conf"; then
-    fail "pacman.runtime.conf is missing placeholder $runtime_placeholder"
+  if ! grep -Fq "$runtime_placeholder" "$profile_dir/shelly.runtime.conf"; then
+    fail "shelly.runtime.conf is missing placeholder $runtime_placeholder"
   fi
 done
 
 for alpm_config in \
-  "$profile_dir/pacman.conf" \
-  "$profile_dir/pacman.runtime.conf" \
-  "$project_dir/packages/devario-alpm-runtime/pacman.conf"; do
+  "$profile_dir/shelly.build.conf" \
+  "$profile_dir/shelly.runtime.conf" \
+  "$project_dir/packages/devario-alpm-runtime/shelly.conf"; do
   if grep -Eq '^\[cachyos([^]]*)?\]$' "$alpm_config"; then
     fail "${alpm_config#"$project_dir/"} must not require a CachyOS binary repository"
   fi
@@ -927,7 +948,7 @@ for required_archiso_patch_text in \
   'shelly upgrade standard --no-confirm' \
   'ExecStart=/usr/bin/shelly keyring init' \
   'ExecStart=/usr/bin/shelly keyring populate archlinux' \
-  '-v gpgdir="${DEVARIO_BUILD_GPGDIR:-/etc/pacman.d/gnupg}"' \
+  '-v gpgdir="${DEVARIO_BUILD_GPGDIR:-/etc/shelly.d/gnupg}"' \
   'print "GPGDir = " gpgdir' \
   'HookDir = " root "/usr/share/libalpm/hooks'; do
   if ! grep -Fq -- "$required_archiso_patch_text" "$archiso_patch"; then
@@ -1399,6 +1420,7 @@ if ! grep -Fq \
 fi
 
 for required_line in \
+  'Requires=shelly-storage-migrate.service' \
   'ExecStart=/usr/bin/shelly keyring init' \
   'ExecStart=/usr/bin/shelly keyring populate archlinux devario-core' \
   'ExecStart=/usr/bin/install -Dm644 /dev/null /var/lib/devario/shelly-keyring.ready'; do
@@ -1447,7 +1469,7 @@ if [[ -n "$runtime_pacman_calls" ]]; then
 fi
 
 # Scan active build entry points separately from removal patches and upstream
-# source archives. Compatibility paths such as /var/lib/pacman do not match an
+# source archives. Compatibility paths used only by migration do not match an
 # executable token, while quoted and unquoted process targets do.
 build_process_calls="$(
   find "$project_dir/scripts" -maxdepth 1 -type f -name '*.sh' ! -name validate.sh \
@@ -1485,10 +1507,10 @@ pacman_reference_is_allowed() {
     README.md|packages/*/README.md)
       return 0
       ;;
-    archiso/pacman.conf|archiso/pacman.runtime.conf|archiso/airootfs/etc/pacman.conf)
+    archiso/shelly.build.conf|archiso/shelly.runtime.conf|archiso/airootfs/etc/shelly.conf)
       return 0
       ;;
-    archiso/airootfs/etc/pacman.d/*)
+    archiso/airootfs/etc/shelly.d/*)
       return 0
       ;;
     archiso/airootfs/usr/lib/devario/acceptance-self-check)
@@ -1523,15 +1545,16 @@ pacman_reference_is_allowed() {
       [[ "$text" == *pacman.conf* ]]
       return
       ;;
+    packages/shelly/0003-use-shelly-runtime-paths.patch)
+      # A replacement patch necessarily contains the removed legacy paths.
+      return 0
+      ;;
     archiso/profiledef.sh)
-      [[ "$text" == *pacman_conf* || "$text" == *DEVARIO_PACMAN_CONF* ]]
+      [[ "$text" == *pacman_conf* ]]
       return
       ;;
     scripts/build-iso.sh)
-      [[ "$text" == *pacman.conf* \
-        || "$text" == *pacman.runtime.conf* \
-        || "$text" == *DEVARIO_PACMAN_CONF* \
-        || "$text" == *usr/share/pacman/keyrings/* \
+      [[ "$text" == *usr/share/pacman/keyrings/* \
         || "$text" == *usr/share/pacman/keyrings/archlinux.gpg* \
         || "$text" == *'--populate-from /usr/share/pacman/keyrings'* ]]
       return
@@ -1542,7 +1565,11 @@ pacman_reference_is_allowed() {
       ;;
     scripts/build-packages-nspawn.sh)
       [[ "$text" == *'/usr/share/pacman/keyrings/archlinux.gpg'* \
-        || "$text" == *'var/lib/pacman/'* \
+        || "$text" == *'var/lib/pacman'* \
+        || "$text" == *'var/cache/pacman/pkg'* \
+        || "$text" == *'../pacman/pkg'* \
+        || "$text" == *'pacman.d/gnupg'* \
+        || "$text" == *'pacman.d/hooks'* \
         || "$text" == *mirrorlist* ]]
       return
       ;;
@@ -1558,13 +1585,13 @@ pacman_reference_is_allowed() {
     scripts/verify-controlled-builder.sh|scripts/verify-image-boundary.sh)
       [[ "$text" == *'usr/share/pacman/keyrings/'* \
         || "$text" == *'var/lib/pacman/'* \
+        || "$text" == *'/var/lib/pacman'* \
+        || "$text" == *'/var/cache/pacman/pkg'* \
+        || "$text" == *'/etc/pacman.d/gnupg'* \
+        || "$text" == *'/etc/pacman.d/hooks'* \
         || "$text" == *pacman.conf* \
         || "$text" == *pacman_config* \
         || "$text" == *PACMAN_CONFIG* ]]
-      return
-      ;;
-    scripts/makepkg-shelly-adapter.sh)
-      [[ "$text" == *'/var/lib/pacman/local/'* ]]
       return
       ;;
   esac
@@ -1596,22 +1623,22 @@ done < <(
     "$project_dir/scripts" 2>/dev/null || true
 )
 
-if ! grep -Eq '^HoldPkg[[:space:]]*=.*\bshelly\b' "$profile_dir/pacman.conf" \
-  || ! grep -Eq '^HoldPkg[[:space:]]*=.*\bdevario-alpm-runtime\b' "$profile_dir/pacman.conf"; then
+if ! grep -Eq '^HoldPkg[[:space:]]*=.*\bshelly\b' "$profile_dir/shelly.build.conf" \
+  || ! grep -Eq '^HoldPkg[[:space:]]*=.*\bdevario-alpm-runtime\b' "$profile_dir/shelly.build.conf"; then
   fail "the ALPM configuration must hold Shelly and devario-alpm-runtime"
 fi
 
-if grep -Eq '^HoldPkg[[:space:]]=.*\bpacman\b' "$profile_dir/pacman.conf"; then
+if grep -Eq '^HoldPkg[[:space:]]=.*\bpacman\b' "$profile_dir/shelly.build.conf"; then
   fail "the ALPM configuration must not hold the absent pacman package"
 fi
 
 if ! grep -Eq '^[[:space:]]*SigLevel[[:space:]]*=[[:space:]]*Never[[:space:]]*$' \
-  "$profile_dir/pacman.conf"; then
+  "$profile_dir/shelly.build.conf"; then
   fail "the staged build repository must disable ALPM verification after build-iso verification"
 fi
 
 if grep -Eq '^[[:space:]]*SigLevel[[:space:]]*=.*\bTrustAll\b' \
-  "$profile_dir/pacman.conf"; then
+  "$profile_dir/shelly.build.conf"; then
   fail "the build-time ALPM configuration must not use misleading TrustAll semantics"
 fi
 
@@ -1932,6 +1959,22 @@ if command -v bsdtar >/dev/null 2>&1; then
     if ! grep -Eq '^provides = pacman=[^[:space:]]+$' <<< "$runtime_pkginfo"; then
       fail "$(basename -- "$artifact") lacks the versioned Pacman compatibility provider"
     fi
+    for required_runtime_path in \
+      etc/shelly.conf \
+      usr/lib/devario/shelly-storage-migrate \
+      usr/lib/systemd/system/shelly-storage-migrate.service \
+      var/lib/shelly/ \
+      var/cache/shelly/pkg/ \
+      etc/shelly.d/gnupg/ \
+      etc/shelly.d/hooks/; do
+      if ! grep -Fxq "$required_runtime_path" <<< "$artifact_contents"; then
+        fail "$(basename -- "$artifact") lacks $required_runtime_path"
+      fi
+    done
+    if grep -Eq '^(etc/pacman\.conf|etc/pacman\.d/(gnupg|hooks)/|var/lib/pacman/|var/cache/pacman/pkg/)$' \
+      <<< "$artifact_contents"; then
+      fail "$(basename -- "$artifact") contains a legacy mutable runtime path"
+    fi
   done
 
   for artifact in "${shelly_artifacts[@]}"; do
@@ -1944,8 +1987,14 @@ if command -v bsdtar >/dev/null 2>&1; then
     if ! grep -Eq '^usr/bin/shelly-key$' <<< "$artifact_contents"; then
       fail "$(basename -- "$artifact") does not contain Shelly's native keyring helper"
     fi
+    if ! grep -Eq '^pkgver = 3\.0\.6-' <<< "$shelly_pkginfo"; then
+      fail "$(basename -- "$artifact") is not Shelly 3.0.6"
+    fi
     if ! grep -Fxq 'depend = libalpm.so=16-64' <<< "$shelly_pkginfo"; then
       fail "$(basename -- "$artifact") does not require the libalpm.so.16 ABI"
+    fi
+    if ! grep -Fxq 'depend = devario-alpm-runtime>=7.1.0.r9.g54d9411-2' <<< "$shelly_pkginfo"; then
+      fail "$(basename -- "$artifact") does not require the Shelly-path runtime migration"
     fi
     if ! grep -Fxq 'options = !autodeps' <<< "$shelly_buildinfo" \
       || ! grep -Eq '^installed = .+-.+-.+$' \
@@ -1976,8 +2025,18 @@ if command -v bsdtar >/dev/null 2>&1; then
         fi
         if ! grep -Fq '/usr/bin/shelly-key' <<< "$shelly_strings" \
           || ! grep -Fq '/usr/bin/gpg' <<< "$shelly_strings" \
-          || ! grep -Fq 'SHELLY_ALPM_CONFIG' <<< "$shelly_strings"; then
+          || ! grep -Fq 'SHELLY_ALPM_CONFIG' <<< "$shelly_strings" \
+          || ! grep -Fq '/etc/shelly.conf' <<< "$shelly_strings" \
+          || ! grep -Fq '/var/lib/shelly' <<< "$shelly_strings" \
+          || ! grep -Fq '/var/cache/shelly/pkg' <<< "$shelly_strings" \
+          || ! grep -Fq '/etc/shelly.d/gnupg' <<< "$shelly_strings"; then
           fail "$(basename -- "$artifact") does not use the patched native keyring helpers"
+        fi
+        if grep -Fq '/etc/pacman.conf' <<< "$shelly_strings" \
+          || grep -Fq '/var/lib/pacman' <<< "$shelly_strings" \
+          || grep -Fq '/var/cache/pacman/pkg' <<< "$shelly_strings" \
+          || grep -Fq '/etc/pacman.d/gnupg' <<< "$shelly_strings"; then
+          fail "$(basename -- "$artifact") retains a legacy runtime path"
         fi
       else
         note "strings is unavailable; Shelly's process-target check was skipped."

@@ -2,13 +2,14 @@ From: Devario maintainers
 Subject: [PATCH] Allow an isolated ALPM configuration override
 
 ISO construction needs Shelly to populate a new RootDir without replacing the
-build host's /etc/pacman.conf.  Keep the normal default while allowing trusted
+build host's /etc/pacman.conf. Keep the normal default while allowing trusted
 build tooling to select a configuration through SHELLY_ALPM_CONFIG.
 
 diff --git a/Shelly.PackageManager/src/alpm/manager.zig b/Shelly.PackageManager/src/alpm/manager.zig
+index 187edf47b5c26bc08c0a97b63af593948ccc18c5..5edd4760d79e4de11e253ea0875a627270f98596 100644
 --- a/Shelly.PackageManager/src/alpm/manager.zig
 +++ b/Shelly.PackageManager/src/alpm/manager.zig
-@@ -198,7 +198,8 @@ pub const Manager = struct {
+@@ -199,7 +199,8 @@ pub const Manager = struct {
          environ: std.process.Environ,
          options: InitOptions,
      ) InitError!*Manager {

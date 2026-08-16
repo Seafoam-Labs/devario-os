@@ -1,6 +1,7 @@
 [Unit]
 Description=Initialize the Shelly package-manager keyring
-After=time-sync.target
+Requires=shelly-storage-migrate.service
+After=shelly-storage-migrate.service time-sync.target
 Before=greetd.service
 ConditionPathExists=!/var/lib/devario/shelly-keyring.ready
 

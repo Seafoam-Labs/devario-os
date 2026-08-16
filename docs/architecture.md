@@ -47,8 +47,11 @@ them.
 
 The build validates this boundary, checks requested versus installed package
 inventories, and rejects dormant process calls to Pacman-family executables.
-Historical ALPM paths such as `/etc/pacman.conf` and `/var/lib/pacman` remain
-because they are interfaces used by `libalpm` and Shelly.
+Shelly reads `/etc/shelly.conf`, stores its local and synchronization databases
+under `/var/lib/shelly`, caches packages under `/var/cache/shelly/pkg`, and
+uses `/etc/shelly.d` for its mutable keyring and local hooks. The Arch
+mirrorlist and distributed keyring sources retain their upstream paths because
+they are immutable compatibility inputs rather than Shelly runtime state.
 
 ## Image and installation flow
 

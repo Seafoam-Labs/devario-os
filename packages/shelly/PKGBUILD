@@ -2,13 +2,15 @@
 # Upstream recipe: Seafoam Labs
 
 pkgname=shelly
-pkgver=3.0.2
-pkgrel=3
+pkgver=3.0.6
+pkgrel=1
+_commit=0efcaa8f6b0c8cd2e8c170c6b547d1a500d53b53
 pkgdesc="Shelly: a modern libalpm package manager for Devario"
 arch=('x86_64')
 url="https://github.com/Seafoam-Labs/Shelly-ALPM"
 license=('GPL-3.0-only')
 depends=(
+  'devario-alpm-runtime>=7.1.0.r9.g54d9411-2'
   'libalpm.so=16-64'
   'gtk4'
   'glib2'
@@ -29,11 +31,9 @@ depends=(
 makedepends=(
   'clang'
   'gettext'
-  'meson'
-  'ninja'
+  'go-md2man'
   'pkgconf'
   'ripgrep'
-  'vala'
   'zig>=0.16'
 )
 optdepends=(
@@ -47,21 +47,24 @@ provides=("shelly=${pkgver}")
 conflicts=('shelly-git' 'shelly-bin')
 
 source=(
-  "${pkgname}-${pkgver}.tar.gz::https://github.com/Seafoam-Labs/Shelly-ALPM/archive/v${pkgver}.tar.gz"
+  "${pkgname}-${pkgver}.tar.gz::https://github.com/Seafoam-Labs/Shelly-ALPM/archive/${_commit}.tar.gz"
   '0001-remove-pacman-runtime-processes.patch'
   '0002-support-alternate-alpm-config.patch'
+  '0003-use-shelly-runtime-paths.patch'
 )
 sha256sums=(
-  '0c2b93ac85f838f2d45d6f10cc7b7d5a8e09603dfaf2964d1fc8ba246c3e3e79'
-  '698d4af7020191aed2bfe6279d61356ba99d5036150c6e21b0e9e891ac05d31b'
-  'fbb576820df35ffb5f48f41a2333044411f5b75c79937917f6a44c2f3a087ad7'
+  '09bdab0b9aa75c4ed65da2bc1213629cf1a6fb5993ca26cbfb79b823374f0c84'
+  '5f976dca6d6d1026373aacb87c68b0c78528c45321ac411f76d380d12ef461d9'
+  '6a071600b6977e94e7447dc424bf825034ec2fec0d048f9b5c0ecb4aa8023b5c'
+  '9aac5c555c3d035cda18e0c06b0cdfd2881a5257f69db6aead875f455cedb74b'
 )
-_source_dir="Shelly-ALPM-${pkgver//+/-}"
+_source_dir="Shelly-ALPM-${_commit}"
 
 prepare() {
   cd "$srcdir/${_source_dir}"
   patch -Np1 < "$srcdir/0001-remove-pacman-runtime-processes.patch"
   patch -Np1 < "$srcdir/0002-support-alternate-alpm-config.patch"
+  patch -Np1 < "$srcdir/0003-use-shelly-runtime-paths.patch"
 }
 
 build() {
@@ -89,36 +92,48 @@ build() {
     -Dcpu=baseline \
     -Doptimize=ReleaseSmall)
 
-  meson setup --prefix=/usr build-notify Shelly.Notifications
-  meson compile -C build-notify
+  (cd Shelly.Notifications.Zig && zig build --verbose \
+    --prefix "$srcdir/${_source_dir}/out-notifications" \
+    --cache-dir "$srcdir/zig-cache" \
+    --global-cache-dir "$srcdir/zig-global-cache" \
+    -Dcpu=baseline \
+    -Doptimize=ReleaseSmall)
 
   ./out-cli/bin/shelly utility --completions bash > shelly.bash
   ./out-cli/bin/shelly utility --completions fish > shelly.fish
   ./out-cli/bin/shelly utility --completions zsh > _shelly
+
+  ./out-cli/bin/shelly utility --docs | go-md2man > shelly.1
+  sed -i "s|^\\.TH .*|.TH \"SHELLY\" \"1\" \"\" \"Shelly ${pkgver}\" \"Shelly CLI Manual\"|" shelly.1
+  printf '\n.SH AUTHORS\nSeafoam Labs.\n' >> shelly.1
 
   local po_file language
   for po_file in Shelly.Ui.Gtk/po/*.po; do
     language="$(basename "$po_file" .po)"
     msgfmt "$po_file" -o "shelly-ui-${language}.mo"
   done
-  for po_file in Shelly.Notifications/po/*.po; do
+  for po_file in Shelly.Notifications.Zig/po/*.po; do
     language="$(basename "$po_file" .po)"
     msgfmt "$po_file" -o "shelly-notifications-${language}.mo"
   done
 }
 
 check() {
-  cd "$srcdir/${_source_dir}/Shelly.Cli.Zig"
-  zig build test \
-    --cache-dir "$srcdir/zig-cache" \
-    --global-cache-dir "$srcdir/zig-global-cache"
+  cd "$srcdir/${_source_dir}"
+
+  local component
+  for component in Shelly.Cli.Zig Shelly.Key; do
+    (cd "$component" && zig build test \
+      --cache-dir "$srcdir/zig-cache" \
+      --global-cache-dir "$srcdir/zig-global-cache")
+  done
 }
 
 package() {
   cd "$srcdir/${_source_dir}"
 
   install -Dm755 \
-    build-notify/shelly-notifications \
+    out-notifications/bin/shelly-notifications \
     "$pkgdir/usr/bin/shelly-notifications"
   install -Dm755 \
     out/bin/Shelly_Ui_Gtk \
@@ -136,6 +151,8 @@ package() {
     "$pkgdir/usr/share/fish/vendor_completions.d/shelly.fish"
   install -Dm644 _shelly \
     "$pkgdir/usr/share/zsh/site-functions/_shelly"
+  install -Dm644 shelly.1 \
+    "$pkgdir/usr/share/man/man1/shelly.1"
 
   install -Dm644 assets/shellylogo.png \
     "$pkgdir/usr/share/icons/hicolor/256x256/apps/shelly.png"

@@ -1,0 +1,13 @@
+[Unit]
+Description=Migrate package-manager state to Shelly-owned paths
+DefaultDependencies=no
+After=local-fs.target
+Before=network-online.target multi-user.target graphical.target shelly-keyring-init.service
+ConditionPathExists=!/var/lib/devario/shelly-path-migration/complete
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/devario/shelly-storage-migrate --finalize
+
+[Install]
+WantedBy=multi-user.target

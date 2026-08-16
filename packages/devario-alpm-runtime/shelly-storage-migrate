@@ -1,0 +1,275 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -euo pipefail
+
+root=/
+mode=finalize
+while (( $# )); do
+  case "$1" in
+    --root) root="$2"; shift 2 ;;
+    --prepare) mode=prepare; shift ;;
+    --finalize) mode=finalize; shift ;;
+    --rollback) mode=rollback; shift ;;
+    *) echo "Unknown Shelly storage migration argument: $1" >&2; exit 2 ;;
+  esac
+done
+
+[[ "$root" == /* && "$root" != *'/../'* && "$root" != */.. ]] || {
+  echo 'The migration root must be an absolute normalized path.' >&2
+  exit 2
+}
+root="${root%/}"
+path() { printf '%s%s\n' "$root" "$1"; }
+
+state_dir="$(path /var/lib/devario/shelly-path-migration)"
+backup_dir="$state_dir/legacy"
+prepared_marker="$state_dir/prepared"
+complete_marker="$state_dir/complete"
+old_config="$(path /etc/pacman.conf)"
+saved_config="$state_dir/pacman.conf"
+new_config="$(path /etc/shelly.conf)"
+
+[[ ! -L "$state_dir" ]] || {
+  echo "Refusing a symlinked migration state directory: $state_dir" >&2
+  exit 1
+}
+install -d -m 0755 "$state_dir"
+
+rewrite_config() {
+  local source="$1" destination="$2" temporary
+  temporary="$(mktemp "${destination}.migrating.XXXXXX")"
+  if ! awk '
+    function canonical_options() {
+      print "DBPath = /var/lib/shelly/"
+      print "CacheDir = /var/cache/shelly/pkg/"
+      print "LogFile = /var/log/shelly.log"
+      print "GPGDir = /etc/shelly.d/gnupg/"
+      print "HookDir = /usr/share/libalpm/hooks/"
+      print "HookDir = /etc/shelly.d/hooks/"
+    }
+    {
+      line=$0
+      lower=tolower(line)
+      if (lower ~ /^[[:space:]]*\[options\][[:space:]]*$/) {
+        found_options=1
+        print line
+        canonical_options()
+        next
+      }
+      if (found_options && lower ~ /^[[:space:]]*(dbpath|cachedir|logfile|gpgdir|hookdir)[[:space:]]*=/) next
+      gsub("/etc/pacman.conf", "/etc/shelly.conf", line)
+      gsub("/etc/pacman.d/gnupg", "/etc/shelly.d/gnupg", line)
+      gsub("/etc/pacman.d/hooks", "/etc/shelly.d/hooks", line)
+      gsub("/var/lib/pacman", "/var/lib/shelly", line)
+      gsub("/var/cache/pacman/pkg", "/var/cache/shelly/pkg", line)
+      print line
+    }
+    END { if (!found_options) exit 42 }
+  ' "$source" > "$temporary"; then
+    rm -f -- "$temporary"
+    return 1
+  fi
+  chmod 0644 "$temporary"
+  mv -f -- "$temporary" "$destination"
+}
+
+rewrite_legacy_config() {
+  local source="$1" destination="$2" temporary
+  temporary="$(mktemp "${destination}.migrating.XXXXXX")"
+  if ! awk '
+    function canonical_options() {
+      print "DBPath = /var/lib/pacman/"
+      print "CacheDir = /var/cache/pacman/pkg/"
+      print "LogFile = /var/log/pacman.log"
+      print "GPGDir = /etc/pacman.d/gnupg/"
+      print "HookDir = /usr/share/libalpm/hooks/"
+      print "HookDir = /etc/pacman.d/hooks/"
+    }
+    {
+      line=$0
+      lower=tolower(line)
+      if (lower ~ /^[[:space:]]*\[options\][[:space:]]*$/) {
+        found_options=1
+        print line
+        canonical_options()
+        next
+      }
+      if (found_options && lower ~ /^[[:space:]]*(dbpath|cachedir|logfile|gpgdir|hookdir)[[:space:]]*=/) next
+      gsub("/etc/shelly.conf", "/etc/pacman.conf", line)
+      gsub("/etc/shelly.d/gnupg", "/etc/pacman.d/gnupg", line)
+      gsub("/etc/shelly.d/hooks", "/etc/pacman.d/hooks", line)
+      gsub("/var/lib/shelly", "/var/lib/pacman", line)
+      gsub("/var/cache/shelly/pkg", "/var/cache/pacman/pkg", line)
+      print line
+    }
+    END { if (!found_options) exit 42 }
+  ' "$source" > "$temporary"; then
+    rm -f -- "$temporary"
+    return 1
+  fi
+  chmod 0644 "$temporary"
+  mv -f -- "$temporary" "$destination"
+}
+
+tree_manifest() {
+  local directory="$1"
+  (
+    cd -- "$directory"
+    find . -mindepth 1 ! -name db.lck -printf 'entry\t%y\t%P\t%l\n' | sort
+    find . -type f ! -name db.lck -exec sha256sum -- {} + | sort
+  )
+}
+
+verify_copy() {
+  local source="$1" destination="$2" source_manifest destination_manifest
+  source_manifest="$(mktemp "$state_dir/source-manifest.XXXXXX")"
+  destination_manifest="$(mktemp "$state_dir/destination-manifest.XXXXXX")"
+  tree_manifest "$source" > "$source_manifest"
+  tree_manifest "$destination" > "$destination_manifest"
+  if ! cmp -s -- "$source_manifest" "$destination_manifest"; then
+    rm -f -- "$source_manifest" "$destination_manifest"
+    echo "Copied Shelly migration state failed verification: $source" >&2
+    return 1
+  fi
+  rm -f -- "$source_manifest" "$destination_manifest"
+}
+
+bridge_directory() {
+  local old="$1" new="$2" relative_target="$3"
+  [[ -d "$old" && ! -L "$old" ]] || return 0
+  if [[ -L "$new" ]]; then
+    [[ "$(readlink -- "$new")" == "$relative_target" ]] || {
+      echo "Unexpected compatibility link at $new" >&2
+      exit 1
+    }
+    return 0
+  fi
+  if [[ -e "$new" ]]; then
+    [[ -d "$new" && -z "$(find "$new" -mindepth 1 -print -quit)" ]] || {
+      echo "Refusing to replace non-empty Shelly path: $new" >&2
+      exit 1
+    }
+    rmdir -- "$new"
+  fi
+  install -d -m 0755 "$(dirname -- "$new")"
+  ln -s -- "$relative_target" "$new"
+}
+
+prepare_migration() {
+  local source_config=''
+  if [[ -f "$saved_config" && ! -L "$saved_config" ]]; then
+    source_config="$saved_config"
+  elif [[ -f "$old_config" && ! -L "$old_config" ]]; then
+    source_config="$old_config"
+  fi
+  if [[ -n "$source_config" ]]; then
+    rewrite_config "$source_config" "$new_config"
+  fi
+  [[ -f "$new_config" && ! -L "$new_config" ]] || {
+    echo 'Shelly storage migration requires a regular /etc/shelly.conf.' >&2
+    exit 1
+  }
+
+  bridge_directory "$(path /var/lib/pacman)" "$(path /var/lib/shelly)" pacman
+  bridge_directory "$(path /var/cache/pacman/pkg)" "$(path /var/cache/shelly/pkg)" ../pacman/pkg
+  bridge_directory "$(path /etc/pacman.d/gnupg)" "$(path /etc/shelly.d/gnupg)" ../pacman.d/gnupg
+  bridge_directory "$(path /etc/pacman.d/hooks)" "$(path /etc/shelly.d/hooks)" ../pacman.d/hooks
+  install -m 0644 /dev/null "$prepared_marker"
+}
+
+materialize_directory() {
+  local old="$1" new="$2" backup_name="$3" staging backup
+  staging="${new}.migrating"
+  backup="$backup_dir/$backup_name"
+
+  if [[ -L "$new" ]]; then
+    [[ -d "$old" && ! -L "$old" ]] || {
+      echo "Legacy directory is unavailable for $new" >&2
+      exit 1
+    }
+    [[ ! -e "$staging" ]] || {
+      echo "Stale migration staging path requires inspection: $staging" >&2
+      exit 1
+    }
+    install -d -m 0755 "$staging"
+    cp -a -- "$old/." "$staging/"
+    rm -f -- "$staging/db.lck"
+    verify_copy "$old" "$staging"
+    rm -- "$new"
+    mv -- "$staging" "$new"
+  fi
+
+  [[ -d "$new" && ! -L "$new" ]] || {
+    echo "Shelly directory was not materialized: $new" >&2
+    exit 1
+  }
+  if [[ -d "$old" && ! -L "$old" ]]; then
+    install -d -m 0700 "$backup_dir"
+    [[ ! -e "$backup" ]] || {
+      echo "Legacy migration backup already exists: $backup" >&2
+      exit 1
+    }
+    mv -- "$old" "$backup"
+  fi
+}
+
+finalize_migration() {
+  [[ -e "$(path /var/lib/pacman/db.lck)" ]] && {
+    echo 'Refusing to migrate while the legacy package database is locked.' >&2
+    exit 1
+  }
+  if [[ -d "$(path /etc/pacman.d/gnupg)" ]] && command -v gpgconf >/dev/null 2>&1; then
+    gpgconf --homedir "$(path /etc/pacman.d/gnupg)" --kill all || true
+  fi
+  prepare_migration
+  materialize_directory "$(path /var/lib/pacman)" "$(path /var/lib/shelly)" var-lib-pacman
+  materialize_directory "$(path /var/cache/pacman/pkg)" "$(path /var/cache/shelly/pkg)" var-cache-pacman-pkg
+  materialize_directory "$(path /etc/pacman.d/gnupg)" "$(path /etc/shelly.d/gnupg)" etc-pacman.d-gnupg
+  materialize_directory "$(path /etc/pacman.d/hooks)" "$(path /etc/shelly.d/hooks)" etc-pacman.d-hooks
+  if [[ -f "$old_config" && ! -L "$old_config" ]]; then
+    install -d -m 0700 "$backup_dir"
+    mv -- "$old_config" "$backup_dir/etc-pacman.conf"
+  fi
+  install -m 0644 /dev/null "$complete_marker"
+}
+
+restore_directory() {
+  local new="$1" old="$2" staging
+  staging="${old}.migrating"
+  [[ -d "$new" && ! -L "$new" ]] || {
+    echo "Shelly rollback source is unavailable: $new" >&2
+    exit 1
+  }
+  [[ ! -e "$old" && ! -L "$old" ]] || return 0
+  [[ ! -e "$staging" ]] || {
+    echo "Stale rollback staging path requires inspection: $staging" >&2
+    exit 1
+  }
+  install -d -m 0755 "$(dirname -- "$old")" "$staging"
+  cp -a -- "$new/." "$staging/"
+  rm -f -- "$staging/db.lck"
+  verify_copy "$new" "$staging"
+  mv -- "$staging" "$old"
+}
+
+rollback_migration() {
+  [[ -e "$(path /var/lib/shelly/db.lck)" ]] && {
+    echo 'Refusing to roll back while the Shelly package database is locked.' >&2
+    exit 1
+  }
+  rewrite_legacy_config "$new_config" "$old_config"
+  restore_directory "$(path /var/lib/shelly)" "$(path /var/lib/pacman)"
+  restore_directory "$(path /var/cache/shelly/pkg)" "$(path /var/cache/pacman/pkg)"
+  restore_directory "$(path /etc/shelly.d/gnupg)" "$(path /etc/pacman.d/gnupg)"
+  restore_directory "$(path /etc/shelly.d/hooks)" "$(path /etc/pacman.d/hooks)"
+  install -m 0644 /dev/null "$state_dir/rollback-ready"
+}
+
+if [[ "$mode" == prepare ]]; then
+  prepare_migration
+elif [[ "$mode" == rollback ]]; then
+  rollback_migration
+else
+  finalize_migration
+fi

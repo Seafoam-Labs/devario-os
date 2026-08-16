@@ -1,6 +1,6 @@
 [Unit]
 Description=Devario Live Graphical Session
 Requires=graphical.target
-Wants=NetworkManager.service greetd.service shelly-keyring-init.service
-After=NetworkManager.service greetd.service shelly-keyring-init.service
+Wants=NetworkManager.service greetd.service shelly-storage-migrate.service shelly-keyring-init.service
+After=NetworkManager.service greetd.service shelly-storage-migrate.service shelly-keyring-init.service
 AllowIsolate=yes

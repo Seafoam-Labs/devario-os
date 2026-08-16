@@ -2,7 +2,7 @@
 
 pkgname=devario-base
 pkgver=3
-pkgrel=2
+pkgrel=3
 pkgdesc="Minimal package set defining a base Devario installation"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -33,7 +33,7 @@ depends=(
   'gzip'
   'xz'
   'licenses'
-  'devario-alpm-runtime>=7.1.0'
+  'devario-alpm-runtime>=7.1.0.r9.g54d9411-2'
   'shelly'
   'archlinux-keyring'
   'systemd'

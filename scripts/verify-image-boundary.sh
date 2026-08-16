@@ -174,14 +174,25 @@ then
   exit 1
 fi
 
-pacman_config="$root_dir/etc/pacman.conf"
-if [[ ! -f "$pacman_config" || -L "$pacman_config" ]]; then
-  echo 'The image does not contain a safe /etc/pacman.conf.' >&2
+shelly_config="$root_dir/etc/shelly.conf"
+if [[ ! -f "$shelly_config" || -L "$shelly_config" ]]; then
+  echo 'The image does not contain a safe /etc/shelly.conf.' >&2
   exit 1
 fi
-PACMAN_CONFIG="$pacman_config" EDITION="$edition" EXPECTED_CORE_URL="$expected_core_url" EXPECTED_MANAGED_URL="$expected_managed_url" python3 -c 'import os, re
+for legacy_runtime_path in \
+  /etc/pacman.conf \
+  /etc/pacman.d/gnupg \
+  /etc/pacman.d/hooks \
+  /var/lib/pacman \
+  /var/cache/pacman/pkg; do
+  if [[ -e "$root_dir$legacy_runtime_path" || -L "$root_dir$legacy_runtime_path" ]]; then
+    echo "The image contains a legacy mutable package-manager path: $legacy_runtime_path" >&2
+    exit 1
+  fi
+done
+SHELLY_CONFIG="$shelly_config" EDITION="$edition" EXPECTED_CORE_URL="$expected_core_url" EXPECTED_MANAGED_URL="$expected_managed_url" python3 -c 'import os, re
 from urllib.parse import urlsplit
-lines=open(os.environ["PACMAN_CONFIG"], encoding="utf-8").read().splitlines()
+lines=open(os.environ["SHELLY_CONFIG"], encoding="utf-8").read().splitlines()
 sections={}
 current=None
 for raw in lines:
@@ -216,7 +227,7 @@ if os.environ["EDITION"] == "community" and "devario-managed" in sections:
 canonical_inventory="$(mktemp /tmp/devario-package-inventory.XXXXXX)"
 IMAGE_ROOT="$root_dir" python3 - > "$canonical_inventory" <<'PY'
 import json,os,pathlib
-root=pathlib.Path(os.environ["IMAGE_ROOT"])/"var/lib/pacman/local"
+root=pathlib.Path(os.environ["IMAGE_ROOT"])/"var/lib/shelly/local"
 records=[]
 for desc in sorted(root.glob("*/desc")):
  lines=desc.read_text(encoding="utf-8").splitlines(); fields={}; i=0

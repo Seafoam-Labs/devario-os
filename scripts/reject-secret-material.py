@@ -154,11 +154,12 @@ def contains_secret_openpgp_packet(data: bytes) -> bool:
 
 def git_tracked(root: Path) -> list[Path]:
     result = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "-z"],
+        ["git", "-C", str(root), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
         check=True,
         stdout=subprocess.PIPE,
     )
-    return [root / os.fsdecode(item) for item in result.stdout.split(b"\0") if item]
+    paths = [root / os.fsdecode(item) for item in result.stdout.split(b"\0") if item]
+    return [path for path in paths if path.exists() or path.is_symlink()]
 
 
 def full_tree(root: Path) -> list[Path]:
