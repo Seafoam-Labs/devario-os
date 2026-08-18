@@ -21,8 +21,10 @@ To try Devario on physical hardware, follow
 The installed system does not ship the `pacman` or `pacman-key` executables. It uses four Devario packages instead:
 
 - `shelly` provides the package-management CLI and UI.
-- `devario-alpm-runtime` provides `libalpm` and the runtime data that Shelly needs, without the Pacman CLI or its build tools.
-- `devario-base` provides the base-system dependency set without depending on Arch's `base` package, which would pull Pacman back into the image.
+- `devario-alpm-runtime` provides `libalpm` and the runtime data that Shelly needs, without the Pacman CLI or its build
+  tools.
+- `devario-base` provides the base-system dependency set without depending on Arch's `base` package, which would pull
+  Pacman back into the image.
 - `devario-keyring` installs the public Devario repository keys consumed by Shelly's keyring commands.
 
 ## What is included
@@ -44,7 +46,8 @@ The installed system does not ship the `pacman` or `pacman-key` executables. It 
 - Shelly-backed repository search, installation, removal, upgrades, and keyring initialization
 - Persistent first-boot initialization of the Arch Linux and Devario signing keyrings
 
-Calamares does not invoke a package manager during installation. Its `unpackfs` module copies the prepared live root filesystem, and the remaining modules configure that copy for the target machine.
+Calamares does not invoke a package manager during installation. Its `unpackfs` module copies the prepared live root
+filesystem, and the remaining modules configure that copy for the target machine.
 
 ISO construction verifies that every Devario-owned package is present exactly
 once in the local repository before installing the live root. In particular,
@@ -111,11 +114,21 @@ Some historical names remain only at upstream Arch compatibility boundaries:
 - Arch package archives, repository databases, signatures, and ALPM hooks
 - Archiso's `pacman_conf` profile setting
 
-Their presence does not mean `/usr/bin/pacman` or `/usr/bin/pacman-key` is present. Devario build scripts, runtime services, and installer configuration must never invoke either executable, `pacstrap`, or `pacman-conf`.
+Their presence does not mean `/usr/bin/pacman` or `/usr/bin/pacman-key` is present. Devario build scripts, runtime
+services, and installer configuration must never invoke either executable, `pacstrap`, or `pacman-conf`.
 
-`devario-alpm-runtime` also advertises a versioned virtual `pacman` provider because `archlinux-keyring` currently depends on that package name. It conflicts with and replaces the real package, but it does not contain either Pacman executable. This compatibility metadata is checked separately from the image-content rule.
+`devario-alpm-runtime` also advertises a versioned virtual `pacman` provider because `archlinux-keyring` currently
+depends on that package name. It conflicts with and replaces the real package, but it does not contain either Pacman
+executable. This compatibility metadata is checked separately from the image-content rule.
 
-The packaged Shelly source is patched at build time because upstream 3.0.6 still delegates keyring and repository operations and pacfile ownership lookup to Pacman programs. Devario routes keyring actions through `shelly-key` or GnuPG, reads ownership information directly from `/var/lib/shelly`, defaults to `/etc/shelly.conf`, and supports `SHELLY_ALPM_CONFIG` for isolated image roots. The package build and artifact validator enforce this boundary. Existing installations are bridged during the package upgrade and materialized under the new paths by `shelly-storage-migrate.service` at the following boot. Verified legacy data is retained under `/var/lib/devario/shelly-path-migration/legacy`; `/usr/lib/devario/shelly-storage-migrate --rollback` can recreate current compatibility state during the rollback window.
+The packaged Shelly source is patched at build time because upstream 3.0.6 still delegates keyring and repository
+operations and pacfile ownership lookup to Pacman programs. Devario routes keyring actions through `shelly-key` or
+GnuPG, reads ownership information directly from `/var/lib/shelly`, defaults to `/etc/shelly.conf`, and supports
+`SHELLY_ALPM_CONFIG` for isolated image roots. The package build and artifact validator enforce this boundary. Existing
+installations are bridged during the package upgrade and materialized under the new paths by
+`shelly-storage-migrate.service` at the following boot. Verified legacy data is retained under
+`/var/lib/devario/shelly-path-migration/legacy`; `/usr/lib/devario/shelly-storage-migrate --rollback` can recreate
+current compatibility state during the rollback window.
 
 ## Using Shelly
 
@@ -156,11 +169,14 @@ shelly keyring init
 shelly keyring populate archlinux devario
 ```
 
-Shelly requests elevation for privileged transaction steps. Run it as the invoking desktop user rather than wrapping the whole command in `sudo`. Use full upgrades rather than synchronizing repositories and installing individual packages into an otherwise stale system.
+Shelly requests elevation for privileged transaction steps. Run it as the invoking desktop user rather than wrapping the
+whole command in `sudo`. Use full upgrades rather than synchronizing repositories and installing individual packages
+into an otherwise stale system.
 
 ## Build prerequisites
 
-Build on an up-to-date Arch Linux or Arch-derived x86-64 system. Once Shelly is available on the build host, install the required Archiso and packaging tools through Shelly:
+Build on an up-to-date Arch Linux or Arch-derived x86-64 system. Once Shelly is available on the build host, install the
+required Archiso and packaging tools through Shelly:
 
 ```sh
 shelly install standard --upgrade archiso base-devel git limine
@@ -209,7 +225,8 @@ scriptlets.
 
 ## Build
 
-Initialize a local development signing key and export its public material into the keyring package. The ignored `.devario-signing/` directory contains the secret key and must remain private:
+Initialize a local development signing key and export its public material into the keyring package. The ignored
+`.devario-signing/` directory contains the secret key and must remain private:
 
 ```sh
 ./scripts/init-repository-key.sh
@@ -299,7 +316,8 @@ The nspawn wrapper mounts an external edition read-only at
 `/devario-edition`; it never copies private overlay sources into the core
 checkout.
 
-The resulting image is written to `out/`, and intermediate Archiso state is stored in `work/`. Override either location when needed:
+The resulting image is written to `out/`, and intermediate Archiso state is stored in `work/`. Override either location
+when needed:
 
 ```sh
 sudo DEVARIO_OUTPUT_DIR=/path/to/out \
@@ -341,7 +359,10 @@ sudo env \
 
 ## Repository signing and publication
 
-With no `DEVARIO_REPO_URL`, the ISO builder embeds the development repository at `/opt/devario/repo` and configures the installed system to use it with `Optional TrustAll`. That mode works offline but is not suitable for publication. The temporary repository used only while constructing the image has `SigLevel = Never`, because the build host does not own Devario's trust root; this does not become the installed configuration.
+With no `DEVARIO_REPO_URL`, the ISO builder embeds the development repository at `/opt/devario/repo` and configures the
+installed system to use it with `Optional TrustAll`. That mode works offline but is not suitable for publication. The
+temporary repository used only while constructing the image has `SigLevel = Never`, because the build host does not own
+Devario's trust root; this does not become the installed configuration.
 
 For a release, export the public half of an existing offline-controlled signing
 key into a reviewed source commit. Release artifacts are produced only by the
@@ -408,13 +429,18 @@ sudo env \
 Before publishing a release:
 
 1. Create a dedicated offline-controlled Devario package-signing key. Never commit its private material.
-2. Sign every package archive and the repository database; `build-packages.sh` does this when `DEVARIO_SIGNING_KEY` is set or its configured signing home contains a fingerprint.
-3. Distribute the exported public key through `devario-keyring`. The Shelly keyring service populates both `archlinux` and `devario`, and remains enabled so a freshly installed target initializes its own keyring.
+2. Sign every package archive and the repository database; `build-packages.sh` does this when `DEVARIO_SIGNING_KEY` is
+   set or its configured signing home contains a fingerprint.
+3. Distribute the exported public key through `devario-keyring`. The Shelly keyring service populates both `archlinux`
+   and `devario`, and remains enabled so a freshly installed target initializes its own keyring.
 4. Publish the repository over HTTPS at a stable URL available after installation.
-5. Verify that the production Devario repository renders with `SigLevel = Required`, which requires signatures on both packages and databases; remove `TrustAll` and the development `file://` server.
-6. Test a clean install, first-boot keyring initialization, metadata refresh, full upgrade, package install, and key rotation using only signed artifacts.
+5. Verify that the production Devario repository renders with `SigLevel = Required`, which requires signatures on both
+   packages and databases; remove `TrustAll` and the development `file://` server.
+6. Test a clean install, first-boot keyring initialization, metadata refresh, full upgrade, package install, and key
+   rotation using only signed artifacts.
 
-The signing keyring package must be updated before a signing-key transition. Release the old-key-signed trust update first, then begin signing repository content with the new key.
+The signing keyring package must be updated before a signing-key transition. Release the old-key-signed trust update
+first, then begin signing repository content with the new key.
 
 ## Test
 
@@ -465,11 +491,13 @@ Before publishing an image, verify that:
     `nvidia`, `nvidia-smi` succeeds, and
     `/sys/module/nvidia_drm/parameters/modeset` contains `Y`. Also verify that a
     non-NVIDIA machine records `none` and still reaches Aqueous.
-14. An `execve` trace of package and ISO construction contains Shelly calls and no Pacman, `pacman-key`, `pacman-conf`, or `pacstrap` process.
+14. An `execve` trace of package and ISO construction contains Shelly calls and no Pacman, `pacman-key`, `pacman-conf`,
+    or `pacstrap` process.
 
 ## Development limitations
 
-- Development images deliberately trust their embedded repository. Public images must use release mode with a signed HTTPS repository.
+- Development images deliberately trust their embedded repository. Public images must use release mode with a signed
+  HTTPS repository.
 - Devario maintainers must track CachyOS LTS security releases, rebuild and
   sign the pinned kernel promptly, and publish corresponding source materials.
 - The current local development repository was built on a CachyOS x86-64-v4
@@ -477,7 +505,9 @@ Before publishing an image, verify that:
   and the pre-existing Calamares artifact inherit the host's v4 startup-object
   requirement. Rebuild all release artifacts on official baseline Arch before
   publishing a generally bootable x86-64 image.
-- Shelly's optional AUR workflow still requires a makepkg-compatible build toolchain. That toolchain is intentionally absent from the default live and installed systems; the supported default runtime covers signed binary repositories and local package archives.
+- Shelly's optional AUR workflow still requires a makepkg-compatible build toolchain. That toolchain is intentionally
+  absent from the default live and installed systems; the supported default runtime covers signed binary repositories
+  and local package archives.
 - The live image leaves Calamares installed on the target until removal is covered by automated installation tests.
 - Secure Boot is not configured.
 - Pre-Turing NVIDIA GPUs are unsupported because the image intentionally keeps
