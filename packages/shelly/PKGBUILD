@@ -2,9 +2,9 @@
 # Upstream recipe: Seafoam Labs
 
 pkgname=shelly
-pkgver=3.0.6
+pkgver=3.1.2
 pkgrel=1
-_commit=0efcaa8f6b0c8cd2e8c170c6b547d1a500d53b53
+_commit=2172e9512a43ac001fe82b0f3809f785df89330f
 pkgdesc="Shelly: a modern libalpm package manager for Devario"
 arch=('x86_64')
 url="https://github.com/Seafoam-Labs/Shelly-ALPM"
@@ -45,6 +45,7 @@ optdepends=(
 )
 provides=("shelly=${pkgver}")
 conflicts=('shelly-git' 'shelly-bin')
+backup=('etc/shellybuild.conf')
 
 source=(
   "${pkgname}-${pkgver}.tar.gz::https://github.com/Seafoam-Labs/Shelly-ALPM/archive/${_commit}.tar.gz"
@@ -53,18 +54,18 @@ source=(
   '0003-use-shelly-runtime-paths.patch'
 )
 sha256sums=(
-  '09bdab0b9aa75c4ed65da2bc1213629cf1a6fb5993ca26cbfb79b823374f0c84'
-  '5f976dca6d6d1026373aacb87c68b0c78528c45321ac411f76d380d12ef461d9'
-  '6a071600b6977e94e7447dc424bf825034ec2fec0d048f9b5c0ecb4aa8023b5c'
-  '9aac5c555c3d035cda18e0c06b0cdfd2881a5257f69db6aead875f455cedb74b'
+  '202949f096b4e2715ff0928b3d8e35b5cfe80e79ca392cbad4ed2b1ab854044f'
+  '7cf4a7a59f90756c6ce7c7496d0a321f0728ac93d2cf7ac64f1ce6c046ca4d6e'
+  '292160e49be336d59622ed1fac0770add982184ecffef8a0d5de9822a1360922'
+  'e7233d315f77291cb809eb5440241445200231dcb2a632ef73e284e29c4336ec'
 )
 _source_dir="Shelly-ALPM-${_commit}"
 
 prepare() {
   cd "$srcdir/${_source_dir}"
-  patch -Np1 < "$srcdir/0001-remove-pacman-runtime-processes.patch"
-  patch -Np1 < "$srcdir/0002-support-alternate-alpm-config.patch"
-  patch -Np1 < "$srcdir/0003-use-shelly-runtime-paths.patch"
+  patch --fuzz=0 -Np1 < "$srcdir/0001-remove-pacman-runtime-processes.patch"
+  patch --fuzz=0 -Np1 < "$srcdir/0002-support-alternate-alpm-config.patch"
+  patch --fuzz=0 -Np1 < "$srcdir/0003-use-shelly-runtime-paths.patch"
 }
 
 build() {
@@ -122,7 +123,7 @@ check() {
   cd "$srcdir/${_source_dir}"
 
   local component
-  for component in Shelly.Cli.Zig Shelly.Key; do
+  for component in Shelly.Cli.Zig Shelly.Key Shelly.PackageManager; do
     (cd "$component" && zig build test \
       --cache-dir "$srcdir/zig-cache" \
       --global-cache-dir "$srcdir/zig-global-cache")
@@ -144,6 +145,8 @@ package() {
   install -Dm755 \
     out-key/bin/shelly-key \
     "$pkgdir/usr/bin/shelly-key"
+  install -Dm644 shellybuild.conf \
+    "$pkgdir/etc/shellybuild.conf"
 
   install -Dm644 shelly.bash \
     "$pkgdir/usr/share/bash-completion/completions/shelly"
@@ -179,40 +182,16 @@ package() {
       "$pkgdir/usr/share/locale/$language/LC_MESSAGES/shelly-notifications.mo"
   done
 
-  cat <<'EOF' | install -Dm644 /dev/stdin \
+  install -Dm644 com.shellyorg.shelly.desktop \
     "$pkgdir/usr/share/applications/com.shellyorg.shelly.desktop"
-[Desktop Entry]
-Name=Shelly
-Comment=A Modern Arch Package Manager
-Exec=/usr/bin/shelly-ui %u
-Icon=shelly
-Type=Application
-Categories=System;Utility;
-Keywords=program;software;store;repository;package;add;install;uninstall;remove;update;apps;applications;flatpak;aur;appimage;
-MimeType=x-scheme-handler/appstream;x-scheme-handler/flatpak+https;
-Terminal=false
-X-GNOME-UsesNotifications=true
-EOF
-
-  cat <<'EOF' | install -Dm644 /dev/stdin \
+  install -Dm644 com.shellyorg.shelly-notifications.desktop \
     "$pkgdir/usr/share/applications/com.shellyorg.shelly-notifications.desktop"
-[Desktop Entry]
-Name=Shelly Notifications
-Comment=Notification service for Shelly package manager
-Exec=/usr/bin/shelly-notifications
-Icon=shelly-tray
-Type=Application
-Categories=System;Utility;
-Keywords=program;software;store;repository;package;update;
-Terminal=false
-NoDisplay=true
-EOF
 
   cat <<'EOF' | install -Dm644 /dev/stdin \
     "$pkgdir/usr/share/polkit-1/actions/com.shellyorg.shelly.policy"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
- "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+ "http://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd">
 <policyconfig>
   <vendor>Shelly</vendor>
   <vendor_url>https://github.com/Seafoam-Labs/Shelly-ALPM</vendor_url>
@@ -230,43 +209,6 @@ EOF
 </policyconfig>
 EOF
 
-  cat <<'SCRIPT' | install -Dm755 /dev/stdin \
+  install -Dm755 shelly-flatpak-integrate \
     "$pkgdir/usr/bin/shelly-flatpak-integrate"
-#!/usr/bin/bash
-set -euo pipefail
-
-flatpak_dirs=(
-  '/var/lib/flatpak/exports/share/applications'
-  "$HOME/.local/share/flatpak/exports/share/applications"
-)
-local_apps_dir="$HOME/.local/share/applications"
-mkdir -p "$local_apps_dir"
-
-for directory in "${flatpak_dirs[@]}"; do
-  [[ -d "$directory" ]] || continue
-  for desktop_file in "$directory"/*.desktop; do
-    [[ -f "$desktop_file" ]] || continue
-    filename="$(basename "$desktop_file")"
-    destination="$local_apps_dir/$filename"
-    [[ -f "$destination" ]] || cp "$desktop_file" "$destination"
-    grep -q 'ShellyManage' "$destination" && continue
-
-    if grep -q '^Actions=' "$destination"; then
-      sed -i 's/^Actions=\(.*\)/Actions=\1ShellyManage;/' "$destination"
-    else
-      sed -i '/^\[Desktop Entry\]/a Actions=ShellyManage;' "$destination"
-    fi
-
-    cat >> "$destination" <<'EOF'
-
-[Desktop Action ShellyManage]
-Name=Manage in Shelly
-Icon=shelly
-Exec=/usr/bin/shelly-ui --page flatpak-install
-EOF
-  done
-done
-
-update-desktop-database "$local_apps_dir" 2>/dev/null || true
-SCRIPT
 }

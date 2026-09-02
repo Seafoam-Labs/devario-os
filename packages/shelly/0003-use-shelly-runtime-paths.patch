@@ -1,14 +1,36 @@
-From: Devario maintainers
-Subject: [PATCH] Move Shelly runtime state to Shelly-owned paths
+From 59bdfcd677fdf03e41979687b1bc64a511d34680 Mon Sep 17 00:00:00 2001
+From: Devario maintainers <maintainers@devario.local>
+Date: Wed, 2 Sep 2026 13:38:01 -0400
+Subject: [PATCH] move runtime state to Shelly-owned paths
 
-Use Shelly-owned configuration, keyring, hook, database, and cache paths for
-all production defaults while preserving the isolated configuration override.
+---
+ Shelly.Cli.Zig/src/cli/catalog/keyring.zig    |  4 +-
+ Shelly.Cli.Zig/src/commands/builder.zig       | 16 +++--
+ Shelly.Cli.Zig/src/commands/downgrade.zig     |  2 +-
+ .../src/commands/isolated_build.zig           | 61 ++-----------------
+ Shelly.Cli.Zig/src/commands/keyring.zig       |  2 +-
+ Shelly.Cli.Zig/src/commands/pacfiles.zig      |  3 +-
+ Shelly.Cli.Zig/src/commands/utility.zig       |  2 +-
+ Shelly.Key/src/cli.zig                        |  6 +-
+ Shelly.Key/src/keyring/keyring.zig            |  4 +-
+ .../src/alpm/archive_manager.zig              |  2 +-
+ .../src/alpm/cache_manager.zig                |  2 +-
+ .../src/alpm/configuration.zig                | 16 ++---
+ Shelly.PackageManager/src/alpm/manager.zig    |  8 +--
+ .../src/alpm/manager_test.zig                 | 16 ++---
+ .../src/alpm/pacfile_manager.zig              |  4 +-
+ .../src/aur/builder/builder.zig               |  3 +
+ .../src/aur/builder/builder_test.zig          |  2 +-
+ .../src/aur/builder/package_file.zig          |  8 ++-
+ Shelly.PackageManager/src/aur/manager.zig     |  1 +
+ Shelly.Ui.Gtk/src/pages/transaction_page.zig  |  2 +-
+ 20 files changed, 63 insertions(+), 101 deletions(-)
 
 diff --git a/Shelly.Cli.Zig/src/cli/catalog/keyring.zig b/Shelly.Cli.Zig/src/cli/catalog/keyring.zig
-index 07982b64d78e3f5d4ffae3cd54985c130558e944..569c21a3955b20a445ec1329c5b780551bb88569 100644
+index 65df4c4..a15583b 100644
 --- a/Shelly.Cli.Zig/src/cli/catalog/keyring.zig
 +++ b/Shelly.Cli.Zig/src/cli/catalog/keyring.zig
-@@ -23,7 +23,7 @@ pub const variants = [_]types.Variant{
+@@ -24,7 +24,7 @@ pub const variants = [_]types.Variant{
          .name = "refresh",
          .type_code = 'r',
          .description = "Refresh pacman keyring keys from the configured keyserver.",
@@ -17,20 +39,75 @@ index 07982b64d78e3f5d4ffae3cd54985c130558e944..569c21a3955b20a445ec1329c5b78055
      },
      .{
          .action = .keyring,
-@@ -54,7 +54,7 @@ pub const variants = [_]types.Variant{
+@@ -55,7 +55,7 @@ pub const variants = [_]types.Variant{
          .name = "recv",
          .type_code = 'v',
-         .description = "Receive one or more keys from the configured or requested keyserver.",
--        .implementation = "/usr/bin/gpg --homedir /etc/pacman.d/gnupg [--keyserver server] --recv-keys [keys...]",
-+        .implementation = "/usr/bin/gpg --homedir /etc/shelly.d/gnupg [--keyserver server] --recv-keys [keys...]",
+         .description = "Receive keys into the pacman keyring or the current user's source-signing keyring.",
+-        .implementation = "/usr/bin/gpg --homedir /etc/pacman.d/gnupg --recv-keys, or /usr/bin/gpg --recv-keys with --user",
++        .implementation = "/usr/bin/gpg --homedir /etc/shelly.d/gnupg --recv-keys, or /usr/bin/gpg --recv-keys with --user",
          .arguments = &.{repeatedArgument(
              "keys",
              1,
+diff --git a/Shelly.Cli.Zig/src/commands/builder.zig b/Shelly.Cli.Zig/src/commands/builder.zig
+index e4c8b25..eaae840 100644
+--- a/Shelly.Cli.Zig/src/commands/builder.zig
++++ b/Shelly.Cli.Zig/src/commands/builder.zig
+@@ -18,6 +18,13 @@ pub fn dispatch(
+     invocation: *const parser.Invocation,
+ ) !?u8 {
+     if (!std.mem.eql(u8, invocation.command.path, command_path)) return null;
++    if (optionEnabled(invocation, "--isolated")) {
++        try context.stderr.writeAll(
++            "Isolated root provisioning is unavailable on Devario; use the native builder without --isolated.\n",
++        );
++        try context.stderr.flush();
++        return 1;
++    }
+     if (optionEnabled(invocation, "--makesrcinfo"))
+         return try executeMakeSrcinfo(context, invocation);
+     if (shouldElevateBuildCoordinator(invocation, elevation.isRoot())) {
+@@ -51,8 +58,7 @@ fn isolatedRequested(invocation: *const parser.Invocation) bool {
+ }
+
+ fn shouldElevateBuildCoordinator(invocation: *const parser.Invocation, running_as_root: bool) bool {
+-    return !running_as_root and
+-        (syncDepsRequested(invocation) or isolatedRequested(invocation));
++    return !running_as_root and syncDepsRequested(invocation);
+ }
+
+ fn executeWithRunner(
+@@ -808,7 +814,7 @@ fn validateIsolatedArtifacts(
+     const bindings = Zigalpm.alpm.bindings.libalpm;
+     const raw = bindings.alpm;
+     var alpm_error: raw.alpm_errno_t = 0;
+-    const handle = raw.alpm_initialize("/", "/var/lib/pacman", &alpm_error) orelse
++    const handle = raw.alpm_initialize("/", "/var/lib/shelly", &alpm_error) orelse
+         return error.ArtifactValidationFailed;
+     defer _ = raw.alpm_release(handle);
+
+@@ -1688,7 +1694,7 @@ test "sync deps options parse under both spellings" {
+     try std.testing.expect(!shouldElevateSyncDeps(&plain.dispatch, false));
+ }
+
+-test "isolated builds elevate only the outer coordinator" {
++test "isolated builds are rejected before coordinator elevation" {
+     const spec = @import("../cli/spec.zig");
+     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+     defer arena.deinit();
+@@ -1702,7 +1708,7 @@ test "isolated builds elevate only the outer coordinator" {
+         "5a" ** std.crypto.hash.sha2.Sha256.digest_length,
+     });
+     try std.testing.expect(isolatedRequested(&outer.dispatch));
+-    try std.testing.expect(shouldElevateBuildCoordinator(&outer.dispatch, false));
++    try std.testing.expect(!shouldElevateBuildCoordinator(&outer.dispatch, false));
+     try std.testing.expect(!shouldElevateBuildCoordinator(&outer.dispatch, true));
+     try std.testing.expect(!isolatedRequested(&child.dispatch));
+     try std.testing.expect(!shouldElevateBuildCoordinator(&child.dispatch, false));
 diff --git a/Shelly.Cli.Zig/src/commands/downgrade.zig b/Shelly.Cli.Zig/src/commands/downgrade.zig
-index 5ad5863fb80b6315fabef95e7cff4136d0a30fe3..e54e38ad650a4c8e3112569604c541f55641df59 100644
+index e298fed..b4fa8c6 100644
 --- a/Shelly.Cli.Zig/src/commands/downgrade.zig
 +++ b/Shelly.Cli.Zig/src/commands/downgrade.zig
-@@ -652,7 +652,7 @@ test "downgrade lists candidates as C sharp compatible JSON and UI records" {
+@@ -650,7 +650,7 @@ test "downgrade lists candidates as C sharp compatible JSON and UI records" {
      const manifest = try spec.Manifest.load(tc.arena.allocator());
      var candidates = [_]Zigalpm.alpm.DowngradeCandidate{
          testCandidate("demo", "2.0", "1", "2.0-1", "x86_64", "demo-2.0-1-x86_64.pkg.tar.zst", "https://archive.example/demo-2.0-1-x86_64.pkg.tar.zst", .arch_linux, true),
@@ -38,28 +115,101 @@ index 5ad5863fb80b6315fabef95e7cff4136d0a30fe3..e54e38ad650a4c8e3112569604c541f5
 +        testCandidate("demo", "1.0", "2", "1.0-2", "x86_64", "demo-1.0-2-x86_64.pkg.tar.zst", "/var/cache/shelly/pkg/demo-1.0-2-x86_64.pkg.tar.zst", .local_cache, false),
      };
      var capture: TestRunner = .{ .candidates = &candidates };
- 
+
+diff --git a/Shelly.Cli.Zig/src/commands/isolated_build.zig b/Shelly.Cli.Zig/src/commands/isolated_build.zig
+index 422b2c6..4756a88 100644
+--- a/Shelly.Cli.Zig/src/commands/isolated_build.zig
++++ b/Shelly.Cli.Zig/src/commands/isolated_build.zig
+@@ -77,63 +77,12 @@ pub const Root = struct {
+         self.* = undefined;
+     }
+
+-    /// Bootstraps a clean Arch root. pacstrap is restricted to provisioning;
+-    /// the package build itself is always Shelly's native builder in nspawn.
++    /// Devario has no legacy root-provisioning executable. The public command
++    /// rejects isolated builds before this defensive boundary is reached.
+     pub fn bootstrap(self: *Root, extra_packages: []const []const u8) !void {
+-        var argv: std.ArrayList([]const u8) = .empty;
+-        defer argv.deinit(self.allocator);
+-        try argv.appendSlice(self.allocator, &.{
+-            "/usr/bin/pacstrap",
+-            "-C",
+-            "/etc/pacman.conf",
+-            "-c",
+-            self.root_path,
+-            "base",
+-            "base-devel",
+-            "git",
+-            "ca-certificates",
+-        });
+-        try argv.appendSlice(self.allocator, extra_packages);
+-        try runInherited(self.io, argv.items);
+-
+-        const root_argument = try std.fmt.allocPrint(self.allocator, "--root={s}", .{self.root_path});
+-        defer self.allocator.free(root_argument);
+-        try runInherited(self.io, &.{
+-            "/usr/bin/systemd-sysusers",
+-            root_argument,
+-            "--inline",
+-            "g shelly-build 1000",
+-            "--inline",
+-            "u shelly-build 1000:1000 \"Shelly build user\" /home/shelly-build /usr/bin/bash",
+-        });
+-
+-        const home_path = try self.rootJoin("home/shelly-build");
+-        defer self.allocator.free(home_path);
+-        const executable_directory = try self.rootJoin("usr/local/libexec/shelly");
+-        defer self.allocator.free(executable_directory);
+-        const work_path = try self.rootJoin("build/work");
+-        defer self.allocator.free(work_path);
+-        const sources_path = try self.rootJoin("build/sources");
+-        defer self.allocator.free(sources_path);
+-        const logs_path = try self.rootJoin("build/logs");
+-        defer self.allocator.free(logs_path);
+-        try std.Io.Dir.cwd().createDirPath(self.io, home_path);
+-        try std.Io.Dir.cwd().createDirPath(self.io, executable_directory);
+-        try std.Io.Dir.cwd().createDirPath(self.io, work_path);
+-        try std.Io.Dir.cwd().createDirPath(self.io, sources_path);
+-        try std.Io.Dir.cwd().createDirPath(self.io, logs_path);
+-        try runInherited(self.io, &.{
+-            "/usr/bin/chown",
+-            "-R",
+-            "--",
+-            "1000:1000",
+-            self.source_path,
+-            self.artifact_path,
+-            work_path,
+-            sources_path,
+-            logs_path,
+-            home_path,
+-        });
++        _ = self;
++        _ = extra_packages;
++        return error.IsolatedRootProvisioningUnavailable;
+     }
+
+     /// Materializes only byte-exact inputs accepted by the host review. This
 diff --git a/Shelly.Cli.Zig/src/commands/keyring.zig b/Shelly.Cli.Zig/src/commands/keyring.zig
-index 12e174dd7c12e61dea03ba1c72406083fc3206f8..538be757ad14dea2b5992ec60cf2b5eb1318d615 100644
+index 76db915..d649442 100644
 --- a/Shelly.Cli.Zig/src/commands/keyring.zig
 +++ b/Shelly.Cli.Zig/src/commands/keyring.zig
 @@ -8,7 +8,7 @@ const elevation = @import("../runtime/elevation.zig");
  const spec = @import("../cli/spec.zig");
- 
+
  const command_prefix = "shelly keyring ";
 -const keyring_directory = "/etc/pacman.d/gnupg";
 +const keyring_directory = "/etc/shelly.d/gnupg";
- 
+
  const Action = enum {
      init,
 diff --git a/Shelly.Cli.Zig/src/commands/pacfiles.zig b/Shelly.Cli.Zig/src/commands/pacfiles.zig
-index 308d776dbb78950708d483a92b10a503d9bd9337..cde7f2f04c8458a8b9fbf837774c91bdca09cccf 100644
+index 308d776..cde7f2f 100644
 --- a/Shelly.Cli.Zig/src/commands/pacfiles.zig
 +++ b/Shelly.Cli.Zig/src/commands/pacfiles.zig
 @@ -35,10 +35,11 @@ pub fn run(
          return 1;
      }
- 
+
 +    const config_path = context.environ.getPosix("SHELLY_ALPM_CONFIG") orelse "/etc/shelly.conf";
      var config = try Zigalpm.alpm.configuration.Configuration.parse(
          context.allocator,
@@ -68,22 +218,22 @@ index 308d776dbb78950708d483a92b10a503d9bd9337..cde7f2f04c8458a8b9fbf837774c91bd
 +        config_path,
      );
      defer config.deinitialize();
- 
+
 diff --git a/Shelly.Cli.Zig/src/commands/utility.zig b/Shelly.Cli.Zig/src/commands/utility.zig
-index a07d32d29b7c7c72209092412b558bb8c9c30126..39bd62fbfd535594323662322c964836db0bfab0 100644
+index a07d32d..39bd62f 100644
 --- a/Shelly.Cli.Zig/src/commands/utility.zig
 +++ b/Shelly.Cli.Zig/src/commands/utility.zig
 @@ -12,7 +12,7 @@ const spec = @import("../cli/spec.zig");
  const xdg = @import("../runtime/xdg.zig");
- 
+
  const command_path = "shelly utility utility";
 -const default_database_directory = "/var/lib/pacman";
 +const default_database_directory = "/var/lib/shelly";
- 
+
  const Operation = union(enum) {
      fix_permissions,
 diff --git a/Shelly.Key/src/cli.zig b/Shelly.Key/src/cli.zig
-index 30d7b6761452b6ac841719f89e0d27587149aa4a..90cd52b1a08b25ffe75f8aef93e24275afa4ebe9 100644
+index 30d7b67..90cd52b 100644
 --- a/Shelly.Key/src/cli.zig
 +++ b/Shelly.Key/src/cli.zig
 @@ -169,7 +169,7 @@ pub fn printHelp(writer: *std.Io.Writer) !void {
@@ -114,34 +264,34 @@ index 30d7b6761452b6ac841719f89e0d27587149aa4a..90cd52b1a08b25ffe75f8aef93e24275
          \\                            (default: /usr/share/pacman/keyrings)
          \\  -h, --help                Show this help message
 diff --git a/Shelly.Key/src/keyring/keyring.zig b/Shelly.Key/src/keyring/keyring.zig
-index dfde082234383c7fc63fcfa0e8f18d97b9c0a9ec..00bf2c1f1f3a0230df73575f31b7e1c1e684f5df 100644
+index dfde082..00bf2c1 100644
 --- a/Shelly.Key/src/keyring/keyring.zig
 +++ b/Shelly.Key/src/keyring/keyring.zig
 @@ -8,7 +8,7 @@ const keydir = @import("keydir.zig");
  const keyfiles = @import("keyfiles.zig");
- 
+
  /// Default keyring location, used when `--init` is invoked without a path.
 -pub const default_gpgdir = "/etc/pacman.d/gnupg";
 +pub const default_gpgdir = "/etc/shelly.d/gnupg";
- 
+
  /// Default source directory for `--populate`, used when `--populate-from` is not given.
  pub const default_populate_from = "/usr/share/pacman/keyrings";
 @@ -42,7 +42,7 @@ pub fn init(
- 
+
      try keydir.ensureKeyringDir(base, io, keyring_path);
      // GnuPG selects its public-key storage format on first use. Match
 -    // pacman-key by creating pubring.gpg before invoking GnuPG so libalpm can
 +    // the legacy helper by creating pubring.gpg before invoking GnuPG so libalpm can
      // read the resulting keyring directly.
      try keyfiles.ensureAlpmKeyringFiles(base, io, keyring_path);
- 
+
 diff --git a/Shelly.PackageManager/src/alpm/archive_manager.zig b/Shelly.PackageManager/src/alpm/archive_manager.zig
-index d710c2e967a72564df082d398a2a7cdab8c3deca..03fcf7854c1a66ed4de1213b0edb49f9afaf3734 100644
+index d710c2e..03fcf78 100644
 --- a/Shelly.PackageManager/src/alpm/archive_manager.zig
 +++ b/Shelly.PackageManager/src/alpm/archive_manager.zig
 @@ -102,7 +102,7 @@ pub const PreparedPackage = struct {
  };
- 
+
  pub const Options = struct {
 -    cache_directory_fallback: []const u8 = "/var/cache/pacman/pkg",
 +    cache_directory_fallback: []const u8 = "/var/cache/shelly/pkg",
@@ -149,20 +299,20 @@ index d710c2e967a72564df082d398a2a7cdab8c3deca..03fcf7854c1a66ed4de1213b0edb49f9
      arch_linux_base_url: []const u8 = arch_linux_archive,
      cachyos_base_url: []const u8 = cachyos_archive,
 diff --git a/Shelly.PackageManager/src/alpm/cache_manager.zig b/Shelly.PackageManager/src/alpm/cache_manager.zig
-index 60ef51c234e9e543319cba16f9542a4162f1a6bc..ba8c6b94d6a783631050fcaa2e2aeab9cf990b0f 100644
+index 60ef51c..ba8c6b9 100644
 --- a/Shelly.PackageManager/src/alpm/cache_manager.zig
 +++ b/Shelly.PackageManager/src/alpm/cache_manager.zig
 @@ -21,7 +21,7 @@ pub const InstalledFilter = enum {
  };
- 
+
  pub const Options = struct {
 -    cache_directory: []const u8 = "/var/cache/pacman/pkg",
 +    cache_directory: []const u8 = "/var/cache/shelly/pkg",
      handle: libalpm.Handle = null,
  };
- 
+
 diff --git a/Shelly.PackageManager/src/alpm/configuration.zig b/Shelly.PackageManager/src/alpm/configuration.zig
-index a278438140c4a79f5651eb05c4a2fcc466cbfc79..785cbc15354bf57fd87b2cbf7ff2903e6b1535c7 100644
+index a278438..961162d 100644
 --- a/Shelly.PackageManager/src/alpm/configuration.zig
 +++ b/Shelly.PackageManager/src/alpm/configuration.zig
 @@ -73,10 +73,10 @@ pub const Configuration = struct {
@@ -179,18 +329,20 @@ index a278438140c4a79f5651eb05c4a2fcc466cbfc79..785cbc15354bf57fd87b2cbf7ff2903e
                  .hook_directory = .empty,
                  .hold_packages = .empty,
                  .transfer_command = "/usr/bin/curl -L -C - -f -o %o %u",
-@@ -96,7 +96,7 @@ pub const Configuration = struct {
+@@ -96,8 +96,8 @@ pub const Configuration = struct {
                  .remote_file_signature_level = sig(.{ .package = true }) | sig(.{ .database = true }),
              };
              try conf.hook_directory.append(alloc, "/usr/share/libalpm/hooks");
 -            try conf.hook_directory.append(alloc, "/etc/pacman.d/hooks");
+-            try conf.hold_packages.append(alloc, "pacman");
 +            try conf.hook_directory.append(alloc, "/etc/shelly.d/hooks");
-             try conf.hold_packages.append(alloc, "pacman");
++            try conf.hold_packages.append(alloc, "devario-alpm-runtime");
              try conf.hold_packages.append(alloc, "glibc");
              try conf.hold_packages.append(alloc, "shelly");
+             return conf;
 @@ -985,7 +985,7 @@ test "empty input yields defaults" {
      defer conf.deinitialize();
- 
+
      try testing.expectEqualStrings("/", conf.root_directory);
 -    try testing.expectEqualStrings("/var/lib/pacman", conf.database_path);
 +    try testing.expectEqualStrings("/var/lib/shelly", conf.database_path);
@@ -208,7 +360,7 @@ index a278438140c4a79f5651eb05c4a2fcc466cbfc79..785cbc15354bf57fd87b2cbf7ff2903e
          \\CheckSpace
 @@ -1006,7 +1006,7 @@ test "parses options section" {
      defer conf.deinitialize();
- 
+
      try testing.expectEqualStrings("/mnt/target", conf.root_directory);
 -    try testing.expectEqualStrings("/mnt/target/var/lib/pacman", conf.database_path);
 +    try testing.expectEqualStrings("/mnt/target/var/lib/shelly", conf.database_path);
@@ -216,19 +368,19 @@ index a278438140c4a79f5651eb05c4a2fcc466cbfc79..785cbc15354bf57fd87b2cbf7ff2903e
      try testing.expectEqual(@as(usize, 2), conf.ignore_package.items.len);
      try testing.expectEqualStrings("linux", conf.ignore_package.items[0]);
 diff --git a/Shelly.PackageManager/src/alpm/manager.zig b/Shelly.PackageManager/src/alpm/manager.zig
-index 5edd4760d79e4de11e253ea0875a627270f98596..dbc0eae08c7d70892cabfe4fcc7611145fa11a4b 100644
+index 01898f2..749df5d 100644
 --- a/Shelly.PackageManager/src/alpm/manager.zig
 +++ b/Shelly.PackageManager/src/alpm/manager.zig
-@@ -192,7 +192,7 @@ pub const Manager = struct {
+@@ -201,7 +201,7 @@ pub const Manager = struct {
          return @enumFromInt(default_download_address_family_policy.load(.acquire));
      }
- 
+
 -    /// If null is passed for config it will use the default /etc/pacman.conf.
 +    /// If null is passed for config it will use the default /etc/shelly.conf.
      /// The caller owns the returned manager and must call deinit when finished.
      pub fn init(
          allocator: std.mem.Allocator,
-@@ -200,7 +200,7 @@ pub const Manager = struct {
+@@ -209,7 +209,7 @@ pub const Manager = struct {
          options: InitOptions,
      ) InitError!*Manager {
          const config_path = options.config_path orelse
@@ -236,8 +388,8 @@ index 5edd4760d79e4de11e253ea0875a627270f98596..dbc0eae08c7d70892cabfe4fcc761114
 +            (environ.getPosix("SHELLY_ALPM_CONFIG") orelse "/etc/shelly.conf");
          const self = allocator.create(Manager) catch return InitError.InitFailed;
          errdefer allocator.destroy(self);
- 
-@@ -2992,7 +2992,7 @@ pub const Manager = struct {
+
+@@ -3246,7 +3246,7 @@ pub const Manager = struct {
              .DiskSpace => try details.appendSlice(self.allocator, "Not enough disk space\n Why is your disk so small?\n"),
              .HandleNull => try details.appendSlice(self.allocator, "Lost the handle. Kinda like a plot but more important.\n"),
              .HandleNotNull => try details.appendSlice(self.allocator, "Handle is not null. Normally you would want this but at this point I'm unsure.\n"),
@@ -246,8 +398,8 @@ index 5edd4760d79e4de11e253ea0875a627270f98596..dbc0eae08c7d70892cabfe4fcc761114
              .DbOpen => try details.appendSlice(self.allocator, "Failed to open the database.\n"),
              .DbCreate => try details.appendSlice(self.allocator, "Failed to create the database.\n"),
              .DbNull => try details.appendSlice(self.allocator, "Database is null.\n"),
-@@ -4606,7 +4606,7 @@ test "handleErrorMessage emits the expected database lock error" {
- 
+@@ -4993,7 +4993,7 @@ test "handleErrorMessage emits the expected database lock error" {
+
      try testing.expectEqualStrings(
          "unable to lock database\n" ++
 -            "You have a db.lck. It's at /var/lib/pacman/db.lck. You should probably delete that.\n",
@@ -256,7 +408,7 @@ index 5edd4760d79e4de11e253ea0875a627270f98596..dbc0eae08c7d70892cabfe4fcc761114
      );
  }
 diff --git a/Shelly.PackageManager/src/alpm/manager_test.zig b/Shelly.PackageManager/src/alpm/manager_test.zig
-index bc7cd20a7ab36e223f7d02ba0daba7bcb800490b..e63e73ac3f10e5a26daf7e605674184dd1add47a 100644
+index 53d6103..eeab80f 100644
 --- a/Shelly.PackageManager/src/alpm/manager_test.zig
 +++ b/Shelly.PackageManager/src/alpm/manager_test.zig
 @@ -130,7 +130,7 @@ const RemoveEventCapture = struct {
@@ -266,56 +418,65 @@ index bc7cd20a7ab36e223f7d02ba0daba7bcb800490b..e63e73ac3f10e5a26daf7e605674184d
 -// real /var/lib/pacman, and the workspace is deleted once each test finishes.
 +// real /var/lib/shelly, and the workspace is deleted once each test finishes.
  // ---------------------------------------------------------------------------
- 
+
  // A throwaway pacman configuration written to disk under a unique temp root.
-@@ -1111,10 +1111,10 @@ const LocalDbTestWorkspace = struct {
+@@ -1495,10 +1495,10 @@ const LocalDbTestWorkspace = struct {
      real_db_path: []const u8,
- 
+
      // The real system database whose `local` directory holds installed packages.
 -    const system_db_path = "/var/lib/pacman";
 +    const system_db_path = "/var/lib/shelly";
- 
+
      // Returns null (skip) when the real local database is unavailable, e.g. on
 -    // non-Arch hosts or CI without a populated /var/lib/pacman/local.
 +    // non-Devario hosts or CI without a populated /var/lib/shelly/local.
      fn create(allocator: std.mem.Allocator, io: std.Io) !?LocalDbTestWorkspace {
          const real_local = try std.fmt.allocPrint(allocator, "{s}/local", .{system_db_path});
          defer allocator.free(real_local);
-@@ -1299,8 +1299,8 @@ test "get_foreign_packages excludes repository packages after a non-root sync" {
+@@ -1683,8 +1683,8 @@ test "get_foreign_packages excludes repository packages after a non-root sync" {
      const io = threaded.io();
- 
+
      // Skip gracefully when there is no real system database to link against.
 -    const sys_config = "/etc/pacman.conf";
 -    _ = std.Io.Dir.cwd().statFile(io, "/var/lib/pacman/local", .{}) catch return;
 +    const sys_config = "/etc/shelly.conf";
 +    _ = std.Io.Dir.cwd().statFile(io, "/var/lib/shelly/local", .{}) catch return;
- 
+
      // A unique temp root plays the role of the C# `tempPath` cache directory.
      const anchor: u8 = 0;
-@@ -1897,7 +1897,7 @@ test "get_updates_available returns updates when installed packages have newer v
+@@ -2429,7 +2429,7 @@ test "get_updates_available returns updates when installed packages have newer v
      const io = threaded.io();
- 
+
      // Skip gracefully when there is no real system database to link against.
 -    _ = std.Io.Dir.cwd().statFile(io, "/var/lib/pacman/local", .{}) catch return;
 +    _ = std.Io.Dir.cwd().statFile(io, "/var/lib/shelly/local", .{}) catch return;
- 
+
      // A unique temp root plays the role of the C# `tempPath` cache directory.
      const anchor: u8 = 0;
-@@ -1908,7 +1908,7 @@ test "get_updates_available returns updates when installed packages have newer v
+@@ -2440,7 +2440,7 @@ test "get_updates_available returns updates when installed packages have newer v
      defer std.Io.Dir.cwd().deleteTree(io, temp_root) catch {};
- 
+
      // Initialize against the real system configuration with a throwaway temp root.
 -    const mgr = Manager.init(allocator, testing.environ, .{ .config_path = "/etc/pacman.conf", .temp_root_path = temp_root }) catch return;
 +    const mgr = Manager.init(allocator, testing.environ, .{ .config_path = "/etc/shelly.conf", .temp_root_path = temp_root }) catch return;
      defer mgr.deinit();
- 
+
      // Download the remote databases so alpm_sync_get_new_version can compare
+@@ -2675,7 +2675,7 @@ test "Manager hold APIs mutate HoldPkg while retaining shelly" {
+     try testing.expectEqual(@as(usize, 4), held.items.len);
+     try testing.expectEqualStrings("linux", held.items[3]);
+
+-    const removals = [_][]const u8{ "pacman", "glibc", "linux", "shelly" };
++    const removals = [_][]const u8{ "devario-alpm-runtime", "glibc", "linux", "shelly" };
+     try mgr.unhold_packages(&removals);
+     var remaining = try mgr.get_held_packages();
+     defer remaining.deinit(allocator);
 diff --git a/Shelly.PackageManager/src/alpm/pacfile_manager.zig b/Shelly.PackageManager/src/alpm/pacfile_manager.zig
-index 0246db9dc14f9ab53a3e3d2d60d070b7bee12cf1..fd9a1ef03ac8929094644a44091443e9aab4a394 100644
+index 0246db9..fd9a1ef 100644
 --- a/Shelly.PackageManager/src/alpm/pacfile_manager.zig
 +++ b/Shelly.PackageManager/src/alpm/pacfile_manager.zig
 @@ -118,8 +118,8 @@ pub const Pacfile = struct {
- 
+
  pub const Options = struct {
      root_directory: []const u8 = "/",
 -    database_path: []const u8 = "/var/lib/pacman",
@@ -325,11 +486,77 @@ index 0246db9dc14f9ab53a3e3d2d60d070b7bee12cf1..fd9a1ef03ac8929094644a44091443e9
      additional_cache_directories: []const []const u8 = &.{},
      find_paths: []const []const u8 = &default_find_paths,
      temporary_directory: []const u8 = "/tmp",
+diff --git a/Shelly.PackageManager/src/aur/builder/builder.zig b/Shelly.PackageManager/src/aur/builder/builder.zig
+index 3415f42..445ed8f 100644
+--- a/Shelly.PackageManager/src/aur/builder/builder.zig
++++ b/Shelly.PackageManager/src/aur/builder/builder.zig
+@@ -96,6 +96,9 @@ pub const BuildOptions = struct {
+     /// Optional deterministic build-environment snapshot. Production callers
+     /// leave this null and the builder reads libalpm's local database.
+     installed_packages: ?[]const []const u8 = null,
++    /// Active libalpm database used to generate installed-package BUILDINFO
++    /// records when no deterministic snapshot was supplied.
++    database_path: []const u8 = "/var/lib/shelly",
+     /// Byte-exact install scripts retained by the approved package review.
+     install_scripts: []const install_script.Script = &.{},
+     /// Byte-exact local and auxiliary files retained by package review.
+diff --git a/Shelly.PackageManager/src/aur/builder/builder_test.zig b/Shelly.PackageManager/src/aur/builder/builder_test.zig
+index 6c0c85e..f0c0b1c 100644
+--- a/Shelly.PackageManager/src/aur/builder/builder_test.zig
++++ b/Shelly.PackageManager/src/aur/builder/builder_test.zig
+@@ -4191,7 +4191,7 @@ fn probeSandboxPolicy(
+ ) u8 {
+     builder_mod.setNoNewPrivs() catch return 10;
+     builder_mod.sandbox.applyPolicy(allocator, .{
+-        .read_write_paths = &.{ allowed_root, "/tmp" },
++        .read_write_paths = &.{allowed_root},
+         .read_only_paths = &.{},
+     }) catch return 11;
+     if (!probePathReadable(allocator, allowed_path)) return 12;
+diff --git a/Shelly.PackageManager/src/aur/builder/package_file.zig b/Shelly.PackageManager/src/aur/builder/package_file.zig
+index 2c94fda..4855de7 100644
+--- a/Shelly.PackageManager/src/aur/builder/package_file.zig
++++ b/Shelly.PackageManager/src/aur/builder/package_file.zig
+@@ -392,7 +392,7 @@ fn writeBuildInfo(
+     if (self.options.installed_packages) |installed| {
+         for (installed) |value| try writeKeyValue(writer, "installed", value);
+     } else {
+-        const installed = try collectInstalledPackages(self.allocator);
++        const installed = try collectInstalledPackages(self.allocator, self.options.database_path);
+         defer metadata.freeOwnedStrings(self.allocator, installed);
+         for (installed) |value| try writeKeyValue(writer, "installed", value);
+     }
+@@ -421,9 +421,11 @@ fn stripKind(io: std.Io, path: []const u8) !?StripKind {
+     };
+ }
+
+-fn collectInstalledPackages(allocator: std.mem.Allocator) ![][]u8 {
++fn collectInstalledPackages(allocator: std.mem.Allocator, database_path: []const u8) ![][]u8 {
+     var alpm_error: raw_alpm.alpm_errno_t = 0;
+-    const handle = raw_alpm.alpm_initialize("/", "/var/lib/pacman", &alpm_error) orelse
++    const database_path_z = try allocator.dupeZ(u8, database_path);
++    defer allocator.free(database_path_z);
++    const handle = raw_alpm.alpm_initialize("/", database_path_z.ptr, &alpm_error) orelse
+         return error.LocalDatabaseOpenFailed;
+     defer _ = raw_alpm.alpm_release(handle);
+     const database = raw_alpm.alpm_get_localdb(handle) orelse
+diff --git a/Shelly.PackageManager/src/aur/manager.zig b/Shelly.PackageManager/src/aur/manager.zig
+index b529453..eeee40b 100644
+--- a/Shelly.PackageManager/src/aur/manager.zig
++++ b/Shelly.PackageManager/src/aur/manager.zig
+@@ -1827,6 +1827,7 @@ pub const Manager = struct {
+                 .source_destination = self.shellybuild_config.destinations.sources orelse prepared.cache_path,
+                 .log_destination = self.shellybuild_config.destinations.logs orelse prepared.cache_path,
+                 .pkgbuild_path = prepared.pkgbuild_path,
++                .database_path = self.alpm.config.database_path,
+                 .reviewed_pkgbuild_digest = build_review.digest,
+                 .install_scripts = build_review.install_scripts,
+                 .reviewed_files = build_review.reviewed_files,
 diff --git a/Shelly.Ui.Gtk/src/pages/transaction_page.zig b/Shelly.Ui.Gtk/src/pages/transaction_page.zig
-index 9d5ce23a3eb11692be338cd9aa64a364d03c8843..887be7682ec70664d5f18b5d11a1f8018f2ebda6 100644
+index 533be8d..2e911ff 100644
 --- a/Shelly.Ui.Gtk/src/pages/transaction_page.zig
 +++ b/Shelly.Ui.Gtk/src/pages/transaction_page.zig
-@@ -1077,7 +1077,7 @@ test "AUR build lifecycle selects indeterminate and terminal row states" {
+@@ -1147,7 +1147,7 @@ test "AUR build lifecycle selects indeterminate and terminal row states" {
  test "progress console lines include backend stage and percentage" {
      const database_line = try TransactionPage.formatAlpmProgress(std.testing.allocator, .{
          .progress_type = "DatabaseDownload",
@@ -338,3 +565,5 @@ index 9d5ce23a3eb11692be338cd9aa64a364d03c8843..887be7682ec70664d5f18b5d11a1f801
          .message = @as(?[]const u8, null),
          .stage = @as(?[]const u8, "download"),
          .percent = 52,
+--
+2.55.0

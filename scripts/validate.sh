@@ -109,6 +109,7 @@ required_files=(
   "$project_dir/packages/shelly/PKGBUILD"
   "$project_dir/packages/shelly/0001-remove-pacman-runtime-processes.patch"
   "$project_dir/packages/shelly/0002-support-alternate-alpm-config.patch"
+  "$project_dir/packages/shelly/0003-use-shelly-runtime-paths.patch"
   "$project_dir/packages/devario-alpm-runtime/PKGBUILD"
   "$project_dir/packages/devario-base/PKGBUILD"
   "$project_dir/packages/linux-cachyos-lts/PKGBUILD"
@@ -643,8 +644,15 @@ if ! grep -Eq "['\"]libalpm\\.so=16-64['\"]" \
   fail "Shelly must depend on the libalpm.so.16 ABI"
 fi
 
-if ! grep -Fxq 'pkgver=3.0.6' "$project_dir/packages/shelly/PKGBUILD"; then
-  fail "the Community Shelly package must track upstream 3.0.6"
+if ! grep -Fxq 'pkgver=3.1.2' "$project_dir/packages/shelly/PKGBUILD"; then
+  fail "the Community Shelly package must track upstream 3.1.2"
+fi
+if ! grep -Fxq '_commit=2172e9512a43ac001fe82b0f3809f785df89330f' \
+  "$project_dir/packages/shelly/PKGBUILD" \
+  || ! grep -Fq \
+    "'202949f096b4e2715ff0928b3d8e35b5cfe80e79ca392cbad4ed2b1ab854044f'" \
+    "$project_dir/packages/shelly/PKGBUILD"; then
+  fail "Shelly 3.1.2 must be pinned to its verified release commit archive"
 fi
 
 if grep -Eq "['\"]pacman([<>=][^'\"]*)?['\"]" \
@@ -658,8 +666,11 @@ if ! grep -Fq "'0001-remove-pacman-runtime-processes.patch'" \
     "$project_dir/packages/shelly/0001-remove-pacman-runtime-processes.patch" \
   || ! grep -Fq 'Shelly.Cli.Zig/src/commands/repository.zig' \
     "$project_dir/packages/shelly/0001-remove-pacman-runtime-processes.patch" \
-  || ! grep -Fq 'local ALPM database instead of spawning pacman -Qoq' \
-    "$project_dir/packages/shelly/0001-remove-pacman-runtime-processes.patch"; then
+  || ! grep -Fq 'sectionContains(files, "%FILES%", member_path)' \
+    "$project_dir/packages/shelly/0001-remove-pacman-runtime-processes.patch" \
+  || ! grep -Fq \
+    "'7cf4a7a59f90756c6ce7c7496d0a321f0728ac93d2cf7ac64f1ce6c046ca4d6e'" \
+    "$project_dir/packages/shelly/PKGBUILD"; then
   fail "Shelly must patch its remaining Pacman executable calls to native helpers"
 fi
 
@@ -668,7 +679,7 @@ if ! grep -Fq "'0002-support-alternate-alpm-config.patch'" \
   || ! grep -Fq 'SHELLY_ALPM_CONFIG' \
     "$project_dir/packages/shelly/0002-support-alternate-alpm-config.patch" \
   || ! grep -Fq \
-    "'6a071600b6977e94e7447dc424bf825034ec2fec0d048f9b5c0ecb4aa8023b5c'" \
+    "'292160e49be336d59622ed1fac0770add982184ecffef8a0d5de9822a1360922'" \
     "$project_dir/packages/shelly/PKGBUILD"; then
   fail "Shelly must provide checksummed alternate ALPM config support"
 fi
@@ -679,9 +690,23 @@ if ! grep -Fq "'0003-use-shelly-runtime-paths.patch'" \
   || ! grep -Fq '/var/lib/shelly' \
     "$project_dir/packages/shelly/0003-use-shelly-runtime-paths.patch" \
   || ! grep -Fq \
-    "'9aac5c555c3d035cda18e0c06b0cdfd2881a5257f69db6aead875f455cedb74b'" \
+    "'e7233d315f77291cb809eb5440241445200231dcb2a632ef73e284e29c4336ec'" \
     "$project_dir/packages/shelly/PKGBUILD"; then
   fail "Shelly must provide checksummed Shelly-owned runtime path defaults"
+fi
+if ! grep -Fq 'Shelly.Cli.Zig/src/commands/builder.zig' \
+  "$project_dir/packages/shelly/0003-use-shelly-runtime-paths.patch" \
+  || ! grep -Fq 'Shelly.PackageManager/src/aur/builder/package_file.zig' \
+    "$project_dir/packages/shelly/0003-use-shelly-runtime-paths.patch" \
+  || ! grep -Fq 'Isolated root provisioning is unavailable on Devario' \
+    "$project_dir/packages/shelly/0003-use-shelly-runtime-paths.patch"; then
+  fail "Shelly's native builder must use Devario paths and reject legacy isolated provisioning"
+fi
+if ! grep -Fq "backup=('etc/shellybuild.conf')" \
+  "$project_dir/packages/shelly/PKGBUILD" \
+  || grep -Eq "['\"]arch-install-scripts([<>=][^'\"]*)?['\"]" \
+    "$project_dir/packages/shelly/PKGBUILD"; then
+  fail "Shelly must package its builder policy without enabling legacy isolated provisioning"
 fi
 
 makepkg_adapter="$project_dir/scripts/makepkg-shelly-adapter.sh"
@@ -1987,14 +2012,18 @@ if command -v bsdtar >/dev/null 2>&1; then
     if ! grep -Eq '^usr/bin/shelly-key$' <<< "$artifact_contents"; then
       fail "$(basename -- "$artifact") does not contain Shelly's native keyring helper"
     fi
-    if ! grep -Eq '^pkgver = 3\.0\.6-' <<< "$shelly_pkginfo"; then
-      fail "$(basename -- "$artifact") is not Shelly 3.0.6"
+    if ! grep -Eq '^pkgver = 3\.1\.2-' <<< "$shelly_pkginfo"; then
+      fail "$(basename -- "$artifact") is not Shelly 3.1.2"
     fi
     if ! grep -Fxq 'depend = libalpm.so=16-64' <<< "$shelly_pkginfo"; then
       fail "$(basename -- "$artifact") does not require the libalpm.so.16 ABI"
     fi
     if ! grep -Fxq 'depend = devario-alpm-runtime>=7.1.0.r9.g54d9411-2' <<< "$shelly_pkginfo"; then
       fail "$(basename -- "$artifact") does not require the Shelly-path runtime migration"
+    fi
+    if ! grep -Fxq 'etc/shellybuild.conf' <<< "$artifact_contents" \
+      || ! grep -Fxq 'backup = etc/shellybuild.conf' <<< "$shelly_pkginfo"; then
+      fail "$(basename -- "$artifact") does not package Shelly's native-builder policy"
     fi
     if ! grep -Fxq 'options = !autodeps' <<< "$shelly_buildinfo" \
       || ! grep -Eq '^installed = .+-.+-.+$' \
@@ -2020,6 +2049,7 @@ if command -v bsdtar >/dev/null 2>&1; then
         shelly_strings="$(strings "$artifact_extract_dir/usr/bin/shelly" 2>/dev/null || true)"
         if grep -Fxq 'pacman' <<< "$shelly_strings" \
           || grep -Fq 'pacman-key' <<< "$shelly_strings" \
+          || grep -Fq 'pacstrap' <<< "$shelly_strings" \
           || grep -Fxq -- '-Qoq' <<< "$shelly_strings"; then
           fail "$(basename -- "$artifact") retains a Pacman executable invocation"
         fi
@@ -2029,7 +2059,9 @@ if command -v bsdtar >/dev/null 2>&1; then
           || ! grep -Fq '/etc/shelly.conf' <<< "$shelly_strings" \
           || ! grep -Fq '/var/lib/shelly' <<< "$shelly_strings" \
           || ! grep -Fq '/var/cache/shelly/pkg' <<< "$shelly_strings" \
-          || ! grep -Fq '/etc/shelly.d/gnupg' <<< "$shelly_strings"; then
+          || ! grep -Fq '/etc/shelly.d/gnupg' <<< "$shelly_strings" \
+          || ! grep -Fq 'Isolated root provisioning is unavailable on Devario' \
+            <<< "$shelly_strings"; then
           fail "$(basename -- "$artifact") does not use the patched native keyring helpers"
         fi
         if grep -Fq '/etc/pacman.conf' <<< "$shelly_strings" \

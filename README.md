@@ -121,14 +121,16 @@ services, and installer configuration must never invoke either executable, `pacs
 depends on that package name. It conflicts with and replaces the real package, but it does not contain either Pacman
 executable. This compatibility metadata is checked separately from the image-content rule.
 
-The packaged Shelly source is patched at build time because upstream 3.0.6 still delegates keyring and repository
-operations and pacfile ownership lookup to Pacman programs. Devario routes keyring actions through `shelly-key` or
-GnuPG, reads ownership information directly from `/var/lib/shelly`, defaults to `/etc/shelly.conf`, and supports
-`SHELLY_ALPM_CONFIG` for isolated image roots. The package build and artifact validator enforce this boundary. Existing
-installations are bridged during the package upgrade and materialized under the new paths by
-`shelly-storage-migrate.service` at the following boot. Verified legacy data is retained under
-`/var/lib/devario/shelly-path-migration/legacy`; `/usr/lib/devario/shelly-storage-migrate --rollback` can recreate
-current compatibility state during the rollback window.
+The packaged Shelly 3.1.2 source is patched at build time because upstream still delegates keyring and repository
+operations and isolated-root provisioning to legacy Pacman tools. Devario routes keyring actions through `shelly-key`
+or GnuPG, reads ownership and native-builder inventory information directly from `/var/lib/shelly`, defaults to
+`/etc/shelly.conf`, and supports `SHELLY_ALPM_CONFIG` for image roots. The package build and artifact validator enforce
+this boundary. Shelly's native non-isolated PKGBUILD builder is available, but `shelly build --isolated` is rejected
+until its root provisioning can be implemented without `pacstrap`. Existing installations are bridged during the
+package upgrade and materialized under the new paths by `shelly-storage-migrate.service` at the following boot.
+Verified legacy data is retained under `/var/lib/devario/shelly-path-migration/legacy`;
+`/usr/lib/devario/shelly-storage-migrate --rollback` can recreate current compatibility state during the rollback
+window.
 
 ## Using Shelly
 
@@ -168,6 +170,15 @@ Initialize and populate a damaged or new keyring:
 shelly keyring init
 shelly keyring populate archlinux devario
 ```
+
+Build a reviewed PKGBUILD with Shelly's native builder:
+
+```sh
+shelly build /path/to/PKGBUILD
+```
+
+Devario's controlled release pipeline continues to use `makepkg` because its
+corresponding-source workflow requires source-package creation.
 
 Shelly requests elevation for privileged transaction steps. Run it as the invoking desktop user rather than wrapping the
 whole command in `sudo`. Use full upgrades rather than synchronizing repositories and installing individual packages
