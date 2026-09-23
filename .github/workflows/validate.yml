@@ -20,7 +20,7 @@ jobs:
       - name: Install validation tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes gnupg openssl jq libarchive-tools python3-jsonschema python3-yaml qemu-system-x86 qemu-utils squashfs-tools xz-utils zstd
+          sudo apt-get install --yes gnupg openssl jq libalpm13t64 libarchive-tools python3-jsonschema python3-yaml qemu-system-x86 qemu-utils squashfs-tools xz-utils zstd
       - name: Validate source tree
         run: ./scripts/validate.sh
       - name: Run release contract tests

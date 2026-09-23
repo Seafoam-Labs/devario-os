@@ -45,6 +45,10 @@ compatibility with isolated-root operations.
 
 Audit already downloaded, signature-verified databases before staging packages:
 
+Version comparisons require either `vercmp` or the ALPM shared library. Ubuntu
+24.04 CI installs `libalpm13t64` and uses its `alpm_pkg_vercmp` directly when
+`vercmp` is absent.
+
 ```sh
 python3 scripts/audit-iso-repositories.py \
   --database devario-core /path/to/devario-core.db \

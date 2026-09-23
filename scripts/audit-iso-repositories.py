@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Audit an ISO package closure against downloaded, signature-verified databases."""
 import argparse
+import ctypes
+import ctypes.util
+from functools import lru_cache
 import hashlib
 import json
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tarfile
 
@@ -25,6 +29,23 @@ def records(path, repository):
     return result
 
 
+@lru_cache(maxsize=1)
+def alpm_comparator():
+    library = ctypes.util.find_library("alpm")
+    if not library:
+        raise RuntimeError("Package version comparison requires vercmp or libalpm (Ubuntu: libalpm13t64)")
+    compare = ctypes.CDLL(library).alpm_pkg_vercmp
+    compare.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+    compare.restype = ctypes.c_int
+    return compare
+
+
+def compare_versions(left, right):
+    if shutil.which("vercmp"):
+        return int(subprocess.check_output(["vercmp", left, right], text=True).strip())
+    return alpm_comparator()(left.encode(), right.encode())
+
+
 def satisfies(requirement, name, version):
     match = re.fullmatch(r"([^<>=]+)(>=|<=|=|>|<)?(.*)", requirement)
     if not match or match[1] != name:
@@ -33,7 +54,7 @@ def satisfies(requirement, name, version):
         return True
     if not version:
         return False
-    comparison = int(subprocess.check_output(["vercmp", version, match[3]], text=True).strip())
+    comparison = compare_versions(version, match[3])
     return {"=": comparison == 0, ">=": comparison >= 0, "<=": comparison <= 0,
             ">": comparison > 0, "<": comparison < 0}[match[2]]
 

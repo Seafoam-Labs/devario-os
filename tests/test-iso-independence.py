@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 PROJECT = Path(__file__).resolve().parents[1]
 
@@ -64,6 +65,20 @@ class IndependenceTests(unittest.TestCase):
             self.assertNotIn("archiso_", path.read_text())
         self.assertFalse((PROJECT / "iso/profiledef.sh").exists())
         self.assertEqual(json.loads((PROJECT / "iso/profile.json").read_text())["schemaVersion"], 1)
+
+    def test_version_comparison_without_vercmp(self):
+        # Ubuntu CI installs the ALPM library without makepkg/vercmp. Exercise
+        # real ALPM semantics, including epoch, package release and prerelease.
+        with patch.object(audit.shutil, "which", return_value=None):
+            for left, right, sign in (
+                ("1:1.0-1", "9.0-9", 1),
+                ("1.0-2", "1.0-1", 1),
+                ("1.0rc1", "1.0", -1),
+                ("1.0-1", "1.0-1", 0),
+            ):
+                with self.subTest(left=left, right=right):
+                    result = audit.compare_versions(left, right)
+                    self.assertEqual((result > 0) - (result < 0), sign)
 
 
 if __name__ == "__main__":

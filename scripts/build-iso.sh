@@ -74,7 +74,7 @@ if (( EUID != 0 )); then
   exit 1
 fi
 
-for build_command in awk bash bsdtar chmod cp find git gpg grep install mv patch readlink realpath sha256sum; do
+for build_command in awk bash bsdtar chmod cp find git gpg grep install ln mv patch readlink realpath sha256sum; do
   if ! command -v "$build_command" >/dev/null 2>&1; then
     echo "$build_command is required to prepare the Shelly-enabled Devario ISO builder." >&2
     exit 1
@@ -140,6 +140,9 @@ find "$staged_core_repo" -type f -exec chmod 444 {} +
 
 devario_compose_profile \
   "$profile_dir" "$edition_dir" "$staged_profile" "$project_dir"
+# This link targets files installed inside the image, not on the build host.
+# Keep it out of the source archive consumed by GitHub's action downloader.
+ln -sT -- /usr/share/calamares/qml "$staged_profile/airootfs/etc/calamares/qml"
 echo "Building Devario $DEVARIO_EDITION_VARIANT edition ($DEVARIO_EDITION_ID)."
 
 if (( release_build )); then
