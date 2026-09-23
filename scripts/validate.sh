@@ -1411,9 +1411,6 @@ pacman_reference_is_allowed() {
       [[ "$text" == *'"format": "{pacman} (Shelly)"'* ]]
       return
       ;;
-    tools/devario-nspawn/pacman.d/*)
-      return 0
-      ;;
     packages/devario-alpm-runtime/*)
       return 0
       ;;
@@ -1579,7 +1576,7 @@ if command -v shelly >/dev/null 2>&1; then
       case "$package_name" in
         aqueous|aqueous-session|aqueous-noctalia|calamares|ckbcomp|shelly|\
         devario-filesystem|seafoam-keyring|shelly-arch-compat|devario-alpm-runtime|devario-aqueous-desktop|devario-base|devario-boot|devario-dracut|devario-keyring|\
-        noctalia|noctalia-greeter)
+        devario-managed-keyring|noctalia|noctalia-greeter)
           continue
           ;;
       esac
@@ -1634,7 +1631,7 @@ if command -v bsdtar >/dev/null 2>&1; then
   if (( ${#devario_artifacts[@]} )); then
     for expected_artifact_package in \
       aqueous aqueous-noctalia aqueous-session calamares ckbcomp \
-      devario-filesystem seafoam-keyring shelly-arch-compat devario-alpm-runtime devario-aqueous-desktop devario-base devario-boot devario-dracut devario-keyring \
+      devario-filesystem seafoam-keyring devario-alpm-runtime devario-aqueous-desktop devario-base devario-boot devario-dracut devario-keyring \
       linux-cachyos-lts linux-cachyos-lts-headers \
       noctalia noctalia-greeter shelly; do
       expected_artifacts=(
