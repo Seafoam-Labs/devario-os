@@ -214,7 +214,7 @@ the new interface. Update both nspawn wrappers to install explicit required
 tools instead of relying on the `archiso` package's dependencies. Bind builder
 identity into controlled-builder manifests, input locks, and image build records.
 
-Rename the core `iso/` profile directory to `iso/`; update composition,
+Rename the core `archiso/` profile directory to `iso/`; update composition,
 validation, CI, documentation, scripts, and Managed core-path restrictions.
 Retain edition overlay relative paths where their meaning is unchanged. Update
 Managed's `base.lock` only after the tested core revision is committed, using the
