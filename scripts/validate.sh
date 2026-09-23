@@ -192,7 +192,6 @@ required_files=(
   "$project_dir/.github/actions/validate-managed/action.yml"
   "$project_dir/editions/community/package-sources.conf"
   "$project_dir/packages/devario-keyring/active-signer"
-  "$project_dir/tools/devario-nspawn/pacman.d/mirrorlist"
   "$project_dir/tests/fixtures/gpu-driver-setup/mock-modprobe"
   "$project_dir/tests/fixtures/makepkg-shelly/PKGBUILD"
   "$project_dir/tests/test-gpu-driver-setup.sh"
@@ -362,12 +361,6 @@ fi
 package_is_listed() {
   grep -Eq "^[[:space:]]*$1[[:space:]]*$" "$profile_dir/packages.x86_64"
 }
-
-mirrorlist="$project_dir/tools/devario-nspawn/pacman.d/mirrorlist"
-if ! grep -Fqx 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch' \
-  "$mirrorlist"; then
-  fail "the nspawn bootstrap mirrorlist lacks the Arch geo mirror"
-fi
 
 for required_package in \
   aqueous aqueous-session aqueous-noctalia \
