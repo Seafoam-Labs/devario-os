@@ -1,0 +1,97 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -euo pipefail
+helper_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$helper_dir/kernel.sh"
+
+mode=installed
+modules_root=/usr/lib/modules
+boot_dir=/boot
+config_dir=/usr/share/devario/dracut
+kernel_id=linux-cachyos-lts
+kernel_version=
+while (( $# )); do
+  case "$1" in
+    --mode|--modules-root|--boot-dir|--config-dir|--kernel-id|--kver)
+      (( $# >= 2 )) || exit 64
+      case "$1" in
+        --mode) mode="$2" ;; --modules-root) modules_root="$2" ;;
+        --boot-dir) boot_dir="$2" ;; --config-dir) config_dir="$2" ;;
+        --kernel-id) kernel_id="$2" ;; --kver) kernel_version="$2" ;;
+      esac
+      shift 2 ;;
+    *) echo "Unknown argument: $1" >&2; exit 64 ;;
+  esac
+done
+[[ "$mode" == live || "$mode" == installed ]] || exit 64
+devario_kernel_select "$modules_root" "$kernel_id" "$kernel_version"
+[[ -d "$boot_dir" && ! -L "$boot_dir" ]] || { echo 'Boot directory is missing or a symlink.' >&2; exit 1; }
+if [[ "$mode" == installed ]]; then
+  mountpoint -q "$boot_dir" || { echo "$boot_dir must be mounted before updating boot files." >&2; exit 1; }
+fi
+[[ -s "$config_dir/$mode.conf" ]] || { echo "Missing $mode dracut configuration." >&2; exit 1; }
+# Serialize direct invocations and package transactions on the same filesystem.
+exec 9>"$boot_dir/.devario-boot.lock"
+flock -x 9
+stage="$(mktemp -d "$boot_dir/.devario-initramfs.XXXXXX")"
+publishing=false
+declare -a files=("vmlinuz-$kernel_id" "initramfs-$kernel_id.img")
+[[ "$mode" == live ]] || files+=("initramfs-$kernel_id-fallback.img")
+cleanup() {
+  local status=$? file
+  if (( status != 0 )) && [[ "$publishing" == true ]]; then
+    for file in "${files[@]}"; do
+      if [[ -f "$stage/old/$file" ]]; then
+        cp -f -- "$stage/old/$file" "$boot_dir/$file" || true
+      else
+        rm -f -- "$boot_dir/$file"
+      fi
+    done
+  fi
+  rm -rf -- "$stage"
+  return "$status"
+}
+trap cleanup EXIT
+install -d "$stage/empty" "$stage/old"
+install -m644 "$DEVARIO_KERNEL_IMAGE" "$stage/vmlinuz-$kernel_id"
+depmod -a -m "$modules_root" "$DEVARIO_KERNEL_VERSION"
+args=(--force --kver "$DEVARIO_KERNEL_VERSION" --kmoddir "$modules_root/$DEVARIO_KERNEL_VERSION"
+  --conf "$config_dir/$mode.conf" --confdir "$stage/empty"
+  --no-hostonly-cmdline --no-uefi --reproducible)
+if [[ "$mode" == live ]]; then
+  args+=(--no-hostonly)
+else
+  args+=(--hostonly --hostonly-mode sloppy)
+fi
+dracut "${args[@]}" "$stage/initramfs-$kernel_id.img"
+lsinitrd "$stage/initramfs-$kernel_id.img" > "$stage/default.contents"
+grep -Fq "lib/modules/$DEVARIO_KERNEL_VERSION/" "$stage/default.contents"
+if [[ "$mode" == installed ]]; then
+  dracut "${args[@]}" --no-hostonly "$stage/initramfs-$kernel_id-fallback.img"
+  lsinitrd "$stage/initramfs-$kernel_id-fallback.img" > "$stage/fallback.contents"
+  grep -Fq "lib/modules/$DEVARIO_KERNEL_VERSION/" "$stage/fallback.contents"
+fi
+# Generation/inspection and backup must succeed before replacing any active file.
+for file in "${files[@]}"; do
+  [[ -s "$stage/$file" ]] || exit 1
+  [[ ! -e "$boot_dir/$file" ]] || cp -- "$boot_dir/$file" "$stage/old/$file"
+done
+recovery_dir="$boot_dir/devario-recovery/$kernel_id"
+if [[ -s "$stage/old/vmlinuz-$kernel_id" && -s "$stage/old/initramfs-$kernel_id.img" \
+  && ! -e "$recovery_dir" ]]; then
+  install -d "$stage/recovery" "$boot_dir/devario-recovery"
+  for file in "${files[@]}"; do
+    [[ ! -f "$stage/old/$file" ]] || install -m644 "$stage/old/$file" "$stage/recovery/$file"
+  done
+  # Publish the complete saved pair with one directory rename on the same FS.
+  mv -- "$stage/recovery" "$recovery_dir"
+  sync -f "$boot_dir"
+fi
+publishing=true
+for file in "${files[@]}"; do
+  chmod 644 "$stage/$file"
+  mv -f -- "$stage/$file" "$boot_dir/$file"
+done
+sync -f "$boot_dir"
+publishing=false
+printf 'Devario %s initramfs generated for %s.\n' "$mode" "$DEVARIO_KERNEL_VERSION"

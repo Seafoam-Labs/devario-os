@@ -125,6 +125,22 @@
       "declaredLicenses": ["GPL-3.0-or-later"],
       "correspondingSource": true,
       "notes": "Devario applies the checked-in patches under tools/devario-archiso at build time."
+    },
+    {
+      "id": "dracut-111",
+      "path": "packages/devario-dracut/dracut-111.tar.gz",
+      "kind": "upstream-source",
+      "size": 586307,
+      "sha256": "ca949190692e91611ef16ea3642c0f764f63948860f3f742524310728c991493",
+      "upstream": {
+        "url": "https://github.com/dracut-ng/dracut-ng",
+        "revision": "111"
+      },
+      "declaredLicenses": [
+        "GPL-2.0-or-later",
+        "LGPL-2.1-or-later"
+      ],
+      "correspondingSource": true
     }
   ]
 }

@@ -36,3 +36,11 @@ target selection, partition summary, bootloader choice, completion, and that no
 credentials were captured. The review records the active approver fingerprint.
 Real hardware checks required for a particular release are retained alongside
 the release record; source validation never fabricates them.
+
+For the dracut migration, additionally verify normal/fallback installed boot,
+encrypted and plain root, the offered filesystem and swap/resume layouts,
+copy-to-RAM installation after media removal, and kernel/dracut/DKMS/microcode
+updates followed by reboot. Exercise generation failure and recovery, and
+retained HTTP/NFS/NBD and loopback modes. The isolated
+`tests/test-dracut-live-qemu.sh` probe covers the live-root mount contract only;
+it does not satisfy any cell of the exact-candidate matrix above.

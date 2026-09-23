@@ -1,0 +1,31 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Type = Path
+Target = usr/lib/modules/*/vmlinuz
+Target = usr/lib/modules/*/updates/*
+Target = usr/lib/modules/*/extramodules/*
+Target = usr/lib/modules/*/build/Makefile
+Target = usr/src/*/dkms.conf
+Target = usr/lib/firmware/*-ucode/*
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = devario-dracut
+Target = devario-boot
+Target = systemd
+Target = cryptsetup
+Target = lvm2
+Target = amd-ucode
+Target = intel-ucode
+Target = nvidia-open-dkms
+Target = linux-cachyos-lts-headers
+Target = limine
+
+[Action]
+Description = Generating Devario initramfs and updating Limine...
+When = PostTransaction
+Exec = /usr/lib/devario/boot-update

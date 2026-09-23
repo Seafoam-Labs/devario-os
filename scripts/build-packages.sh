@@ -20,6 +20,8 @@ package_order=(
   devario-alpm-runtime
   devario-keyring
   devario-base
+  devario-dracut
+  devario-boot
   linux-cachyos-lts
   shelly
   ckbcomp

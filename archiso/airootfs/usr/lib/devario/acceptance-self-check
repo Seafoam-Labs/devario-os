@@ -91,9 +91,13 @@ fi
 if [[ "$mode" == installed ]]; then
   [[ -s "$(root_path /etc/machine-id)" ]] || fail 'installed system lacks a machine ID'
   [[ -s "$(root_path /etc/fstab)" ]] || fail 'installed system lacks fstab'
-  [[ ! -e "$(root_path /run/archiso/bootmnt)" ]] || fail 'installed system is still an Archiso live root'
+  [[ ! -e "$(root_path /run/devario/live)" ]] || fail 'installed system is still a Devario live root'
 else
   [[ -x "$(root_path /usr/bin/calamares)" || "$root" != / ]] || fail 'live image lacks Calamares'
+  if [[ "$root" == / ]]; then
+    [[ -e /run/devario/live ]] || fail 'live image lacks the Devario dracut marker'
+    mountpoint -q /run/devario/install-root || fail 'pristine installation source is not mounted'
+  fi
 fi
 
 marker="mode=$mode firmware=$firmware edition=$edition"

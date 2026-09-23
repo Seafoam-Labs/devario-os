@@ -28,6 +28,8 @@ Environment:
   DEVARIO_MANAGED_REPO_DIR / DEVARIO_MANAGED_KEYRING_DIR / DEVARIO_MANAGED_REPO_URL
                          Distinct inputs required by a managed edition
   DEVARIO_OUTPUT_DIR    Host ISO output directory (default: project out/)
+  DEVARIO_LIVE_SIGNING_CERT / DEVARIO_LIVE_SIGNING_KEY
+                         Optional CMS inputs for development netboot media
 
 Release mode additionally requires --release-version. Development builds reject
 that option and retain their explicit Development identity.
@@ -262,6 +264,19 @@ nspawn_args+=(
   --setenv="DEVARIO_OUTPUT_DIR=$container_output_dir"
   --setenv="DEVARIO_WORK_DIR=$container_work_dir"
 )
+if [[ -n "${DEVARIO_LIVE_SIGNING_CERT:-}" || -n "${DEVARIO_LIVE_SIGNING_KEY:-}" ]]; then
+  for signing_kind in CERT KEY; do
+    signing_variable="DEVARIO_LIVE_SIGNING_$signing_kind"
+    signing_path="${!signing_variable:-}"
+    [[ -f "$signing_path" && "$signing_path" != *:* && ! "$signing_path" =~ [[:space:]] ]] || {
+      echo 'Both live signing certificate and key paths must be supplied.' >&2
+      exit 1
+    }
+    signing_path="$(realpath -e -- "$signing_path")"
+    nspawn_args+=(--bind-ro="$signing_path:/run/devario-live-signing-$signing_kind")
+    nspawn_args+=(--setenv="$signing_variable=/run/devario-live-signing-$signing_kind")
+  done
+fi
 if [[ -n "${DEVARIO_CORE_REPO_URL:-${DEVARIO_REPO_URL:-}}" ]]; then
   nspawn_args+=(--setenv="DEVARIO_CORE_REPO_URL=${DEVARIO_CORE_REPO_URL:-$DEVARIO_REPO_URL}")
 fi

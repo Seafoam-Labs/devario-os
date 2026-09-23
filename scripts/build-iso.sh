@@ -21,6 +21,7 @@ archiso_archive="$archiso_bundle_dir/archiso-v89.tar.gz"
 archiso_patch="$archiso_bundle_dir/0001-bootstrap-with-shelly.patch"
 archiso_late_overlay_patch="$archiso_bundle_dir/0002-copy-late-airootfs-after-packages.patch"
 archiso_package_verification_patch="$archiso_bundle_dir/0003-verify-installed-packages.patch"
+archiso_dracut_patch="$archiso_bundle_dir/0004-generate-devario-dracut.patch"
 archiso_archive_sha256='d4e98484aaa4880888765cdc8ee9bcabed98320c3e6372b5d9699e32d1a33040'
 
 usage() {
@@ -32,6 +33,7 @@ edition contract rooted at DIRECTORY, then build the resulting ISO.
 
 Repository directories, keyring bundles, and credential-free HTTPS runtime
 URLs are passed independently as DEVARIO_CORE_* and DEVARIO_MANAGED_* values.
+Optional DEVARIO_LIVE_SIGNING_CERT and DEVARIO_LIVE_SIGNING_KEY sign netboot media.
 Community rejects every managed input. Release builds require the authenticated
 controlled nspawn/input-lock contract and fresh output/work directories.
 EOF
@@ -85,7 +87,8 @@ done
 
 if [[ ! -f "$archiso_archive" || ! -f "$archiso_patch" \
   || ! -f "$archiso_late_overlay_patch" \
-  || ! -f "$archiso_package_verification_patch" ]]; then
+  || ! -f "$archiso_package_verification_patch" \
+  || ! -f "$archiso_dracut_patch" ]]; then
   echo "The bundled Archiso source or a Devario patch is missing." >&2
   exit 1
 fi
@@ -208,6 +211,8 @@ required_devario_packages=(
   devario-alpm-runtime
   devario-aqueous-desktop
   devario-base
+  devario-boot
+  devario-dracut
   devario-keyring
   linux-cachyos-lts
   linux-cachyos-lts-headers
@@ -400,6 +405,7 @@ patch --fuzz=0 -d "$patched_archiso_dir" -Np1 < "$archiso_patch"
 patch --fuzz=0 -d "$patched_archiso_dir" -Np1 < "$archiso_late_overlay_patch"
 patch --fuzz=0 -d "$patched_archiso_dir" -Np1 \
   < "$archiso_package_verification_patch"
+patch --fuzz=0 -d "$patched_archiso_dir" -Np1 < "$archiso_dracut_patch"
 patched_mkarchiso="$patched_archiso_dir/archiso/mkarchiso"
 bash -O extglob -n "$patched_mkarchiso"
 
@@ -465,6 +471,17 @@ failure_report="$output_dir/devario-iso-failure-report.log"
 install -m 0644 /dev/null "$gpgme_trace"
 rm -f -- "$failure_report"
 
+archiso_signing_args=()
+if [[ -n "${DEVARIO_LIVE_SIGNING_CERT:-}" || -n "${DEVARIO_LIVE_SIGNING_KEY:-}" ]]; then
+  for signing_input in "${DEVARIO_LIVE_SIGNING_CERT:-}" "${DEVARIO_LIVE_SIGNING_KEY:-}"; do
+    if [[ ! -r "$signing_input" || ! -f "$signing_input" || "$signing_input" =~ [[:space:]] ]]; then
+      echo 'Live signing requires readable certificate/key files with whitespace-free paths.' >&2
+      exit 1
+    fi
+  done
+  archiso_signing_args=(-c "$DEVARIO_LIVE_SIGNING_CERT $DEVARIO_LIVE_SIGNING_KEY")
+fi
+
 set +e
 GPGME_DEBUG="9:$gpgme_trace" \
 DEVARIO_SHELLY="$devario_shelly" \
@@ -475,7 +492,7 @@ DEVARIO_EDITION_ISO_LABEL_PREFIX="$DEVARIO_EDITION_ISO_LABEL_PREFIX" \
 DEVARIO_EDITION_ISO_PUBLISHER="$DEVARIO_EDITION_ISO_PUBLISHER" \
 DEVARIO_EDITION_ISO_APPLICATION="$DEVARIO_EDITION_ISO_APPLICATION" \
   bash -O extglob "$patched_mkarchiso" \
-    -v -r -w "$work_dir" -o "$output_dir" "$staged_profile"
+    -v -r "${archiso_signing_args[@]}" -w "$work_dir" -o "$output_dir" "$staged_profile"
 archiso_status=$?
 set -e
 

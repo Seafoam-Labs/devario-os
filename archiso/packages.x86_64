@@ -10,6 +10,8 @@ cryptsetup
 devario-alpm-runtime
 devario-aqueous-desktop
 devario-base
+devario-boot
+devario-dracut
 devario-keyring
 dmidecode
 dosfstools
@@ -17,12 +19,12 @@ e2fsprogs
 efibootmgr
 exfatprogs
 f2fs-tools
-firefox
 fastfetch
+firefox
 gparted
 gptfdisk
-gvfs
 greetd
+gvfs
 hwinfo
 intel-ucode
 limine
@@ -32,9 +34,9 @@ linux-firmware
 lvm2
 man-db
 mesa
-mkinitcpio
-mkinitcpio-archiso
+nbd
 networkmanager
+nfs-utils
 noctalia
 noctalia-greeter
 noto-fonts

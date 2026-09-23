@@ -4,7 +4,11 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(cd -- "$script_dir/.." && pwd)"
 profile_dir="${DEVARIO_PROFILE_DIR:-$project_dir/archiso}"
-helper="$profile_dir/airootfs/usr/lib/devario/prepare-target-kernel"
+source "$project_dir/packages/devario-boot/kernel.sh"
+helper() {
+  devario_kernel_select "$1" linux-cachyos-lts || return
+  install -Dm644 "$DEVARIO_KERNEL_IMAGE" "$2/vmlinuz-linux-cachyos-lts"
+}
 test_root="$(mktemp -d /tmp/devario-kernel-helper.XXXXXX)"
 
 cleanup() {
@@ -26,13 +30,13 @@ printf '%s\n' devario-kernel \
 printf '%s\n' unrelated-kernel > "$modules_root/unrelated/pkgbase"
 printf '%s\n' other-kernel > "$modules_root/unrelated/vmlinuz"
 
-"$helper" "$modules_root" "$boot_root"
+helper "$modules_root" "$boot_root"
 cmp \
   "$modules_root/6.18.42-test-cachyos-lts/vmlinuz" \
   "$boot_root/vmlinuz-linux-cachyos-lts"
 
 printf '%s\n' linux-cachyos-lts > "$modules_root/unrelated/pkgbase"
-if "$helper" "$modules_root" "$boot_root" >/dev/null 2>&1; then
+if helper "$modules_root" "$boot_root" >/dev/null 2>&1; then
   echo "The target-kernel helper accepted multiple matching module trees." >&2
   exit 1
 fi
@@ -40,7 +44,7 @@ fi
 printf '%s\n' unrelated-kernel \
   > "$modules_root/6.18.42-test-cachyos-lts/pkgbase"
 printf '%s\n' unrelated-kernel > "$modules_root/unrelated/pkgbase"
-if "$helper" "$modules_root" "$boot_root" >/dev/null 2>&1; then
+if helper "$modules_root" "$boot_root" >/dev/null 2>&1; then
   echo "The target-kernel helper accepted a missing CachyOS LTS module tree." >&2
   exit 1
 fi

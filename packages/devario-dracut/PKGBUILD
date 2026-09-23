@@ -1,0 +1,32 @@
+# Maintainer: Devario maintainers
+# SPDX-License-Identifier: GPL-3.0-or-later
+pkgname=devario-dracut
+pkgver=111
+pkgrel=1
+pkgdesc="Upstream dracut generator packaged for Devario"
+arch=('x86_64')
+url="https://github.com/dracut-ng/dracut-ng"
+license=('GPL-2.0-or-later' 'LGPL-2.1-or-later')
+depends=('bash' 'coreutils' 'cpio' 'findutils' 'grep' 'gzip' 'kmod' 'sed'
+         'systemd' 'util-linux' 'xz' 'zstd')
+makedepends=('pkgconf')
+provides=("dracut=$pkgver" 'initramfs')
+conflicts=('dracut' 'mkinitcpio' 'mkinitcpio-archiso')
+source=("dracut-$pkgver.tar.gz")
+sha256sums=('ca949190692e91611ef16ea3642c0f764f63948860f3f742524310728c991493')
+
+build() {
+  cd "$srcdir/dracut-$pkgver"
+  ./configure --prefix=/usr --sysconfdir=/etc --libdir=/usr/lib \
+    --sbindir=/usr/bin --disable-documentation --disable-dracut-cpio --configprofile=''
+  make DRACUT_MAIN_VERSION="$pkgver" DRACUT_FULL_VERSION="$pkgver"
+}
+
+package() {
+  cd "$srcdir/dracut-$pkgver"
+  make DESTDIR="$pkgdir" DRACUT_MAIN_VERSION="$pkgver" DRACUT_FULL_VERSION="$pkgver" install
+  # Devario owns boot-update ordering; kernel-install must not generate a second image.
+  rm -f "$pkgdir/usr/lib/kernel/install.d/50-dracut.install" \
+    "$pkgdir/usr/lib/kernel/install.d/51-dracut-rescue.install"
+  install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
+}

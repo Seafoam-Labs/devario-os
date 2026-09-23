@@ -395,8 +395,10 @@ devario_compose_profile() {
     [limine]=1
     [linux-cachyos-lts]=1
     [linux-cachyos-lts-headers]=1
-    [mkinitcpio]=1
-    [mkinitcpio-archiso]=1
+    [devario-boot]=1
+    [devario-dracut]=1
+    [nbd]=1
+    [nfs-utils]=1
     [networkmanager]=1
     [noctalia]=1
     [noctalia-greeter]=1

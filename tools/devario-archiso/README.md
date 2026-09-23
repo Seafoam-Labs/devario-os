@@ -2,8 +2,9 @@
 
 Devario vendors the official Archiso v89 source archive and applies
 `0001-bootstrap-with-shelly.patch`,
-`0002-copy-late-airootfs-after-packages.patch`, and
-`0003-verify-installed-packages.patch` at ISO build time. The patches retain
+`0002-copy-late-airootfs-after-packages.patch`,
+`0003-verify-installed-packages.patch`, and
+`0004-generate-devario-dracut.patch` at ISO build time. The patches retain
 Archiso's image, bootloader, chroot-mount, and profile orchestration while
 routing repository synchronization, target package installation, and package
 inventory through Shelly. The first also rewrites the otherwise-unused stock CI
@@ -22,6 +23,13 @@ after installation the transaction re-reads the target inventory with
 filesystem, naming every package it asked for and did not get. Without it the
 shortfall would surface later, in a package hook or a boot image that cannot
 start, with the cause obscured.
+
+The fourth patch invokes Devario's live initramfs generator after package and
+overlay preparation and before boot image copying. Kernel selection and dracut
+policy belong to `devario-boot`. The adapter also supplies the public CMS
+certificate when signing network media; it never copies the signing key.
+The generator runs explicitly even when Archiso's earlier stages are cached.
+Changed package/profile inputs still require a fresh Archiso work directory.
 
 Source:
 `https://gitlab.archlinux.org/archlinux/archiso/-/archive/v89/archiso-v89.tar.gz`

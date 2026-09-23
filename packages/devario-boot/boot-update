@@ -1,0 +1,20 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -euo pipefail
+helper_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+case "${1:-}" in
+  --install) (( $# == 1 )) || exit 64; install_mode=true ;;
+  '') install_mode=false ;;
+  *) exit 64 ;;
+esac
+if [[ "$install_mode" == false && ! -e /var/lib/devario/limine-installed ]]; then
+  echo 'Devario boot update: target installation marker is absent; skipping live-image transaction.'
+  exit 0
+fi
+"$helper_dir/initramfs-update" --mode installed
+# A single process owns this sequence: a failed generation never refreshes Limine.
+if [[ "$install_mode" == true ]]; then
+  "$helper_dir/limine-update" --install
+else
+  "$helper_dir/limine-update"
+fi

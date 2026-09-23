@@ -84,7 +84,7 @@ jq -e '
 
 jq -e '
   .schemaVersion == 1 and
-  (.artifacts | length) == 6 and
+  (.artifacts | length) == 7 and
   all(.artifacts[]; (.sha256 | test("^[0-9a-f]{64}$")) and .correspondingSource)
 ' "$project_dir/release/source-manifest.json" >/dev/null
 

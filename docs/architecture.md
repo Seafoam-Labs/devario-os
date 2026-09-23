@@ -2,7 +2,7 @@
 
 Status: implemented core architecture
 
-Devario OS is the independently usable operating-system core shared by the
+Devario OS is an independent distribution and the operating-system core shared by the
 Community edition and any separately maintained editions. It contains the
 Archiso profile, Aqueous desktop, Calamares installer, Shelly package manager,
 package recipes, release validation, and hardware enablement required to build
@@ -33,6 +33,7 @@ flowchart LR
 | Aqueous and Noctalia | Provide the Wayland compositor, shell, greeter, and desktop session. |
 | Calamares | Copies the tested live root and configures the target installation. |
 | Limine | Boots installed systems through UEFI or legacy BIOS. |
+| `devario-dracut` and `devario-boot` | Supply the pinned initramfs generator and Devario-owned kernel, image, recovery, and boot-update policy. |
 | Shelly | Synchronizes repositories and performs package installation, removal, upgrade, signature verification, and inventory. |
 | `devario-alpm-runtime` | Supplies `libalpm` and required runtime data without the Pacman command-line programs. |
 | Devario package repository | Delivers signed core packages and repository metadata. |
@@ -64,6 +65,12 @@ they are immutable compatibility inputs rather than Shelly runtime state.
    installs Limine for the target firmware paths.
 6. The installed system initializes its own Arch and Devario public keyrings
    before normal package operations.
+
+The boot lifecycle is owned by Devario. Archiso invokes the same generation
+implementation used by installation and updates, and Shelly translates package
+events into Devario boot updates. Native kernel metadata does not require Arch
+package conventions; a separate `pkgbase` adapter supports compatible inputs.
+See [the boot contract](DRACUT-BOOT.md) for configuration, recovery, and testing.
 
 ## Edition composition
 

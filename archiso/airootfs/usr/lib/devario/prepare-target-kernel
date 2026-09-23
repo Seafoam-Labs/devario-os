@@ -1,32 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
-modules_root="${1:-/usr/lib/modules}"
-boot_root="${2:-/boot}"
-
-if (( $# > 2 )); then
-  echo "Usage: $0 [modules-root [boot-root]]" >&2
-  exit 2
-fi
-
-shopt -s nullglob
-module_dirs=("$modules_root"/*)
-matching_module_dirs=()
-
-for module_dir in "${module_dirs[@]}"; do
-  if [[ -f "$module_dir/pkgbase" \
-    && -s "$module_dir/vmlinuz" ]] \
-    && read -r package_base < "$module_dir/pkgbase" \
-    && [[ "$package_base" == linux-cachyos-lts ]]; then
-    matching_module_dirs+=("$module_dir")
-  fi
-done
-
-if (( ${#matching_module_dirs[@]} != 1 )); then
-  echo "Expected exactly one linux-cachyos-lts module tree below $modules_root; found ${#matching_module_dirs[@]}." >&2
-  exit 1
-fi
-
-install -Dm644 \
-  "${matching_module_dirs[0]}/vmlinuz" \
-  "$boot_root/vmlinuz-linux-cachyos-lts"
+source /usr/lib/devario/kernel.sh
+(( $# <= 2 )) || exit 64
+devario_kernel_select "${1:-/usr/lib/modules}" linux-cachyos-lts
+install -Dm644 "$DEVARIO_KERNEL_IMAGE" "${2:-/boot}/vmlinuz-linux-cachyos-lts"

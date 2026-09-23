@@ -72,48 +72,8 @@ while [[ "$(lsblk -dnro TYPE "$disk_device")" != disk ]]; do
   disk_device="/dev/$parent_name"
 done
 
-root_spec="$(awk '$1 !~ /^#/ && $2 == "/" { print $1; exit }' /etc/fstab)"
-root_options="$(awk '$1 !~ /^#/ && $2 == "/" { print $4; exit }' /etc/fstab)"
-[[ -n "$root_spec" ]] || fail "the root filesystem is missing from /etc/fstab"
-case "$root_spec" in
-  UUID=*|PARTUUID=*|LABEL=*|/dev/*)
-    ;;
-  *)
-    fail "unsupported root filesystem specification: $root_spec"
-    ;;
-esac
-
-kernel_cmdline="root=$root_spec rw quiet"
-if [[ "$root_spec" == /dev/mapper/* && -f /etc/crypttab ]]; then
-  mapper_name="${root_spec#/dev/mapper/}"
-  crypt_source="$(awk -v name="$mapper_name" \
-    '$1 !~ /^#/ && $1 == name { print $2; exit }' /etc/crypttab)"
-  case "$crypt_source" in
-    UUID=*)
-      kernel_cmdline+=" rd.luks.name=${crypt_source#UUID=}=$mapper_name"
-      ;;
-    /dev/disk/by-uuid/*)
-      kernel_cmdline+=" rd.luks.name=${crypt_source#/dev/disk/by-uuid/}=$mapper_name"
-      ;;
-  esac
-fi
-
-IFS=, read -r -a root_option_list <<< "$root_options"
-for root_option in "${root_option_list[@]}"; do
-  case "$root_option" in
-    subvol=*|subvolid=*)
-      kernel_cmdline+=" rootflags=$root_option"
-      break
-      ;;
-  esac
-done
-
-microcode_path=""
-if grep -q AuthenticAMD /proc/cpuinfo && [[ -f "$boot_dir/amd-ucode.img" ]]; then
-  microcode_path=amd-ucode.img
-elif grep -q GenuineIntel /proc/cpuinfo && [[ -f "$boot_dir/intel-ucode.img" ]]; then
-  microcode_path=intel-ucode.img
-fi
+helper_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+kernel_cmdline="$("$helper_dir/kernel-command-line")"
 
 install -d -m 0755 "$limine_dir"
 temporary_config="$(mktemp "$limine_dir/.limine.conf.XXXXXX")"
@@ -130,9 +90,6 @@ trap cleanup EXIT
   echo '/Devario Linux (CachyOS LTS)'
   echo 'protocol: linux'
   echo 'path: boot():/vmlinuz-linux-cachyos-lts'
-  if [[ -n "$microcode_path" ]]; then
-    echo "module_path: boot():/$microcode_path"
-  fi
   echo 'module_path: boot():/initramfs-linux-cachyos-lts.img'
   echo "cmdline: $kernel_cmdline"
 
@@ -141,10 +98,16 @@ trap cleanup EXIT
     echo '/Devario Linux (CachyOS LTS, fallback initramfs)'
     echo 'protocol: linux'
     echo 'path: boot():/vmlinuz-linux-cachyos-lts'
-    if [[ -n "$microcode_path" ]]; then
-      echo "module_path: boot():/$microcode_path"
-    fi
     echo 'module_path: boot():/initramfs-linux-cachyos-lts-fallback.img'
+    echo "cmdline: $kernel_cmdline"
+  fi
+  if [[ -s "$boot_dir/devario-recovery/linux-cachyos-lts/vmlinuz-linux-cachyos-lts" \
+    && -s "$boot_dir/devario-recovery/linux-cachyos-lts/initramfs-linux-cachyos-lts.img" ]]; then
+    echo
+    echo '/Devario Linux (previous kernel and initramfs)'
+    echo 'protocol: linux'
+    echo 'path: boot():/devario-recovery/linux-cachyos-lts/vmlinuz-linux-cachyos-lts'
+    echo 'module_path: boot():/devario-recovery/linux-cachyos-lts/initramfs-linux-cachyos-lts.img'
     echo "cmdline: $kernel_cmdline"
   fi
 } > "$temporary_config"

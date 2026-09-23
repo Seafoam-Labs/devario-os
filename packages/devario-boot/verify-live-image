@@ -1,0 +1,8 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -eu
+[ "$#" = 3 ] || exit 64
+image=$1 signature=$2 certificate=$3
+[ -s "$image" ] && [ -s "$signature" ] && [ -s "$certificate" ] || exit 1
+exec openssl cms -verify -binary -inform DER -in "$signature" -content "$image" \
+    -certfile "$certificate" -CAfile "$certificate" -purpose any -out /dev/null

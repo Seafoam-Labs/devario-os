@@ -1,0 +1,57 @@
+# Maintainer: Devario maintainers
+# SPDX-License-Identifier: GPL-3.0-or-later
+pkgname=devario-boot
+pkgver=1
+pkgrel=1
+pkgdesc="Devario kernel, dracut and Limine lifecycle"
+arch=('any')
+url="https://github.com/Seafoam-Labs/devario-os"
+license=('GPL-3.0-or-later')
+depends=('devario-dracut=111' 'bash' 'coreutils' 'util-linux' 'kmod' 'limine'
+         'cryptsetup' 'lvm2' 'btrfs-progs' 'e2fsprogs' 'glibc' 'gawk' 'grep')
+source=(
+  '95-devario-boot.hook'
+  'boot-update'
+  'initramfs-update'
+  'install-root.sh'
+  'installed.conf'
+  'kernel-command-line'
+  'kernel.sh'
+  'limine-update'
+  'live-root.sh'
+  'live.conf'
+  'module-setup.sh'
+  'verify-live-image'
+)
+sha256sums=(
+  '108f996671c413d0e2b186063d2ca530c40f8efb55fd12beefcce7803f2bc7e7'
+  'b7f25a1a5c299be2f9ac650badda16e5579165c32e0686ab33ad789820caf50f'
+  '59fd60c39dd875181b053aa2d189f61dbcfa1d95b5e711e37a462db5cb07d057'
+  '3a8807cef4c6dc0d2ef29e9ee4ef246e46203ae01371511abd6d81d4283b6da9'
+  '3efbb3ead28dba72f526627b65678ac41055160533c3e0ea89eeef8e152a353b'
+  '815ec97e8ee77815cb25acc3844d264ca2398cf69efc236556a14c8b4f88178c'
+  'f834101b6c033b4aa5c7dbf33a91fa1fb7bc419803dc187e56f3de62b7f282df'
+  'bc2b7a56a1a4afc04dae3db7e21bc898eedc4abd193d3aeb32c340282490d50f'
+  '8eb5bf879dd79a24aedfa868ba820f8c3593068e668e5188be2f495ddeb6db5b'
+  '34f65cc8ac7259a574b0fb6b519b7864ed57fec4c4b830c19a0865ba06c8d673'
+  'fef72a77838a03d0aadbf800d55e25f5f6b8c570abe112eab8427598a20d9f27'
+  '025547188bed99ddb3d6d58f1f725744c4f4ab555aea855182c60fa0d06695a7'
+)
+
+package() {
+  local file
+  for file in kernel.sh kernel-command-line initramfs-update boot-update limine-update; do
+    install -Dm755 "$srcdir/$file" "$pkgdir/usr/lib/devario/$file"
+  done
+  for file in live.conf installed.conf; do
+    install -Dm644 "$srcdir/$file" "$pkgdir/usr/share/devario/dracut/$file"
+  done
+  for file in module-setup.sh live-root.sh install-root.sh verify-live-image; do
+    install -Dm755 "$srcdir/$file" "$pkgdir/usr/lib/dracut/modules.d/91devario-live/$file"
+  done
+  install -Dm644 "$srcdir/95-devario-boot.hook" "$pkgdir/usr/share/libalpm/hooks/95-devario-boot.hook"
+  install -dm755 "$pkgdir/etc/shelly.d/hooks"
+  for file in 60-dracut-remove 90-dracut-install 60-mkinitcpio-remove 90-mkinitcpio-install 95-devario-limine; do
+    ln -s /dev/null "$pkgdir/etc/shelly.d/hooks/$file.hook"
+  done
+}

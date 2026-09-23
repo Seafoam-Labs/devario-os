@@ -154,7 +154,7 @@ _minor=42
 pkgver=${_major}.${_minor}
 _tagrel=1
 # Devario rebuild 1 of the upstream release, with a baseline x86-64 target.
-pkgrel=1.1
+pkgrel=1.2
 _stable=${_major}.${_minor}
 #_stable=${_major}
 #_stablerc=${_major}-${_rcver}
@@ -545,8 +545,10 @@ _package() {
     # https://github.com/systemd/systemd/commit/edda44605f06a41fb86b7ab8128dcf99161d2344
     install -Dm644 "$(make -s image_name)" "$modulesdir/vmlinuz"
 
-    # Used by mkinitcpio to name the kernel
+    # Compatibility metadata for repository tools; native metadata is below
     echo "$pkgbase" | install -Dm644 /dev/stdin "$modulesdir/pkgbase"
+    printf 'version=%s\nimage=vmlinuz\nid=%s\n' "$(<version)" "$pkgbase" \
+        | install -Dm644 /dev/stdin "$modulesdir/devario-kernel"
 
     echo "Installing modules..."
     ZSTD_CLEVEL=19 make "${BUILD_FLAGS[@]}" INSTALL_MOD_PATH="$pkgdir/usr" INSTALL_MOD_STRIP=1 \

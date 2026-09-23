@@ -1,0 +1,45 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -euo pipefail
+fstab="${1:-/etc/fstab}"
+crypttab="${2:-/etc/crypttab}"
+root_spec="$(awk '$1 !~ /^#/ && $2 == "/" { print $1; exit }' "$fstab")"
+root_options="$(awk '$1 !~ /^#/ && $2 == "/" { print $4; exit }' "$fstab")"
+case "$root_spec" in UUID=*|PARTUUID=*|LABEL=*|/dev/*) ;; *) echo 'Missing or invalid root in fstab.' >&2; exit 1 ;; esac
+args=("root=$root_spec" rw quiet)
+# Read crypttab even when fstab names the decrypted filesystem by UUID.
+if [[ -f "$crypttab" ]]; then
+  while read -r name device key options rest; do
+    [[ -n "$name" && "$name" != \#* ]] || continue
+    [[ ",$options," != *,noauto,* ]] || continue
+    [[ "$name" =~ ^[a-zA-Z0-9_+.-]+$ ]] || exit 1
+    case "$device" in
+      UUID=*) uuid="${device#UUID=}" ;;
+      /dev/disk/by-uuid/*) uuid="${device##*/}" ;;
+      *) uuid="$(blkid -s UUID -o value "$device")" ;;
+    esac
+    [[ "$uuid" =~ ^[a-fA-F0-9-]+$ ]] || exit 1
+    args+=("rd.luks.name=$uuid=$name")
+  done < "$crypttab"
+fi
+IFS=, read -r -a root_option_list <<< "$root_options"
+for option in "${root_option_list[@]}"; do
+  case "$option" in subvol=*|subvolid=*) args+=("rootflags=$option"); break ;; esac
+done
+# Preserve the installer's swap/resume choices, including Btrfs swapfiles.
+swap="$(awk '$1 !~ /^#/ && $3 == "swap" { print $1; exit }' "$fstab")"
+if [[ -n "$swap" ]]; then
+  if [[ "$swap" == /* && -f "$swap" ]]; then
+    uuid="$(findmnt -nro UUID --target "$swap")"
+    if [[ "$(findmnt -nro FSTYPE --target "$swap")" == btrfs ]]; then
+      offset="$(btrfs inspect-internal map-swapfile -r "$swap")"
+    else
+      offset="$(filefrag -v -b "$(getconf PAGESIZE)" "$swap" | awk '$1 == "0:" {sub(/\.\..*/, "", $4); print $4; exit}')"
+    fi
+    [[ -n "$uuid" && "$offset" =~ ^[0-9]+$ ]] || { echo 'Cannot determine swapfile resume offset.' >&2; exit 1; }
+    args+=("resume=UUID=$uuid" "resume_offset=$offset")
+  else
+    args+=("resume=$swap")
+  fi
+fi
+printf '%s\n' "${args[*]}"

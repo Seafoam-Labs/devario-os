@@ -84,7 +84,6 @@ required_files=(
   "$profile_dir/airootfs/etc/calamares/modules/limine.conf"
   "$profile_dir/airootfs/etc/calamares/modules/prepare_target.conf"
   "$profile_dir/airootfs/etc/calamares/modules/services-systemd.conf"
-  "$profile_dir/airootfs/etc/mkinitcpio.d/linux-cachyos-lts.preset"
   "$profile_dir/airootfs/etc/greetd/config.toml"
   "$profile_dir/airootfs/etc/polkit-1/rules.d/49-devario-live-installer.rules"
   "$profile_dir/airootfs/etc/systemd/system/default.target"
@@ -92,11 +91,10 @@ required_files=(
   "$profile_dir/airootfs/etc/systemd/system/multi-user.target.wants/devario-acceptance-self-check.service"
   "$profile_dir/airootfs/etc/systemd/system/shelly-keyring-init.service"
   "$profile_dir/airootfs/usr/lib/devario/acceptance-self-check"
-  "$profile_dir/airootfs/usr/lib/devario/limine-update"
+  "$project_dir/packages/devario-boot/limine-update"
   "$profile_dir/airootfs/usr/lib/devario/prepare-target-kernel"
   "$profile_dir/airootfs/usr/local/bin/devario-aqueous-live-session"
-  "$profile_dir/airootfs/usr/share/libalpm/hooks/95-devario-limine.hook"
-  "$profile_dir/airootfs/usr/share/devario/linux-cachyos-lts.preset"
+  "$project_dir/packages/devario-boot/95-devario-boot.hook"
   "$profile_dir/airootfs/usr/share/calamares/branding/devario/branding.desc"
   "$profile_dir/late-airootfs/etc/skel/.bashrc"
   "$profile_dir/late-airootfs/usr/share/devario/fastfetch/config.jsonc"
@@ -112,6 +110,13 @@ required_files=(
   "$project_dir/packages/shelly/0003-use-shelly-runtime-paths.patch"
   "$project_dir/packages/devario-alpm-runtime/PKGBUILD"
   "$project_dir/packages/devario-base/PKGBUILD"
+  "$project_dir/packages/devario-dracut/PKGBUILD"
+  "$project_dir/packages/devario-boot/PKGBUILD"
+  "$project_dir/packages/devario-boot/initramfs-update"
+  "$project_dir/packages/devario-boot/boot-update"
+  "$project_dir/tests/test-dracut-boot.sh"
+  "$project_dir/tests/test-dracut-live-qemu.sh"
+  "$project_dir/tools/devario-archiso/0004-generate-devario-dracut.patch"
   "$project_dir/packages/linux-cachyos-lts/PKGBUILD"
   "$project_dir/packages/linux-cachyos-lts/config"
   "$project_dir/packages/linux-cachyos-lts/README.md"
@@ -244,7 +249,9 @@ done < <(
   printf '%s\n' "$project_dir/scripts/lib/edition.sh"
   printf '%s\n' "$profile_dir/profiledef.sh"
   printf '%s\n' "$profile_dir/late-airootfs/etc/skel/.bashrc"
-  printf '%s\n' "$profile_dir/airootfs/usr/lib/devario/limine-update"
+  for boot_helper in kernel.sh kernel-command-line initramfs-update boot-update limine-update module-setup.sh live-root.sh install-root.sh verify-live-image; do
+    printf '%s\n' "$project_dir/packages/devario-boot/$boot_helper"
+  done
   printf '%s\n' "$profile_dir/airootfs/usr/lib/devario/prepare-target-kernel"
   printf '%s\n' "$profile_dir/airootfs/usr/lib/devario/acceptance-self-check"
   printf '%s\n' "$project_dir/packages/devario-aqueous-desktop/gpu-driver-setup"
@@ -267,6 +274,9 @@ fi
 if ! DEVARIO_PROFILE_DIR="$profile_dir" \
   bash "$project_dir/tests/test-prepare-target-kernel.sh"; then
   fail "target-kernel preparation behavior tests failed"
+fi
+if ! bash "$project_dir/tests/test-dracut-boot.sh"; then
+  fail "Devario dracut behavior tests failed"
 fi
 if ! bash "$project_dir/tests/test-edition-composition.sh"; then
   fail "edition composition behavior tests failed"
@@ -368,7 +378,7 @@ fi
 for required_package in \
   aqueous aqueous-session aqueous-noctalia \
   calamares ckbcomp devario-alpm-runtime devario-aqueous-desktop \
-  devario-base devario-keyring greetd limine noctalia noctalia-greeter shelly fastfetch \
+  devario-base devario-boot devario-dracut devario-keyring greetd limine noctalia noctalia-greeter shelly fastfetch \
   linux-cachyos-lts linux-cachyos-lts-headers nvidia-open-dkms nvidia-utils \
   vulkan-intel vulkan-radeon vulkan-swrast xorg-xwayland; do
   if ! package_is_listed "$required_package"; then
@@ -377,7 +387,7 @@ for required_package in \
 done
 
 for forbidden_package in \
-  pacman base linux grub os-prober lightdm lightdm-gtk-greeter xfce4 xfce4-goodies \
+  mkinitcpio mkinitcpio-archiso pacman base linux grub os-prober lightdm lightdm-gtk-greeter xfce4 xfce4-goodies \
   xorg-server xorg-xinit greetd-agreety greetd-tuigreet vulkan-nouveau; do
   if package_is_listed "$forbidden_package"; then
     fail "packages.x86_64 must not include $forbidden_package"
@@ -391,6 +401,8 @@ declare -A expected_pkgnames=(
   [devario-alpm-runtime]=devario-alpm-runtime
   [devario-aqueous-desktop]=devario-aqueous-desktop
   [devario-base]=devario-base
+  [devario-boot]=devario-boot
+  [devario-dracut]=devario-dracut
   [devario-keyring]=devario-keyring
   [linux-cachyos-lts]=linux-cachyos-lts
   [noctalia]=noctalia
@@ -434,10 +446,11 @@ for required_kernel_recipe_text in \
   '_major=6.18' \
   '_minor=42' \
   ': "${_build_nvidia_open:=no}"' \
-  'pkgrel=1.1' \
+  'pkgrel=1.2' \
   'pkgname+=("$pkgbase-headers")' \
   'KBUILD_BUILD_HOST=devario' \
   'e322057f183bf666741ec12d2d64f681d9ba7bc4e4326354656ca23be5ecfb5ab3ab2ef494ddb54605f4ff1d5bba5a08493760eea9a36860080eafdb369a0321' \
+  '"$modulesdir/devario-kernel"' \
   "$expected_kernel_config_b2"; do
   if ! grep -Fq "$required_kernel_recipe_text" "$kernel_pkgbuild"; then
     fail "linux-cachyos-lts packaging is missing: $required_kernel_recipe_text"
@@ -958,6 +971,7 @@ archiso_archive="$project_dir/tools/devario-archiso/archiso-v89.tar.gz"
 archiso_patch="$project_dir/tools/devario-archiso/0001-bootstrap-with-shelly.patch"
 archiso_late_overlay_patch="$project_dir/tools/devario-archiso/0002-copy-late-airootfs-after-packages.patch"
 archiso_package_verification_patch="$project_dir/tools/devario-archiso/0003-verify-installed-packages.patch"
+archiso_dracut_patch="$project_dir/tools/devario-archiso/0004-generate-devario-dracut.patch"
 expected_archiso_sha256='d4e98484aaa4880888765cdc8ee9bcabed98320c3e6372b5d9699e32d1a33040'
 actual_archiso_sha256="$(sha256sum "$archiso_archive")"
 actual_archiso_sha256="${actual_archiso_sha256%% *}"
@@ -1044,7 +1058,11 @@ if command -v bsdtar >/dev/null 2>&1 && command -v patch >/dev/null 2>&1; then
     || ! patch --fuzz=0 -d "$archiso_check_dir/archiso-v89" -Np1 \
       < "$archiso_patch" >/dev/null \
     || ! patch --fuzz=0 -d "$archiso_check_dir/archiso-v89" -Np1 \
-      < "$archiso_late_overlay_patch" >/dev/null; then
+      < "$archiso_late_overlay_patch" >/dev/null \
+    || ! patch --fuzz=0 -d "$archiso_check_dir/archiso-v89" -Np1 \
+      < "$archiso_package_verification_patch" >/dev/null \
+    || ! patch --fuzz=0 -d "$archiso_check_dir/archiso-v89" -Np1 \
+      < "$archiso_dracut_patch" >/dev/null; then
     fail "the Devario patches do not apply cleanly to bundled Archiso v89"
   else
     patched_mkarchiso="$archiso_check_dir/archiso-v89/archiso/mkarchiso"
@@ -1161,15 +1179,13 @@ fi
 keyring_unit="$profile_dir/airootfs/etc/systemd/system/shelly-keyring-init.service"
 default_target="$profile_dir/airootfs/etc/systemd/system/default.target"
 prepare_target="$profile_dir/airootfs/etc/calamares/modules/prepare_target.conf"
-live_kernel_preset="$profile_dir/airootfs/etc/mkinitcpio.d/linux-cachyos-lts.preset"
-installed_kernel_preset="$profile_dir/airootfs/usr/share/devario/linux-cachyos-lts.preset"
 services_systemd="$profile_dir/airootfs/etc/calamares/modules/services-systemd.conf"
 calamares_settings="$profile_dir/airootfs/etc/calamares/settings.conf"
 unpackfs_config="$profile_dir/airootfs/etc/calamares/modules/unpackfs.conf"
 partition_config="$profile_dir/airootfs/etc/calamares/modules/partition.conf"
 limine_config="$profile_dir/airootfs/etc/calamares/modules/limine.conf"
-limine_update="$profile_dir/airootfs/usr/lib/devario/limine-update"
-limine_hook="$profile_dir/airootfs/usr/share/libalpm/hooks/95-devario-limine.hook"
+limine_update="$project_dir/packages/devario-boot/limine-update"
+limine_hook="$project_dir/packages/devario-boot/95-devario-boot.hook"
 live_greetd_config="$profile_dir/airootfs/etc/greetd/config.toml"
 installed_greetd_config="$project_dir/packages/devario-aqueous-desktop/greetd-config.toml"
 live_session_wrapper="$profile_dir/airootfs/usr/local/bin/devario-aqueous-live-session"
@@ -1230,9 +1246,9 @@ if ! grep -Fq 'module: shellprocess' "$calamares_settings" \
   || ! grep -Fq 'shellprocess@limine' "$calamares_settings"; then
   fail "Calamares does not schedule the dedicated Limine installation job"
 fi
-if ! grep -Fqx '  - source: "/run/archiso/airootfs"' "$unpackfs_config" \
+if ! grep -Fqx '  - source: "/run/devario/install-root"' "$unpackfs_config" \
   || ! grep -Fqx '    sourcefs: "file"' "$unpackfs_config"; then
-  fail "Calamares must install from Archiso's persistent mounted root"
+  fail "Calamares must install from the pristine Devario live root"
 fi
 if grep -Fq '/run/archiso/bootmnt' "$unpackfs_config"; then
   fail "Calamares unpackfs must not depend on bootmnt, which copy-to-RAM unmounts"
@@ -1241,8 +1257,7 @@ prepare_target_kernel="$profile_dir/airootfs/usr/lib/devario/prepare-target-kern
 for required_kernel_install_text in \
   '/usr/lib/devario/prepare-target-kernel' \
   'rm -f /usr/lib/devario/prepare-target-kernel' \
-  'test -s /boot/vmlinuz-linux-cachyos-lts' \
-  'install -Dm644 /usr/share/devario/linux-cachyos-lts.preset /etc/mkinitcpio.d/linux-cachyos-lts.preset'; do
+  'test -s /boot/vmlinuz-linux-cachyos-lts'; do
   if ! grep -Fq "$required_kernel_install_text" "$prepare_target"; then
     fail "Calamares target preparation is missing: $required_kernel_install_text"
   fi
@@ -1250,34 +1265,15 @@ done
 if grep -Fq '$' "$prepare_target"; then
   fail "Calamares target-preparation commands must not contain shell variables that its macro expander consumes"
 fi
-for required_kernel_helper_text in \
-  'module_dirs=("$modules_root"/*)' \
-  '[[ "$package_base" == linux-cachyos-lts ]]' \
-  '(( ${#matching_module_dirs[@]} != 1 ))' \
-  '"${matching_module_dirs[0]}/vmlinuz"' \
-  '"$boot_root/vmlinuz-linux-cachyos-lts"'; do
-  if ! grep -Fq "$required_kernel_helper_text" "$prepare_target_kernel"; then
-    fail "the target-kernel helper is missing: $required_kernel_helper_text"
-  fi
-done
-if grep -Fq 'find /usr/lib/modules' "$prepare_target_kernel"; then
-  fail "Calamares must select the CachyOS LTS module tree by pkgbase, not filesystem order"
+if ! grep -Fq 'devario_kernel_select' "$prepare_target_kernel"; then
+  fail "Calamares must use Devario kernel metadata selection"
 fi
-for kernel_preset_pair in \
-  "$live_kernel_preset:/boot/vmlinuz-linux-cachyos-lts" \
-  "$live_kernel_preset:/boot/initramfs-linux-cachyos-lts.img" \
-  "$installed_kernel_preset:/boot/vmlinuz-linux-cachyos-lts" \
-  "$installed_kernel_preset:/boot/initramfs-linux-cachyos-lts.img" \
-  "$installed_kernel_preset:/boot/initramfs-linux-cachyos-lts-fallback.img"; do
-  preset_path="${kernel_preset_pair%%:*}"
-  required_preset_path="${kernel_preset_pair#*:}"
-  if ! grep -Fq "$required_preset_path" "$preset_path"; then
-    fail "${preset_path#"$project_dir/"} is missing $required_preset_path"
-  fi
-done
-if [[ -e "$profile_dir/airootfs/etc/mkinitcpio.d/linux.preset" \
-  || -e "$profile_dir/airootfs/usr/share/devario/linux.preset" ]]; then
-  fail "the stock linux mkinitcpio preset remains in the Archiso profile"
+if grep -Eq '^[[:space:]]*-[[:space:]]*(initcpio|initcpiocfg)[[:space:]]*$' "$calamares_settings"; then
+  fail "Calamares still invokes mkinitcpio"
+fi
+if [[ -d "$profile_dir/airootfs/etc/mkinitcpio.d" ]] \
+  && [[ -n "$(find "$profile_dir/airootfs/etc/mkinitcpio.d" -type f -print -quit)" ]]; then
+  fail "obsolete mkinitcpio presets remain in the profile"
 fi
 for live_boot_config in \
   "$profile_dir/efiboot/loader/entries/01-devario-linux.conf" \
@@ -1286,7 +1282,9 @@ for live_boot_config in \
   "$profile_dir/syslinux/archiso_sys-linux.cfg" \
   "$profile_dir/syslinux/archiso_pxe-linux.cfg"; do
   if ! grep -Fq 'vmlinuz-linux-cachyos-lts' "$live_boot_config" \
-    || ! grep -Fq 'initramfs-linux-cachyos-lts.img' "$live_boot_config"; then
+    || ! grep -Fq 'initramfs-linux-cachyos-lts.img' "$live_boot_config" \
+    || ! grep -Fq 'root=live:' "$live_boot_config" \
+    || ! grep -Fq 'rd.overlay=1' "$live_boot_config"; then
     fail "${live_boot_config#"$project_dir/"} does not boot the CachyOS LTS live kernel"
   fi
 done
@@ -1296,16 +1294,11 @@ if ! grep -Fqx 'efiSystemPartition: "/boot"' "$partition_config" \
   || ! grep -Fqx 'defaultFileSystemType: "btrfs"' "$partition_config"; then
   fail "Calamares must use Btrfs with the 4096M FAT /boot and hybrid Limine layout"
 fi
-if ! grep -Fqx '  - "/usr/lib/devario/limine-update --install"' "$limine_config"; then
+if ! grep -Fqx '  - "/usr/lib/devario/boot-update --install"' "$limine_config"; then
   fail "the Limine Calamares job does not invoke the target installer"
 fi
 if [[ ! -x "$limine_update" ]]; then
   fail "the installed Limine update helper must be executable"
-fi
-if ! grep -Fq \
-  '["/usr/lib/devario/limine-update"]="0:0:755"' \
-  "$profile_dir/profiledef.sh"; then
-  fail "Archiso must install the Limine update helper as root-owned and executable"
 fi
 for limine_helper_text in \
   'path: boot():/vmlinuz-linux-cachyos-lts' \
@@ -1315,18 +1308,17 @@ for limine_helper_text in \
   'limine bios-install "$disk_device"' \
   'installed_marker=/var/lib/devario/limine-installed' \
   'target installation marker is absent; skipping live-image transaction' \
-  'rd.luks.name=' \
-  'rootflags='; do
+  'kernel-command-line'; do
   if ! grep -Fq "$limine_helper_text" "$limine_update"; then
     fail "the Limine update helper is missing: $limine_helper_text"
   fi
 done
-for limine_hook_target in linux-cachyos-lts amd-ucode intel-ucode limine; do
+for limine_hook_target in devario-boot devario-dracut amd-ucode intel-ucode limine; do
   if ! grep -Fqx "Target = $limine_hook_target" "$limine_hook"; then
     fail "the Limine ALPM hook does not track $limine_hook_target"
   fi
 done
-if ! grep -Fqx 'Exec = /usr/lib/devario/limine-update' "$limine_hook"; then
+if ! grep -Fqx 'Exec = /usr/lib/devario/boot-update' "$limine_hook"; then
   fail "the Limine ALPM hook does not invoke the update helper"
 fi
 
@@ -1712,7 +1704,7 @@ if command -v shelly >/dev/null 2>&1; then
       [[ -n "$package_name" && "$package_name" != \#* ]] || continue
       case "$package_name" in
         aqueous|aqueous-session|aqueous-noctalia|calamares|ckbcomp|shelly|\
-        devario-alpm-runtime|devario-aqueous-desktop|devario-base|devario-keyring|\
+        devario-alpm-runtime|devario-aqueous-desktop|devario-base|devario-boot|devario-dracut|devario-keyring|\
         noctalia|noctalia-greeter)
           continue
           ;;
@@ -1768,7 +1760,7 @@ if command -v bsdtar >/dev/null 2>&1; then
   if (( ${#devario_artifacts[@]} )); then
     for expected_artifact_package in \
       aqueous aqueous-noctalia aqueous-session calamares ckbcomp \
-      devario-alpm-runtime devario-aqueous-desktop devario-base devario-keyring \
+      devario-alpm-runtime devario-aqueous-desktop devario-base devario-boot devario-dracut devario-keyring \
       linux-cachyos-lts linux-cachyos-lts-headers \
       noctalia noctalia-greeter shelly; do
       expected_artifacts=(

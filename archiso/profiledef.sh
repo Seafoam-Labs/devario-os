@@ -19,7 +19,6 @@ file_permissions=(
   ["/etc/shadow"]="0:0:400"
   ["/etc/polkit-1/rules.d/49-devario-live-installer.rules"]="0:0:644"
   ["/etc/sudoers.d/10-devario-live"]="0:0:440"
-  ["/usr/lib/devario/limine-update"]="0:0:755"
   ["/usr/lib/devario/prepare-target-kernel"]="0:0:755"
   ["/usr/local/bin/devario-aqueous-live-session"]="0:0:755"
 )

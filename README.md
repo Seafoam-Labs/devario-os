@@ -494,10 +494,12 @@ Before publishing an image, verify that:
 9. `ldd /usr/bin/shelly` resolves `libalpm` from `devario-alpm-runtime`.
 10. Keyring initialization and a signed full system upgrade succeed.
 11. Package install, local-package install, removal, provider resolution, and ALPM hooks work.
-12. A kernel or Limine upgrade regenerates initramfs as applicable, refreshes
+12. A kernel, dracut, DKMS, microcode, or Limine upgrade runs Devario's ordered
+    dracut generation and boot update, refreshes
     `limine.conf` and the deployed Limine binaries, and leaves the system bootable.
     Verify that the active release contains `cachyos-lts` in `uname -r` and that
     both normal and fallback Limine entries use the matching artifact names.
+    See [the boot contract and recovery instructions](docs/DRACUT-BOOT.md).
 13. On Turing-or-newer NVIDIA hardware, `/run/devario/gpu-driver` contains
     `nvidia`, `nvidia-smi` succeeds, and
     `/sys/module/nvidia_drm/parameters/modeset` contains `Y`. Also verify that a

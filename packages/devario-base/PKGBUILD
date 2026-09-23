@@ -2,15 +2,14 @@
 
 pkgname=devario-base
 pkgver=3
-pkgrel=3
+pkgrel=4
 pkgdesc="Minimal package set defining a base Devario installation"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
 license=('GPL-3.0-or-later')
 
-# This tracks Arch's base 3 dependency set, replacing only its pacman edge with
-# the Shelly/libalpm stack.  Keep this list synchronized with Arch's base
-# package when that package changes.
+# Devario owns its base package policy. Shelly supplies repository compatibility;
+# boot generation and deployment are owned by devario-boot.
 depends=(
   'filesystem'
   'gcc-libs'
@@ -35,6 +34,7 @@ depends=(
   'licenses'
   'devario-alpm-runtime>=7.1.0.r9.g54d9411-2'
   'shelly'
+  'devario-boot'
   'archlinux-keyring'
   'systemd'
   'systemd-sysvcompat'
