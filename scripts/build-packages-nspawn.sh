@@ -12,14 +12,14 @@ if [[ "${1:-}" == --managed-build ]]; then
 fi
 
 container_root="${DEVARIO_NSPAWN_ROOT:-/var/lib/machines/devario-builder}"
-bootstrap_url="${DEVARIO_BOOTSTRAP_URL:-https://geo.mirror.pkgbuild.com/iso/latest/archlinux-bootstrap-x86_64.tar.zst}"
+bootstrap_url="${DEVARIO_BOOTSTRAP_URL:-}"
 bootstrap_cache="${DEVARIO_BOOTSTRAP_CACHE:-/var/cache/devario/bootstrap}"
-arch_keyring="${DEVARIO_ARCH_KEYRING:-/usr/share/pacman/keyrings/archlinux.gpg}"
-arch_snapshot_url="${DEVARIO_ARCH_SNAPSHOT_URL:-}"
-bootstrap_mirrorlist="$project_dir/tools/devario-nspawn/pacman.d/mirrorlist"
+bootstrap_keyring="${DEVARIO_BOOTSTRAP_KEYRING:-$project_dir/packages/devario-keyring/devario.gpg}"
+repository_snapshot_url="${DEVARIO_REPOSITORY_SNAPSHOT_URL:-}"
+
 container_user="devario-build"
 container_project_dir="/build"
-marker_name=".devario-nspawn-builder"
+marker_name=".devario-nspawn-builder-v2"
 prepare_only=0
 release_build="${DEVARIO_RELEASE_BUILD:-0}"
 release_output=''
@@ -28,7 +28,7 @@ usage() {
   cat <<'EOF'
 Usage: sudo ./scripts/build-packages-nspawn.sh [--prepare-only] [--output DIR] [package-directory ...]
 
-Create or reuse an official Arch systemd-nspawn package builder, bootstrap it
+Create or reuse a Devario systemd-nspawn package builder, bootstrap it
 with the repository's Shelly package, and build baseline Devario packages into
 repo/core/. Package transactions are performed through Shelly.
 
@@ -44,9 +44,9 @@ Package directories:
 
 Environment:
   DEVARIO_NSPAWN_ROOT       Container root (default: /var/lib/machines/devario-builder)
-  DEVARIO_BOOTSTRAP_URL     Official Arch bootstrap archive URL
+  DEVARIO_BOOTSTRAP_URL     Devario bootstrap archive URL
   DEVARIO_BOOTSTRAP_CACHE   Download cache directory
-  DEVARIO_ARCH_KEYRING      Host Arch release-key keyring
+  DEVARIO_BOOTSTRAP_KEYRING      Devario bootstrap public-key bundle
   DEVARIO_GNUPGHOME         Optional external signing-key home to bind into the container
   DEVARIO_SIGNING_KEY       Optional signing-key fingerprint passed to the package build
 EOF
@@ -98,11 +98,11 @@ fi
 if (( release_build )); then
   if ! devario_validate_https_url "$bootstrap_url" \
     || [[ "$bootstrap_url" == */latest || "$bootstrap_url" == */latest/* ]]; then
-    echo 'Controlled releases require an immutable HTTPS Arch bootstrap URL (not /latest/).' >&2
+    echo 'Controlled releases require an immutable HTTPS Devario bootstrap URL (not /latest/).' >&2
     exit 1
   fi
-  if [[ ! "$arch_snapshot_url" =~ ^https://archive\.archlinux\.org/repos/[0-9]{4}/[0-9]{2}/[0-9]{2}/$ ]]; then
-    echo 'DEVARIO_ARCH_SNAPSHOT_URL must select an exact dated Arch archive snapshot.' >&2
+  if [[ ! "$repository_snapshot_url" =~ ^https://[a-z0-9.-]+(:[0-9]{1,5})?/snapshots/[A-Za-z0-9._-]+/$ ]]; then
+    echo 'DEVARIO_REPOSITORY_SNAPSHOT_URL must select an exact named immutable repository snapshot.' >&2
     exit 1
   fi
   if [[ -d "$container_root" ]] \
@@ -137,12 +137,8 @@ python3 -c 'import jsonschema' >/dev/null 2>&1 || {
   exit 1
 }
 
-if [[ ! -r "$arch_keyring" ]]; then
-  echo "The Arch release-key keyring is unavailable: $arch_keyring" >&2
-  exit 1
-fi
-if [[ ! -s "$bootstrap_mirrorlist" ]]; then
-  echo "The Devario bootstrap mirrorlist is unavailable: $bootstrap_mirrorlist" >&2
+if [[ ! -r "$bootstrap_keyring" ]]; then
+  echo "The Devario bootstrap keyring is unavailable: $bootstrap_keyring" >&2
   exit 1
 fi
 
@@ -210,12 +206,12 @@ if [[ ! -f "$container_marker" ]]; then
   fi
 
   install -d -m 0755 "$container_root" "$bootstrap_cache"
-  bootstrap_archive="$bootstrap_cache/archlinux-bootstrap-x86_64.tar.zst"
+  bootstrap_archive="$bootstrap_cache/devario-bootstrap-x86_64.tar.zst"
   bootstrap_signature="$bootstrap_archive.sig"
   download_archive="$bootstrap_archive.part"
   download_signature="$bootstrap_signature.part"
   verification_dir="$(mktemp -d /tmp/devario-bootstrap-gpg.XXXXXX)"
-  verification_keyring="$verification_dir/archlinux.gpg"
+  verification_keyring="$verification_dir/bootstrap.gpg"
 
   cleanup_downloads() {
     rm -f -- "$download_archive" "$download_signature"
@@ -223,18 +219,17 @@ if [[ ! -f "$container_marker" ]]; then
   }
   trap cleanup_downloads EXIT
 
-  echo "Downloading the official Arch bootstrap filesystem..."
+  [[ -n "$bootstrap_url" ]] || { echo "Set DEVARIO_BOOTSTRAP_URL to a signed Devario bootstrap archive." >&2; exit 1; }
+  devario_validate_https_url "$bootstrap_url"
+  echo "Downloading the Devario bootstrap filesystem..."
   curl --fail --location --show-error \
     --output "$download_archive" "$bootstrap_url"
   curl --fail --location --show-error \
     --output "$download_signature" "$bootstrap_url.sig"
 
-  echo "Verifying the Arch bootstrap signature..."
-  # Arch keyring packages may ship the aggregate as concatenated ASCII armor,
-  # while gpgv's --keyring input must be a binary OpenPGP keyring. Normalize a
-  # private temporary copy and keep gpgv as the actual verifier.
-  gpg --batch --yes --dearmor \
-    --output "$verification_keyring" "$arch_keyring"
+  echo "Verifying the Devario bootstrap signature..."
+  # Verify against the pinned binary Devario public-key bundle.
+  cp -- "$bootstrap_keyring" "$verification_keyring"
   gpgv --keyring "$verification_keyring" \
     "$download_signature" "$download_archive"
   mv -f -- "$download_archive" "$bootstrap_archive"
@@ -251,79 +246,80 @@ else
   echo "Reusing the Devario builder at $container_root"
 fi
 
-bootstrap_archive="$bootstrap_cache/archlinux-bootstrap-x86_64.tar.zst"
+bootstrap_archive="$bootstrap_cache/devario-bootstrap-x86_64.tar.zst"
 bootstrap_signature="$bootstrap_archive.sig"
 if (( release_build )); then
   # Preserve and verify the exact signed repository databases used for
   # dependency resolution. Shelly's sync cache is compared byte-for-byte below.
-  snapshot_id="${arch_snapshot_url#https://archive.archlinux.org/repos/}"
+  snapshot_id="${repository_snapshot_url##*/snapshots/}"
   snapshot_id="${snapshot_id%/}"
   snapshot_id="${snapshot_id//\//-}"
-  arch_snapshot_dir="$bootstrap_cache/arch-snapshot-$snapshot_id"
-  install -d -m 0755 "$arch_snapshot_dir"
-  verification_dir="$(mktemp -d /tmp/devario-arch-snapshot-gpg.XXXXXX)"
-  verification_keyring="$verification_dir/archlinux.gpg"
-  gpg --batch --yes --dearmor --output "$verification_keyring" "$arch_keyring"
-  for repository_name in core extra; do
+  repository_snapshot_dir="$bootstrap_cache/repository-snapshot-$snapshot_id"
+  install -d -m 0755 "$repository_snapshot_dir"
+  verification_dir="$(mktemp -d /tmp/devario-repository-snapshot-gpg.XXXXXX)"
+  verification_keyring="$verification_dir/bootstrap.gpg"
+  cp -- "$bootstrap_keyring" "$verification_keyring"
+  for repository_name in devario-core seafoam-labs; do
     for suffix in db db.sig; do
-      destination="$arch_snapshot_dir/$repository_name.$suffix"
+      destination="$repository_snapshot_dir/$repository_name.$suffix"
       curl --fail --location --show-error \
         --output "$destination.part" \
-        "$arch_snapshot_url$repository_name/os/x86_64/$repository_name.$suffix"
+        "$repository_snapshot_url$repository_name/x86_64/$repository_name.$suffix"
       mv -f -- "$destination.part" "$destination"
     done
     gpgv --keyring "$verification_keyring" \
-      "$arch_snapshot_dir/$repository_name.db.sig" \
-      "$arch_snapshot_dir/$repository_name.db"
+      "$repository_snapshot_dir/$repository_name.db.sig" \
+      "$repository_snapshot_dir/$repository_name.db"
   done
   rm -rf -- "$verification_dir"
-  printf 'Server = %s$repo/os/$arch\n' "$arch_snapshot_url" \
-    > "$container_root/etc/pacman.d/mirrorlist"
-  chmod 0644 "$container_root/etc/pacman.d/mirrorlist"
 fi
 
-# Some official bootstrap snapshots omit pacman-mirrorlist. Shelly can still
-# register [core] and [extra] in that state, but those repositories have no
-# download servers. Seed only a missing or empty file and preserve any mirror
-# selection already configured in a reused builder.
-if (( ! release_build )) && [[ ! -s "$container_root/etc/pacman.d/mirrorlist" ]]; then
-  echo "Installing the bootstrap Arch mirrorlist into the container..."
-  install -Dm644 "$bootstrap_mirrorlist" \
-    "$container_root/etc/pacman.d/mirrorlist"
-fi
-
-# Official Arch bootstrap roots expose their ALPM state through legacy paths.
-# Seed Shelly's configuration and bridge the new paths until the Devario
-# runtime package can perform the durable installed-system migration.
+# Native bootstrap roots use Shelly storage directly. Configuration is selected
+# from Devario policy and the controlled snapshot contract.
 install -Dm644 "$project_dir/packages/devario-alpm-runtime/shelly.conf" \
   "$container_root/etc/shelly.conf"
+if (( release_build )); then
+  python3 - "$container_root/etc/shelly.conf" "$repository_snapshot_url" <<'PYCONF'
+import pathlib,sys
+p=pathlib.Path(sys.argv[1]); text=p.read_text()
+text=text.replace('https://repo.seafoam-labs.org/devario-core/$arch',sys.argv[2]+'devario-core/$arch')
+text=text.replace('https://repo.seafoam-labs.org/$arch',sys.argv[2]+'seafoam-labs/$arch')
+p.write_text(text)
+PYCONF
+fi
+install -Dm644 "$bootstrap_keyring" "$container_root/usr/share/pacman/keyrings/devario-core.gpg"
+install -Dm644 "$project_dir/packages/devario-keyring/devario-trusted" "$container_root/usr/share/pacman/keyrings/devario-core-trusted"
+install -Dm644 "$project_dir/packages/devario-keyring/devario-revoked" "$container_root/usr/share/pacman/keyrings/devario-core-revoked"
+for suffix in gpg trusted revoked; do
+  source="$project_dir/packages/seafoam-keyring/seafoam-labs-$suffix"
+  destination="$container_root/usr/share/pacman/keyrings/seafoam-labs-$suffix"
+  if [[ "$suffix" == gpg ]]; then source="$project_dir/packages/seafoam-keyring/seafoam-labs.gpg"; destination="$container_root/usr/share/pacman/keyrings/seafoam-labs.gpg"; fi
+  install -Dm644 "$source" "$destination"
+done
 install -d -m 0755 \
   "$container_root/etc/shelly.d" \
   "$container_root/var/cache/shelly"
-legacy_database="$container_root/var/lib/pacman"
-legacy_database_name="${legacy_database##*/}"
-[[ -e "$container_root/var/lib/shelly" ]] || \
-  ln -s "$legacy_database_name" "$container_root/var/lib/shelly"
-[[ -e "$container_root/var/cache/shelly/pkg" ]] || \
-  ln -s ../pacman/pkg "$container_root/var/cache/shelly/pkg"
-[[ -e "$container_root/etc/shelly.d/gnupg" ]] || \
-  ln -s ../pacman.d/gnupg "$container_root/etc/shelly.d/gnupg"
-[[ -e "$container_root/etc/shelly.d/hooks" ]] || \
-  ln -s ../pacman.d/hooks "$container_root/etc/shelly.d/hooks"
+install -d -m 0755 "$container_root/var/lib/shelly" \
+  "$container_root/var/cache/shelly/pkg" "$container_root/etc/shelly.d/gnupg" \
+  "$container_root/etc/shelly.d/hooks"
+if ! grep -Eq '^ID=("devario"|devario)$' "$container_root/etc/os-release"; then
+  echo 'The bootstrap must identify as Devario; an Arch bootstrap is not a native build input.' >&2
+  exit 1
+fi
 
 # The current locally trusted Shelly binary is only a bootstrap tool. It is
-# replaced by the package freshly compiled against the official Arch userspace.
+# replaced by the package freshly compiled against the Devario userspace.
 echo "Installing the Shelly bootstrap into the container..."
 bsdtar --numeric-owner -xpf "$shelly_package" -C "$container_root"
 run_container_root /usr/bin/shelly --version
 
-echo "Initializing the Arch package trust store through Shelly..."
+echo "Initializing the Devario and Seafoam package trust stores through Shelly..."
 run_container_root /usr/bin/shelly keyring init
-run_container_root /usr/bin/shelly keyring populate archlinux
+run_container_root /usr/bin/shelly keyring populate devario-core seafoam-labs
 run_container_root /usr/bin/shelly sync standard --no-confirm
 if (( release_build )); then
-  for repository_name in core extra; do
-    if ! cmp -s "$arch_snapshot_dir/$repository_name.db" \
+  for repository_name in devario-core seafoam-labs; do
+    if ! cmp -s "$repository_snapshot_dir/$repository_name.db" \
       "$container_root/var/lib/shelly/sync/$repository_name.db"; then
       echo "Shelly resolved against unexpected $repository_name database bytes." >&2
       exit 1
@@ -421,7 +417,7 @@ if (( release_build )); then
   bsdtar -xf "$core_archive" -C "$core_snapshot"
   core_commit="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["commit"])' "$core_report")"
   source_date_epoch="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sourceDateEpoch"])' "$core_report")"
-  bootstrap_archive="$bootstrap_cache/archlinux-bootstrap-x86_64.tar.zst"
+  bootstrap_archive="$bootstrap_cache/devario-bootstrap-x86_64.tar.zst"
   [[ -f "$bootstrap_archive" && ! -L "$bootstrap_archive" ]] || {
     echo 'Verified bootstrap archive is unavailable.' >&2
     exit 1
@@ -491,8 +487,8 @@ if (( release_build )); then
 
   run_prepare_root /usr/bin/rm -rf -- "$container_release_work"
   container_release_work=''
-  for repository_name in core extra; do
-    cmp -s "$arch_snapshot_dir/$repository_name.db" \
+  for repository_name in devario-core seafoam-labs; do
+    cmp -s "$repository_snapshot_dir/$repository_name.db" \
       "$container_root/var/lib/shelly/sync/$repository_name.db" || {
       echo "Prepared builder drifted from locked $repository_name database." >&2
       exit 1
@@ -502,7 +498,7 @@ if (( release_build )); then
   dependency_closure="$release_temp/dependency-closure.json"
   CONTAINER_ROOT="$container_root" python3 - > "$dependency_closure" <<'PY'
 import json, os, pathlib
-root=pathlib.Path(os.environ["CONTAINER_ROOT"])/"var/lib/pacman/local"
+root=pathlib.Path(os.environ["CONTAINER_ROOT"])/"var/lib/shelly/local"
 records=[]
 for desc in sorted(root.glob("*/desc")):
  lines=desc.read_text(encoding="utf-8").splitlines(); fields={}; i=0
@@ -524,8 +520,8 @@ PY
     --exclude etc/devario/controlled-builder.json.sig)"
   "$script_dir/write-controlled-builder-manifest.py" \
     --root-tree-sha256 "$builder_root_digest" \
-    --arch-snapshot-url "$arch_snapshot_url" \
-    --arch-snapshot-dir "$arch_snapshot_dir" \
+    --repository-snapshot-url "$repository_snapshot_url" \
+    --repository-snapshot-dir "$repository_snapshot_dir" \
     --bootstrap-archive "$bootstrap_archive" \
     --bootstrap-signature "$bootstrap_signature" \
     --bootstrap-url "$bootstrap_url" \
@@ -538,15 +534,15 @@ PY
   chmod 0444 "$container_manifest" "$container_manifest.sig"
   devario_gpgv_active_signature "$container_manifest.sig" "$container_manifest"
 
-  normalized_arch_keyring="$release_temp/archlinux.gpg"
-  gpg --batch --yes --dearmor --output "$normalized_arch_keyring" "$arch_keyring"
+  normalized_bootstrap_keyring="$release_temp/bootstrap.gpg"
+  cp -- "$bootstrap_keyring" "$normalized_bootstrap_keyring"
   input_lock="$release_temp/CORE-INPUT-LOCK.json"
   lock_args=(
     --operation packages --core "$project_dir"
     --edition "$project_dir/editions/community"
     --bootstrap-archive "$bootstrap_archive" --bootstrap-signature "$bootstrap_signature"
-    --bootstrap-url "$bootstrap_url" --arch-snapshot-dir "$arch_snapshot_dir"
-    --arch-snapshot-url "$arch_snapshot_url" --arch-keyring "$normalized_arch_keyring"
+    --bootstrap-url "$bootstrap_url" --repository-snapshot-dir "$repository_snapshot_dir"
+    --repository-snapshot-url "$repository_snapshot_url" --bootstrap-keyring "$normalized_bootstrap_keyring"
     --shelly-bootstrap "$shelly_package" --shelly-bootstrap-signature "$shelly_signature"
     --builder-manifest "$container_manifest" --builder-manifest-signature "$container_manifest.sig"
     --builder-keyring "$project_dir/packages/devario-keyring" --builder-repository devario-core

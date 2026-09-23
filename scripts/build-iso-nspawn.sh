@@ -22,6 +22,9 @@ Environment:
                          Work directory inside the container (default: a fresh
                          directory below /var/tmp)
   DEVARIO_CORE_REPO_DIR Core repository directory (default: repo/core)
+  DEVARIO_SEAFOAM_REPO_DIR Seafoam repository directory (default: repo/seafoam)
+  DEVARIO_SEAFOAM_KEYRING_DIR / DEVARIO_SEAFOAM_REPO_URL
+                         Optional overrides for Seafoam public keys/runtime URL
   DEVARIO_CORE_KEYRING_DIR
                          Core public-key bundle (default: packages/devario-keyring)
   DEVARIO_CORE_REPO_URL Credential-free HTTPS core runtime repository URL
@@ -91,7 +94,7 @@ if [[ -n "$release_version" ]]; then
 fi
 
 if (( EUID != 0 )); then
-  echo "Run this script through sudo so Archiso can mount its target filesystems." >&2
+  echo "Run this script through sudo so Devario ISO can mount its target filesystems." >&2
   exit 1
 fi
 if [[ "$container_root" != /* ]]; then
@@ -142,10 +145,10 @@ run_container_root() {
     "$@"
 }
 
-echo "Installing the Archiso toolchain through Shelly..."
+echo "Installing the Devario ISO toolchain through Shelly..."
 run_container_root /usr/bin/shelly sync standard --no-confirm
 run_container_root /usr/bin/shelly install standard --no-confirm \
-  archiso limine
+  python libisoburn dosfstools mtools squashfs-tools openssl util-linux coreutils limine
 
 if [[ -n "${DEVARIO_NSPAWN_WORK_DIR:-}" ]]; then
   container_work_dir="$DEVARIO_NSPAWN_WORK_DIR"
@@ -158,10 +161,10 @@ if [[ -n "${DEVARIO_NSPAWN_WORK_DIR:-}" ]]; then
   run_container_root /usr/bin/install -d -m 0755 "$container_work_dir"
 else
   container_work_dir="$(
-    run_container_root /usr/bin/mktemp -d /var/tmp/devario-archiso.XXXXXX
+    run_container_root /usr/bin/mktemp -d /var/tmp/devario-iso.XXXXXX
   )"
 fi
-echo "Using container-internal Archiso work directory: $container_work_dir"
+echo "Using container-internal Devario ISO work directory: $container_work_dir"
 
 resolve_host_path() {
   local requested_path="$1"
@@ -239,6 +242,14 @@ nspawn_args+=(
   --setenv="DEVARIO_CORE_REPO_DIR=$container_core_repo_dir"
   --setenv="DEVARIO_CORE_KEYRING_DIR=$container_core_keyring_dir"
 )
+map_readonly_input "$(realpath -e -- "${DEVARIO_SEAFOAM_REPO_DIR:-$project_dir/repo/seafoam}")" /devario-seafoam-repo
+nspawn_args+=(--setenv="DEVARIO_SEAFOAM_REPO_DIR=$mapped_input_path")
+map_readonly_input "$(realpath -e -- "${DEVARIO_SEAFOAM_KEYRING_DIR:-$project_dir/packages/seafoam-keyring}")" /devario-seafoam-keyring
+nspawn_args+=(--setenv="DEVARIO_SEAFOAM_KEYRING_DIR=$mapped_input_path")
+if [[ -n "${DEVARIO_SEAFOAM_REPO_URL:-}" ]]; then
+  nspawn_args+=(--setenv="DEVARIO_SEAFOAM_REPO_URL=$DEVARIO_SEAFOAM_REPO_URL")
+fi
+
 if [[ -n "${DEVARIO_MANAGED_REPO_DIR:-}" || -n "${DEVARIO_MANAGED_KEYRING_DIR:-}" ]]; then
   [[ -n "${DEVARIO_MANAGED_REPO_DIR:-}" && -n "${DEVARIO_MANAGED_KEYRING_DIR:-}" ]] || {
     echo 'Managed repository and keyring inputs must be supplied together.' >&2

@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+pkgname=shelly-arch-compat
+pkgver=1
+pkgrel=1
+pkgdesc="Opt-in Arch repository configuration for Shelly"
+arch=('any')
+url="https://github.com/Seafoam-Labs/devario-os"
+license=('GPL-3.0-or-later')
+depends=('shelly' 'archlinux-keyring' 'pacman-mirrorlist' 'python')
+source=('shelly-arch-compat' '20-protect-devario.hook')
+sha256sums=(
+  'b9f1a7c5f50ddabfd7da25a6a6908d66c7f61d1cb55c762f53aa3914faa71974'
+  '433b33e80bbaa832fc0d4fd41f9c1c3c9148d519e72d8e3ad6653998677ed219'
+)
+
+package() {
+  install -Dm755 "$srcdir/shelly-arch-compat" "$pkgdir/usr/bin/shelly-arch-compat"
+  install -Dm644 "$srcdir/20-protect-devario.hook" "$pkgdir/usr/share/libalpm/hooks/20-protect-devario.hook"
+}

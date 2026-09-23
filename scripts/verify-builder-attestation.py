@@ -59,7 +59,7 @@ def main() -> int:
         if attestation["operation"] == "iso" and \
                 attestation["releaseVersion"] != lock["releaseVersion"]:
             raise ValueError("attestation release version differs from input lock")
-        for field in ("controlledBuilder", "archSnapshot", "bootstrap", "shellyBootstrap"):
+        for field in ("controlledBuilder", "isoBuilder", "repositorySnapshot", "bootstrap", "shellyBootstrap"):
             if attestation[field] != lock[field]:
                 raise ValueError(f"attestation {field} differs from input lock")
         if attestation["builderObservation"]["markerSha256"] != lock["controlledBuilder"]["manifestSha256"] \
@@ -80,7 +80,7 @@ def main() -> int:
         if manifest["rootTreeSha256"] != lock["controlledBuilder"]["rootTreeSha256"] \
                 or manifest["dependencyClosureSha256"] != lock["controlledBuilder"]["dependencyClosureSha256"]:
             raise ValueError("controlled-builder identity differs from the input lock")
-        for field in ("archSnapshot", "bootstrap", "shellyBootstrap"):
+        for field in ("isoBuilder", "repositorySnapshot", "bootstrap", "shellyBootstrap"):
             if manifest[field] != lock[field]:
                 raise ValueError(f"controlled-builder manifest {field} differs from input lock")
         if attestation["operation"] == "external-packages" or (

@@ -100,14 +100,15 @@ def main() -> int:
             raise ValueError("builder marker differs from the input-lock manifest")
         output_root = args.output_tree.resolve(strict=True)
         data = {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
+            "isoBuilder": lock["isoBuilder"],
             "operation": args.operation,
             "edition": lock["edition"]["id"],
             "inputLockSha256": hashlib.sha256(lock_bytes).hexdigest(),
             "coreCommit": lock["core"]["commit"],
             "sourceDateEpoch": lock["sourceDateEpoch"],
             "controlledBuilder": lock["controlledBuilder"],
-            "archSnapshot": lock["archSnapshot"],
+            "repositorySnapshot": lock["repositorySnapshot"],
             "bootstrap": lock["bootstrap"],
             "shellyBootstrap": lock["shellyBootstrap"],
             "builderObservation": {

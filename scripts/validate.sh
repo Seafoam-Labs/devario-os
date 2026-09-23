@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(cd -- "$script_dir/.." && pwd)"
-base_profile_dir="$project_dir/archiso"
+base_profile_dir="$project_dir/iso"
 edition_dir="$project_dir/editions/community"
 
 usage() {
@@ -74,7 +74,7 @@ note() {
 }
 
 required_files=(
-  "$profile_dir/profiledef.sh"
+  "$profile_dir/profile.json"
   "$profile_dir/packages.x86_64"
   "$profile_dir/shelly.build.conf"
   "$profile_dir/shelly.runtime.conf"
@@ -116,7 +116,6 @@ required_files=(
   "$project_dir/packages/devario-boot/boot-update"
   "$project_dir/tests/test-dracut-boot.sh"
   "$project_dir/tests/test-dracut-live-qemu.sh"
-  "$project_dir/tools/devario-archiso/0004-generate-devario-dracut.patch"
   "$project_dir/packages/linux-cachyos-lts/PKGBUILD"
   "$project_dir/packages/linux-cachyos-lts/config"
   "$project_dir/packages/linux-cachyos-lts/README.md"
@@ -193,10 +192,6 @@ required_files=(
   "$project_dir/.github/actions/validate-managed/action.yml"
   "$project_dir/editions/community/package-sources.conf"
   "$project_dir/packages/devario-keyring/active-signer"
-  "$project_dir/tools/devario-archiso/archiso-v89.tar.gz"
-  "$project_dir/tools/devario-archiso/0001-bootstrap-with-shelly.patch"
-  "$project_dir/tools/devario-archiso/0002-copy-late-airootfs-after-packages.patch"
-  "$project_dir/tools/devario-archiso/0003-verify-installed-packages.patch"
   "$project_dir/tools/devario-nspawn/pacman.d/mirrorlist"
   "$project_dir/tests/fixtures/gpu-driver-setup/mock-modprobe"
   "$project_dir/tests/fixtures/makepkg-shelly/PKGBUILD"
@@ -247,7 +242,6 @@ done < <(
   find "$project_dir/tests" -maxdepth 1 -type f -name '*.sh' -print
   find "$project_dir/packages" -mindepth 2 -maxdepth 2 -type f -name PKGBUILD -print
   printf '%s\n' "$project_dir/scripts/lib/edition.sh"
-  printf '%s\n' "$profile_dir/profiledef.sh"
   printf '%s\n' "$profile_dir/late-airootfs/etc/skel/.bashrc"
   for boot_helper in kernel.sh kernel-command-line initramfs-update boot-update limine-update module-setup.sh live-root.sh install-root.sh verify-live-image; do
     printf '%s\n' "$project_dir/packages/devario-boot/$boot_helper"
@@ -400,6 +394,9 @@ declare -A expected_pkgnames=(
   [shelly]=shelly
   [devario-alpm-runtime]=devario-alpm-runtime
   [devario-aqueous-desktop]=devario-aqueous-desktop
+  [devario-filesystem]=devario-filesystem
+  [seafoam-keyring]=seafoam-keyring
+  [shelly-arch-compat]=shelly-arch-compat
   [devario-base]=devario-base
   [devario-boot]=devario-boot
   [devario-dracut]=devario-dracut
@@ -915,7 +912,7 @@ for required_nspawn_iso_text in \
   '"$script_dir/build-packages-nspawn.sh" --prepare-only' \
   'run_container_root /usr/bin/shelly install standard --no-confirm' \
   'DEVARIO_WORK_DIR cannot be host-bound by the nspawn wrapper.' \
-  '/usr/bin/mktemp -d /var/tmp/devario-archiso.XXXXXX' \
+  '/usr/bin/mktemp -d /var/tmp/devario-iso.XXXXXX' \
   'devario-iso-build.log' \
   'build_pipeline_status=("${PIPESTATUS[@]}")' \
   'tail -n 200 "$build_log"' \
@@ -951,7 +948,7 @@ for required_kernel_preflight_text in \
   'linux-cachyos-lts-headers' \
   'Missing required package artifacts:' \
   'build-packages-nspawn.sh linux-cachyos-lts' \
-  '0003-verify-installed-packages.patch'; do
+  'run-iso-builder.py'; do
   if ! grep -Fq "$required_kernel_preflight_text" \
     "$project_dir/scripts/build-iso.sh"; then
     fail "build-iso.sh does not reject an incomplete kernel repository: $required_kernel_preflight_text"
@@ -967,130 +964,14 @@ if ! grep -Fq 'keyring_packages=' "$project_dir/scripts/build-iso.sh" \
   fail "release ISO builds must verify the trust root inside devario-keyring"
 fi
 
-archiso_archive="$project_dir/tools/devario-archiso/archiso-v89.tar.gz"
-archiso_patch="$project_dir/tools/devario-archiso/0001-bootstrap-with-shelly.patch"
-archiso_late_overlay_patch="$project_dir/tools/devario-archiso/0002-copy-late-airootfs-after-packages.patch"
-archiso_package_verification_patch="$project_dir/tools/devario-archiso/0003-verify-installed-packages.patch"
-archiso_dracut_patch="$project_dir/tools/devario-archiso/0004-generate-devario-dracut.patch"
-expected_archiso_sha256='d4e98484aaa4880888765cdc8ee9bcabed98320c3e6372b5d9699e32d1a33040'
-actual_archiso_sha256="$(sha256sum "$archiso_archive")"
-actual_archiso_sha256="${actual_archiso_sha256%% *}"
-if [[ "$actual_archiso_sha256" != "$expected_archiso_sha256" ]]; then
-  fail "the bundled Archiso v89 archive failed its checksum"
+if ! python3 "$project_dir/tests/test-iso-independence.py"; then
+  fail "ISO independence contract tests failed"
 fi
-
-for required_archiso_patch_text in \
-  'SHELLY_ALPM_CONFIG="${generated_config}"' \
-  '"${devario_shelly}" sync standard --no-confirm' \
-  '"${devario_shelly}" install standard --no-confirm' \
-  '"${devario_shelly}" list standard --show-hidden --json' \
-  'shelly upgrade standard --no-confirm' \
-  'ExecStart=/usr/bin/shelly keyring init' \
-  'ExecStart=/usr/bin/shelly keyring populate archlinux' \
-  '-v gpgdir="${DEVARIO_BUILD_GPGDIR:-/etc/shelly.d/gnupg}"' \
-  'print "GPGDir = " gpgdir' \
-  'HookDir = " root "/usr/share/libalpm/hooks'; do
-  if ! grep -Fq -- "$required_archiso_patch_text" "$archiso_patch"; then
-    fail "the bundled Archiso patch is missing: $required_archiso_patch_text"
-  fi
-done
-
-for required_package_verification_text in \
-  'Shelly did not install requested package(s):' \
-  'sorted(set(sys.argv[1:]) - installed)' \
-  '"${devario_shelly}" list standard --show-hidden --json'; do
-  if ! grep -Fq -- "$required_package_verification_text" \
-    "$archiso_package_verification_patch"; then
-    fail "the bundled Archiso package verification patch is missing: $required_package_verification_text"
-  fi
-done
-if ! grep -Fq 'patch --fuzz=0 -d "$patched_archiso_dir" -Np1' \
-  "$project_dir/scripts/build-iso.sh" \
-  || ! grep -Fq '< "$archiso_package_verification_patch"' \
-    "$project_dir/scripts/build-iso.sh"; then
-  fail "build-iso.sh does not apply the installed-package verification patch"
+if ! python3 "$script_dir/run-iso-builder.py" --check; then
+  fail "the pinned Devario ISO builder failed verification"
 fi
-
-for required_late_overlay_patch_text in \
-  '_make_late_airootfs()' \
-  'grep -q '\''^liveuser:'\'' "${pacstrap_dir}/etc/passwd"' \
-  '[[ -e "${pacstrap_dir}/home/liveuser" ]]' \
-  '"${profile}/late-airootfs/." "${pacstrap_dir}"' \
-  '_run_once _make_late_airootfs'; do
-  if ! grep -Fq -- "$required_late_overlay_patch_text" \
-    "$archiso_late_overlay_patch"; then
-    fail "the late airootfs patch is missing: $required_late_overlay_patch_text"
-  fi
-done
-
-iso_build_script="$project_dir/scripts/build-iso.sh"
-for required_iso_build_text in \
-  'grep -aFq '\''SHELLY_ALPM_CONFIG'\'' "$devario_shelly"' \
-  'build_gpgdir="$(mktemp -d "$work_dir/.devario-keyring.XXXXXX")"' \
-  'usr/bin/shelly usr/bin/shelly-key' \
-  'install -m 0644 /dev/null "$build_gpgdir/pubring.gpg"' \
-  'install -m 0600 /dev/null "$build_gpgdir/secring.gpg"' \
-  '"$devario_shelly_key" --init "$build_gpgdir"' \
-  '--populate-from /usr/share/pacman/keyrings --populate archlinux' \
-  '--populate-from "$core_keyring_source" --populate devario' \
-  '|| -e "$build_gpgdir/pubring.kbx"' \
-  'GPGME_DEBUG="9:$gpgme_trace"' \
-  'devario-iso-failure-report.log' \
-  'patch --fuzz=0' \
-  'archiso_late_overlay_patch=' \
-  '< "$archiso_late_overlay_patch"' \
-  'DEVARIO_SHELLY="$devario_shelly"' \
-  'DEVARIO_BUILD_GPGDIR="$build_gpgdir"' \
-  'rm -rf -- "$build_gpgdir"' \
-  'bash -O extglob "$patched_mkarchiso"'; do
-  if ! grep -Fq -- "$required_iso_build_text" "$iso_build_script"; then
-    fail "build-iso.sh is missing: $required_iso_build_text"
-  fi
-done
-if grep -Eq 'command -v[[:space:]]+mkarchiso|^[[:space:]]*mkarchiso([[:space:]]|$)' \
-  "$iso_build_script"; then
-  fail "build-iso.sh must invoke only the bundled, Shelly-patched Archiso source"
-fi
-
-if command -v bsdtar >/dev/null 2>&1 && command -v patch >/dev/null 2>&1; then
-  archiso_check_dir="$(mktemp -d /tmp/devario-archiso-check.XXXXXX)"
-  if ! bsdtar -xf "$archiso_archive" -C "$archiso_check_dir" \
-    || ! patch --fuzz=0 -d "$archiso_check_dir/archiso-v89" -Np1 \
-      < "$archiso_patch" >/dev/null \
-    || ! patch --fuzz=0 -d "$archiso_check_dir/archiso-v89" -Np1 \
-      < "$archiso_late_overlay_patch" >/dev/null \
-    || ! patch --fuzz=0 -d "$archiso_check_dir/archiso-v89" -Np1 \
-      < "$archiso_package_verification_patch" >/dev/null \
-    || ! patch --fuzz=0 -d "$archiso_check_dir/archiso-v89" -Np1 \
-      < "$archiso_dracut_patch" >/dev/null; then
-    fail "the Devario patches do not apply cleanly to bundled Archiso v89"
-  else
-    patched_mkarchiso="$archiso_check_dir/archiso-v89/archiso/mkarchiso"
-    if ! bash -O extglob -n "$patched_mkarchiso"; then
-      fail "the patched Archiso entry point has invalid shell syntax"
-    fi
-    # Scan the process-bearing source formats in the complete patched vendor
-    # tree. Ignore comments and declarative hook descriptions; executable hook
-    # fields and systemd ExecStart lines remain in scope.
-    patched_archiso_calls="$(
-      find "$archiso_check_dir/archiso-v89" -type f \
-        \( -name '*.sh' -o -name mkarchiso -o -name run_archiso \
-          -o -name Makefile -o -name '*.yml' -o -name '*.yaml' \
-          -o -name '*.service' -o -name '*.hook' \) \
-        -exec grep -HnE \
-          "(^|[=[:space:]\"'])(sudo[[:space:]]+)?(/usr/bin/)?(pacman|pacman-key|pacman-conf|pacstrap)([[:space:]\"']|$)" \
-          {} + 2>/dev/null \
-        | grep -vE ':[0-9]+:[[:space:]]*(#|Description[[:space:]]*=)' \
-        || true
-    )"
-    if [[ -n "$patched_archiso_calls" ]]; then
-      echo "$patched_archiso_calls" >&2
-      fail "the patched Archiso source retains a forbidden package-manager process"
-    fi
-  fi
-  rm -rf -- "$archiso_check_dir"
-else
-  note "bsdtar or patch is unavailable; bundled Archiso patch application was skipped."
+if grep -Eq 'mkarchiso|tools/devario-archiso' "$project_dir/scripts/build-iso.sh"; then
+  fail "the ISO build must not depend on Archiso"
 fi
 
 if ! grep -Fq '/.devario-signing/' "$project_dir/.gitignore"; then
@@ -1208,7 +1089,7 @@ if ! grep -Fqx \
   fail "the late airootfs overlay does not define the Devario live account"
 fi
 if grep -Eq '^liveuser:' "$profile_dir/airootfs/etc/passwd"; then
-  fail "the Archiso profile materializes liveuser in /etc/passwd"
+  fail "the Devario ISO profile materializes liveuser in /etc/passwd"
 fi
 for required_fastfetch_bashrc_text in \
   '[[ $- != *i* ]] && return' \
@@ -1250,7 +1131,7 @@ if ! grep -Fqx '  - source: "/run/devario/install-root"' "$unpackfs_config" \
   || ! grep -Fqx '    sourcefs: "file"' "$unpackfs_config"; then
   fail "Calamares must install from the pristine Devario live root"
 fi
-if grep -Fq '/run/archiso/bootmnt' "$unpackfs_config"; then
+if grep -Fq '/run/iso/bootmnt' "$unpackfs_config"; then
   fail "Calamares unpackfs must not depend on bootmnt, which copy-to-RAM unmounts"
 fi
 prepare_target_kernel="$profile_dir/airootfs/usr/lib/devario/prepare-target-kernel"
@@ -1279,8 +1160,8 @@ for live_boot_config in \
   "$profile_dir/efiboot/loader/entries/01-devario-linux.conf" \
   "$profile_dir/grub/grub.cfg" \
   "$profile_dir/grub/loopback.cfg" \
-  "$profile_dir/syslinux/archiso_sys-linux.cfg" \
-  "$profile_dir/syslinux/archiso_pxe-linux.cfg"; do
+  "$profile_dir/syslinux/devario_sys-linux.cfg" \
+  "$profile_dir/syslinux/devario_pxe-linux.cfg"; do
   if ! grep -Fq 'vmlinuz-linux-cachyos-lts' "$live_boot_config" \
     || ! grep -Fq 'initramfs-linux-cachyos-lts.img' "$live_boot_config" \
     || ! grep -Fq 'root=live:' "$live_boot_config" \
@@ -1407,7 +1288,7 @@ legacy_desktop_references="$(
 )"
 if [[ -n "$legacy_desktop_references" ]]; then
   echo "$legacy_desktop_references" >&2
-  fail "the Archiso profile retains a legacy desktop or greeter reference"
+  fail "the Devario ISO profile retains a legacy desktop or greeter reference"
 fi
 if [[ -e "$profile_dir/airootfs/etc/skel/Desktop/install-devario.desktop" ]]; then
   fail "the live installer must be discovered through Noctalia, not an XFCE desktop folder"
@@ -1431,15 +1312,15 @@ if grep -Eq 'subject\.(local|active)' "$live_installer_polkit"; then
   fail "the live installer Polkit rule must support UWSM-managed processes outside the logind session scope"
 fi
 if ! grep -Fq \
-  '["/etc/polkit-1/rules.d/49-devario-live-installer.rules"]="0:0:644"' \
-  "$profile_dir/profiledef.sh"; then
+  '"/etc/polkit-1/rules.d/49-devario-live-installer.rules": "644"' \
+  "$profile_dir/profile.json"; then
   fail "the live installer Polkit rule must be root-owned and world-readable"
 fi
 
 for required_line in \
   'Requires=shelly-storage-migrate.service' \
   'ExecStart=/usr/bin/shelly keyring init' \
-  'ExecStart=/usr/bin/shelly keyring populate archlinux devario-core' \
+  'ExecStart=/usr/bin/shelly keyring populate devario-core seafoam-labs' \
   'ExecStart=/usr/bin/install -Dm644 /dev/null /var/lib/devario/shelly-keyring.ready'; do
   if ! grep -Fxq "$required_line" "$keyring_unit"; then
     fail "shelly-keyring-init.service is missing: $required_line"
@@ -1514,7 +1395,7 @@ if [[ -n "$package_function_calls" ]]; then
 fi
 
 # Every remaining Pacman identifier must fit one of these explicit boundaries:
-# documentation; Archiso's build configuration; ALPM compatibility paths; the
+# documentation; the image build configuration; ALPM compatibility paths; the
 # package that builds libalpm from upstream source; or build-ISO plumbing.
 pacman_reference_is_allowed() {
   local relative_path="$1"
@@ -1524,16 +1405,16 @@ pacman_reference_is_allowed() {
     README.md|packages/*/README.md)
       return 0
       ;;
-    archiso/shelly.build.conf|archiso/shelly.runtime.conf|archiso/airootfs/etc/shelly.conf)
+    iso/shelly.build.conf|iso/shelly.runtime.conf|iso/airootfs/etc/shelly.conf)
       return 0
       ;;
-    archiso/airootfs/etc/shelly.d/*)
+    iso/airootfs/etc/shelly.d/*)
       return 0
       ;;
-    archiso/airootfs/usr/lib/devario/acceptance-self-check)
+    iso/airootfs/usr/lib/devario/acceptance-self-check)
       return 0
       ;;
-    archiso/late-airootfs/usr/share/devario/fastfetch/config.jsonc)
+    iso/late-airootfs/usr/share/devario/fastfetch/config.jsonc)
       [[ "$text" == *'"format": "{pacman} (Shelly)"'* ]]
       return
       ;;
@@ -1543,7 +1424,7 @@ pacman_reference_is_allowed() {
     packages/devario-alpm-runtime/*)
       return 0
       ;;
-    packages/devario-keyring/*)
+    packages/devario-keyring/*|packages/seafoam-keyring/*|packages/shelly-arch-compat/*)
       return 0
       ;;
     packages/devario-base/PKGBUILD)
@@ -1566,7 +1447,7 @@ pacman_reference_is_allowed() {
       # A replacement patch necessarily contains the removed legacy paths.
       return 0
       ;;
-    archiso/profiledef.sh)
+    iso/profile.json)
       [[ "$text" == *pacman_conf* ]]
       return
       ;;
@@ -1581,7 +1462,7 @@ pacman_reference_is_allowed() {
       return
       ;;
     scripts/build-packages-nspawn.sh)
-      [[ "$text" == *'/usr/share/pacman/keyrings/archlinux.gpg'* \
+      [[ "$text" == *usr/share/pacman/keyrings/* || "$text" == *'/usr/share/pacman/keyrings/archlinux.gpg'* \
         || "$text" == *'var/lib/pacman'* \
         || "$text" == *'var/cache/pacman/pkg'* \
         || "$text" == *'../pacman/pkg'* \
@@ -1623,7 +1504,7 @@ while IFS= read -r reference; do
   reference_line="${remainder%%:*}"
   reference_text="${remainder#*:}"
   if [[ "$reference_path" == "$profile_dir/"* ]]; then
-    relative_path="archiso/${reference_path#"$profile_dir/"}"
+    relative_path="iso/${reference_path#"$profile_dir/"}"
   else
     relative_path="${reference_path#"$project_dir/"}"
   fi
@@ -1704,7 +1585,7 @@ if command -v shelly >/dev/null 2>&1; then
       [[ -n "$package_name" && "$package_name" != \#* ]] || continue
       case "$package_name" in
         aqueous|aqueous-session|aqueous-noctalia|calamares|ckbcomp|shelly|\
-        devario-alpm-runtime|devario-aqueous-desktop|devario-base|devario-boot|devario-dracut|devario-keyring|\
+        devario-filesystem|seafoam-keyring|shelly-arch-compat|devario-alpm-runtime|devario-aqueous-desktop|devario-base|devario-boot|devario-dracut|devario-keyring|\
         noctalia|noctalia-greeter)
           continue
           ;;
@@ -1760,7 +1641,7 @@ if command -v bsdtar >/dev/null 2>&1; then
   if (( ${#devario_artifacts[@]} )); then
     for expected_artifact_package in \
       aqueous aqueous-noctalia aqueous-session calamares ckbcomp \
-      devario-alpm-runtime devario-aqueous-desktop devario-base devario-boot devario-dracut devario-keyring \
+      devario-filesystem seafoam-keyring shelly-arch-compat devario-alpm-runtime devario-aqueous-desktop devario-base devario-boot devario-dracut devario-keyring \
       linux-cachyos-lts linux-cachyos-lts-headers \
       noctalia noctalia-greeter shelly; do
       expected_artifacts=(

@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(cd -- "$script_dir/.." && pwd)"
-profile_dir="${DEVARIO_PROFILE_DIR:-$project_dir/archiso}"
+profile_dir="${DEVARIO_PROFILE_DIR:-$project_dir/iso}"
 source "$project_dir/packages/devario-boot/kernel.sh"
 helper() {
   devario_kernel_select "$1" linux-cachyos-lts || return

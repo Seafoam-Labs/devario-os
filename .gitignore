@@ -14,3 +14,6 @@
 !/packages/noctalia-greeter/noctalia-greeter-4aa960dcff874dddd4d3d94d931df43a416ea9cf.tar.gz
 /.devario-signing/
 !/packages/devario-dracut/dracut-111.tar.gz
+
+__pycache__/
+*.py[cod]

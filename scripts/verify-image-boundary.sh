@@ -11,6 +11,8 @@ write_inventory=''
 release_validation=0
 input_lock=''
 core_keyring=''
+seafoam_keyring="$script_dir/../packages/seafoam-keyring"
+expected_seafoam_url='https://repo.seafoam-labs.org/x86_64'
 managed_keyring=''
 expected_core_url=''
 expected_managed_url=''
@@ -22,13 +24,15 @@ Usage: verify-image-boundary.sh (--root DIR | --iso FILE) [options]
 
 Scan the complete installed/live root for private keys, customer/tenant data,
 and managed-product leakage. The ISO form also extracts and canonicalizes the
-exact Archiso package inventory.
+exact Devario package inventory.
 
 Options:
   --edition ID                  community or managed (default: community)
   --release                     require embedded release-mode source/trust record
   --input-lock FILE             exact CORE-INPUT-LOCK.json for release binding
   --core-keyring DIR            expected core public-key bundle
+  --seafoam-keyring DIR         expected Seafoam public-key bundle
+  --seafoam-url URL             exact installed Seafoam repository URL
   --managed-keyring DIR         expected managed public-key bundle
   --core-url URL                exact installed core repository URL
   --managed-url URL             exact installed managed repository URL
@@ -49,6 +53,8 @@ while (( $# )); do
     --release) release_validation=1; shift ;;
     --input-lock) input_lock="$2"; shift 2 ;;
     --core-keyring) core_keyring="$2"; shift 2 ;;
+    --seafoam-keyring) seafoam_keyring="$2"; shift 2 ;;
+    --seafoam-url) expected_seafoam_url="$2"; shift 2 ;;
     --managed-keyring) managed_keyring="$2"; shift 2 ;;
     --core-url) expected_core_url="$2"; shift 2 ;;
     --managed-url) expected_managed_url="$2"; shift 2 ;;
@@ -254,9 +260,9 @@ expected={(item["name"],item["version"]) for item in json.load(open(os.environ["
 actual=set()
 for number,line in enumerate(open(os.environ["PACKAGE_LIST"]),1):
  match=re.fullmatch(r"([^ ]+) ([^\s]+)\n?",line)
- if not match or (match.group(1),match.group(2)) in actual: raise SystemExit(f"invalid Archiso package-list line {number}")
+ if not match or (match.group(1),match.group(2)) in actual: raise SystemExit(f"invalid Devario package-list line {number}")
  actual.add((match.group(1),match.group(2)))
-if actual != expected: raise SystemExit("Archiso package list differs from installed local database closure")
+if actual != expected: raise SystemExit("Devario package list differs from installed local database closure")
 PY
 fi
 if [[ -n "$expected_inventory" ]]; then
@@ -298,6 +304,12 @@ if (( release_validation )); then
     [[ "$core_active" != "$managed_active" ]] || { echo 'Core and managed release signers overlap.' >&2; exit 1; }
     devario_require_disjoint_fingerprint_sets core_fingerprints managed_fingerprints
   fi
+  devario_validate_keyring_bundle "$seafoam_keyring" seafoam-labs production
+  seafoam_active="$DEVARIO_ACTIVE_SIGNER"; seafoam_public="$DEVARIO_KEYRING_PUBLIC"
+  seafoam_trusted="$DEVARIO_KEYRING_TRUSTED"; seafoam_revoked="$DEVARIO_KEYRING_REVOKED"
+  seafoam_active_file="$DEVARIO_KEYRING_ACTIVE"
+  SEAFOAM_ACTIVE="$seafoam_active" SEAFOAM_PUBLIC="$seafoam_public" SEAFOAM_TRUSTED="$seafoam_trusted" \
+  SEAFOAM_REVOKED="$seafoam_revoked" SEAFOAM_ACTIVE_FILE="$seafoam_active_file" SEAFOAM_KEYRING="$seafoam_keyring" SEAFOAM_URL="$expected_seafoam_url" \
   RECORD="$record" LOCK="$input_lock" CORE_ACTIVE="$core_active" CORE_PUBLIC="$core_public" \
   CORE_TRUSTED="$core_trusted" CORE_REVOKED="$core_revoked" CORE_ACTIVE_FILE="$core_active_file" \
   CORE_KEYRING="$core_keyring" MANAGED_ACTIVE="$managed_active" MANAGED_PUBLIC="$managed_public" \
@@ -327,6 +339,7 @@ if lock["operation"]!="iso" or lock["edition"]["id"]!=os.environ["EDITION"]: rai
 if lock["releaseVersion"]!=os.environ["RELEASE_VERSION"] or record["releaseVersion"]!=lock["releaseVersion"]: raise SystemExit("image/candidate release version differs from input lock")
 if record["inputLockSha256"]!=hashlib.sha256(lock_raw).hexdigest(): raise SystemExit("embedded image does not bind the supplied input lock")
 if record["coreCommit"]!=lock["core"]["commit"] or record["sourceDateEpoch"]!=lock["sourceDateEpoch"]: raise SystemExit("embedded source identity differs from lock")
+if record["isoBuilder"] != lock["isoBuilder"]: raise SystemExit("image builder identity differs from lock")
 root=pathlib.Path(os.environ["ROOT_DIR"])
 os_release=root/"etc/os-release"
 if not os_release.is_file() or os_release.is_symlink(): raise SystemExit("release image lacks a safe os-release identity")
@@ -371,6 +384,7 @@ def check(name,prefix,active,public,trusted,revoked,active_file,keyring,url):
  for supplied,embedded,label in ((pathlib.Path(public),installed,"public keys"),(pathlib.Path(trusted),installed_trusted,"trusted keys"),(pathlib.Path(revoked),installed_revoked,"revoked keys"),(pathlib.Path(active_file),installed_active,"active signer")):
   if supplied.read_bytes()!=embedded.read_bytes(): raise SystemExit(f"installed {name} {label} differ")
 check("coreRepository","devario-core",os.environ["CORE_ACTIVE"],os.environ["CORE_PUBLIC"],os.environ["CORE_TRUSTED"],os.environ["CORE_REVOKED"],os.environ["CORE_ACTIVE_FILE"],os.environ["CORE_KEYRING"],os.environ["CORE_URL"])
+check("seafoamRepository","seafoam-labs",os.environ["SEAFOAM_ACTIVE"],os.environ["SEAFOAM_PUBLIC"],os.environ["SEAFOAM_TRUSTED"],os.environ["SEAFOAM_REVOKED"],os.environ["SEAFOAM_ACTIVE_FILE"],os.environ["SEAFOAM_KEYRING"],os.environ["SEAFOAM_URL"])
 if os.environ["EDITION"]=="managed": check("managedRepository","devario-managed",os.environ["MANAGED_ACTIVE"],os.environ["MANAGED_PUBLIC"],os.environ["MANAGED_TRUSTED"],os.environ["MANAGED_REVOKED"],os.environ["MANAGED_ACTIVE_FILE"],os.environ["MANAGED_KEYRING"],os.environ["MANAGED_URL"])
 elif "managedRepository" in record: raise SystemExit("Community release record contains managed trust")
 PY

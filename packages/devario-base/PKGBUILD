@@ -2,7 +2,7 @@
 
 pkgname=devario-base
 pkgver=3
-pkgrel=4
+pkgrel=5
 pkgdesc="Minimal package set defining a base Devario installation"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -11,7 +11,7 @@ license=('GPL-3.0-or-later')
 # Devario owns its base package policy. Shelly supplies repository compatibility;
 # boot generation and deployment are owned by devario-boot.
 depends=(
-  'filesystem'
+  'devario-filesystem'
   'gcc-libs'
   'glibc'
   'bash'
@@ -32,10 +32,11 @@ depends=(
   'gzip'
   'xz'
   'licenses'
-  'devario-alpm-runtime>=7.1.0.r9.g54d9411-2'
+  'devario-alpm-runtime>=7.1.0.r9.g54d9411-3'
   'shelly'
   'devario-boot'
-  'archlinux-keyring'
+  'devario-keyring'
+  'seafoam-keyring'
   'systemd'
   'systemd-sysvcompat'
   'iputils'

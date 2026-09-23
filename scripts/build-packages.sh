@@ -17,6 +17,8 @@ source_output_dir="${DEVARIO_SOURCE_OUTPUT_DIR:-}"
 prepare_dependencies_only="${DEVARIO_BUILDER_PREPARE:-0}"
 expected_packager='ZoeyErinBauer <40698010+ZoeyErinBauer@users.noreply.github.com>'
 package_order=(
+  devario-filesystem
+  seafoam-keyring
   devario-alpm-runtime
   devario-keyring
   devario-base
@@ -48,6 +50,7 @@ EOF
 
 requested_packages=("$@")
 declare -A known_package_directories=()
+known_package_directories[shelly-arch-compat]=1
 for package_name in "${package_order[@]}"; do
   known_package_directories["$package_name"]=1
 done
@@ -72,6 +75,10 @@ for package_name in "${requested_packages[@]}"; do
   fi
   requested_package_directories["$package_name"]=1
 done
+
+if [[ -n "${requested_package_directories[shelly-arch-compat]:-}" ]]; then
+  package_order+=(shelly-arch-compat)
+fi
 
 selected_package_order=()
 if (( ${#requested_package_directories[@]} == 0 )); then
@@ -216,6 +223,8 @@ collect_build_dependencies() {
   for package_name in "${selected_package_order[@]}"; do
     if [[ "$package_name" == devario-base \
       || "$package_name" == devario-keyring \
+      || "$package_name" == seafoam-keyring \
+      || "$package_name" == devario-filesystem \
       || "$package_name" == devario-aqueous-desktop ]]; then
       continue
     fi

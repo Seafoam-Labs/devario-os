@@ -2,7 +2,7 @@
 
 pkgname=devario-alpm-runtime
 pkgver=7.1.0.r9.g54d9411
-pkgrel=2
+pkgrel=3
 pkgdesc="The libalpm runtime and configuration used by Shelly (without Pacman executables)"
 arch=('x86_64')
 url="https://gitlab.archlinux.org/pacman/pacman"
@@ -18,14 +18,13 @@ depends=(
   'gpgme' 'libgpgme.so'
   'libarchive' 'libarchive.so'
   'openssl' 'libcrypto.so'
-  'pacman-mirrorlist'
   'systemd'
 )
 makedepends=('meson')
 _upstream_commit='54d94116164b0b2202c6061c4a59c6f3e70820d8'
 _source_dir="pacman-${_upstream_commit}"
 
-# archlinux-keyring currently depends on the package name "pacman", although
+# Optional compatible packages such as archlinux-keyring depend on "pacman", although
 # its install script skips pacman-key when that executable is absent.  This
 # versioned compatibility provide prevents the real pacman package from being
 # pulled into the image.  No pacman or pacman-key executable is shipped here.
@@ -46,7 +45,7 @@ source=(
 sha256sums=(
   '871a9616e5c82e265e4b2ff9eb4d1b4ae4e37bcc1387a48d04992a7b10af7336'
   '9a734e5d75be603d58aa92e8d29a15466b3ac2af6b7d6f6728dd5c3e5ed8758d'
-  'ccbd27f25c9d7339a02092291fd4dacf30a3e70545cf40b7c9444fc831fb0c56'
+  '4ed5425ee9d74291eda296de8d2c19cec13154e09afd77f2af24e8f128999521'
   '0fafdbb0f41e471dea9ce0a5f0b79bd216b443926f7f4c99d6b11d9f536d5b52'
   'f7df4b2ed5e8db335dea4c44912a4f18f843742d14bdae584453d6c5218d7aa9'
   '2a594dab826f2599528d8a96b388fadd163a9df079e579756365a24df507cb72'
@@ -126,7 +125,7 @@ package() {
     "$pkgdir/var/cache/shelly/pkg" \
     "$pkgdir/var/lib/shelly"
 
-  printf '%s\n' 'u alpm - "Arch Linux Package Management" -' | \
+  printf '%s\n' 'u alpm - "Shelly Package Management" -' | \
     install -Dm644 /dev/stdin "$pkgdir/usr/lib/sysusers.d/alpm.conf"
 
   local wantsdir="$pkgdir/usr/lib/systemd/system/sockets.target.wants"

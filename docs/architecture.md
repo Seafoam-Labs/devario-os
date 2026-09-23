@@ -4,7 +4,7 @@ Status: implemented core architecture
 
 Devario OS is an independent distribution and the operating-system core shared by the
 Community edition and any separately maintained editions. It contains the
-Archiso profile, Aqueous desktop, Calamares installer, Shelly package manager,
+Devario ISO profile, Aqueous desktop, Calamares installer, Shelly package manager,
 package recipes, release validation, and hardware enablement required to build
 and install Devario.
 
@@ -18,7 +18,7 @@ the Community edition.
 flowchart LR
     Build["Package and ISO build"] --> Repo["Signed Devario repository"]
     Repo --> Shelly["Shelly + libalpm runtime"]
-    Profile["Archiso profile"] --> Image["Community live and install image"]
+    Profile["Devario ISO profile"] --> Image["Community live and install image"]
     Repo --> Image
     Image --> System["Installed Devario system"]
     Shelly --> System
@@ -29,7 +29,7 @@ flowchart LR
 
 | Component | Responsibility |
 | --- | --- |
-| Archiso profile | Defines the live image, installer environment, boot media, and installed-system defaults. |
+| Devario ISO profile | Defines the live image, installer environment, boot media, and installed-system defaults. |
 | Aqueous and Noctalia | Provide the Wayland compositor, shell, greeter, and desktop session. |
 | Calamares | Copies the tested live root and configures the target installation. |
 | Limine | Boots installed systems through UEFI or legacy BIOS. |
@@ -50,23 +50,23 @@ The build validates this boundary, checks requested versus installed package
 inventories, and rejects dormant process calls to Pacman-family executables.
 Shelly reads `/etc/shelly.conf`, stores its local and synchronization databases
 under `/var/lib/shelly`, caches packages under `/var/cache/shelly/pkg`, and
-uses `/etc/shelly.d` for its mutable keyring and local hooks. The Arch
-mirrorlist and distributed keyring sources retain their upstream paths because
-they are immutable compatibility inputs rather than Shelly runtime state.
+uses `/etc/shelly.d` for its mutable keyring and local hooks. Public keyring sources retain the libalpm-compatible `/usr/share/pacman/keyrings`
+location. The Arch mirrorlist belongs only to the optional `shelly-arch-compat`
+package; it is not a default repository input.
 
 ## Image and installation flow
 
 1. Package recipes build the pinned Devario-owned packages.
 2. The repository database and packages are signed for release builds.
 3. ISO construction verifies package presence and signatures before asking
-   Shelly to populate the staged Archiso root.
+   Shelly to populate the staged Devario root.
 4. The live image boots Aqueous and exposes Calamares.
 5. Calamares copies the prepared live root, configures the selected disk, and
    installs Limine for the target firmware paths.
-6. The installed system initializes its own Arch and Devario public keyrings
+6. The installed system initializes its own Devario core and Seafoam Labs public keyrings
    before normal package operations.
 
-The boot lifecycle is owned by Devario. Archiso invokes the same generation
+The boot lifecycle is owned by Devario. The Devario ISO builder invokes the same generation
 implementation used by installation and updates, and Shelly translates package
 events into Devario boot updates. Native kernel metadata does not require Arch
 package conventions; a separate `pkgbase` adapter supports compatible inputs.
@@ -96,10 +96,12 @@ and signature information.
 
 ## Trust boundary
 
-Community systems trust only the Devario core repository key distributed by
-`devario-keyring`. The key currently checked into this development tree is a
-public development key and is not a production trust root. Release images must
-use signed HTTPS repositories and a separately controlled production key.
+Community systems use `devario-core` and `seafoam-labs` at
+`https://repo.seafoam-labs.org`, with `devario-core` first. Their verified public
+key bundles are packaged by `devario-keyring` and `seafoam-keyring`. Both services
+currently advertise the same signer; each repository remains a separate locked
+input. Release builds require complete signed package closures and named
+immutable repository/bootstrap snapshots. See [the ISO builder contract](ISO-BUILDER.md).
 
 External editions may introduce an additional repository and trust root in
 their own package set. They must not replace, re-sign, or silently duplicate

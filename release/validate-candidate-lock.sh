@@ -8,7 +8,7 @@ project_dir="$(cd -- "$script_dir/.." && pwd)"
 source "$script_dir/lib-release.sh"
 candidate='' artifacts='' metadata='' core_input_lock='' overlay_input_lock='' builder_manifest='' builder_manifest_signature='' builder_attestation='' builder_attestation_signature='' builder_output_tree=''
 core_source='' overlay_source='' core_keyring='' managed_keyring='' core_repository='' managed_repository='' source_image='' core_url='' managed_url='' allow_pending=0
-bootstrap_archive='' bootstrap_signature='' arch_snapshot_dir='' arch_keyring='' shelly_bootstrap='' shelly_bootstrap_signature='' dependency_closure=''
+bootstrap_archive='' bootstrap_signature='' repository_snapshot_dir='' bootstrap_keyring='' shelly_bootstrap='' shelly_bootstrap_signature='' dependency_closure=''
 while (( $# )); do
   case "$1" in
     --candidate) candidate="$2"; shift 2 ;;
@@ -32,8 +32,8 @@ while (( $# )); do
     --managed-url) managed_url="$2"; shift 2 ;;
     --bootstrap-archive) bootstrap_archive="$2"; shift 2 ;;
     --bootstrap-signature) bootstrap_signature="$2"; shift 2 ;;
-    --arch-snapshot-dir) arch_snapshot_dir="$2"; shift 2 ;;
-    --arch-keyring) arch_keyring="$2"; shift 2 ;;
+    --repository-snapshot-dir) repository_snapshot_dir="$2"; shift 2 ;;
+    --bootstrap-keyring) bootstrap_keyring="$2"; shift 2 ;;
     --shelly-bootstrap) shelly_bootstrap="$2"; shift 2 ;;
     --shelly-bootstrap-signature) shelly_bootstrap_signature="$2"; shift 2 ;;
     --dependency-closure) dependency_closure="$2"; shift 2 ;;
@@ -127,7 +127,7 @@ if (( allow_pending )); then
   exit 0
 fi
 [[ -n "$core_source" && -n "$core_keyring" && -n "$core_repository" && -n "$source_image" && -n "$core_url" ]] || { echo 'Production validation requires clean core source, core repository/trust/URL, and the exact source image.' >&2; exit 1; }
-for value in bootstrap_archive bootstrap_signature arch_snapshot_dir arch_keyring shelly_bootstrap shelly_bootstrap_signature dependency_closure; do [[ -n "${!value}" ]] || { echo "Production input-lock verification is missing $value." >&2; exit 2; }; done
+for value in bootstrap_archive bootstrap_signature repository_snapshot_dir bootstrap_keyring shelly_bootstrap shelly_bootstrap_signature dependency_closure; do [[ -n "${!value}" ]] || { echo "Production input-lock verification is missing $value." >&2; exit 2; }; done
 case "$(realpath -- "$core_repository")/" in "$(realpath -- "$artifacts")/"*) ;; *) echo 'Core repository must be inside the locked artifact tree.' >&2; exit 1;; esac
 if [[ "$edition" == managed ]]; then
   [[ -n "$overlay_source" && -n "$managed_keyring" && -n "$managed_repository" && -n "$managed_url" ]] || { echo 'Managed production validation requires overlay source, managed repository/trust, and managed URL.' >&2; exit 1; }
@@ -136,10 +136,10 @@ else
   [[ -z "$managed_keyring" && -z "$managed_repository" && -z "$overlay_source" && -z "$managed_url" ]] || { echo 'Community production validation rejects managed trust, repository, source, and URL inputs.' >&2; exit 1; }
 fi
 edition_source="$core_source/editions/community"; builder_keyring="$core_keyring"; builder_repository=devario-core
-input_verify_args=(--operation iso --core "$core_source" --edition "$edition_source" --bootstrap-archive "$bootstrap_archive" --bootstrap-signature "$bootstrap_signature" --bootstrap-url "$(jq -r '.bootstrap.url' "$core_input_lock")" --arch-snapshot-dir "$arch_snapshot_dir" --arch-snapshot-url "$(jq -r '.archSnapshot.url' "$core_input_lock")" --arch-keyring "$arch_keyring" --shelly-bootstrap "$shelly_bootstrap" --shelly-bootstrap-signature "$shelly_bootstrap_signature" --builder-manifest "$builder_manifest" --builder-manifest-signature "$builder_manifest_signature" --builder-keyring "$builder_keyring" --builder-repository "$builder_repository" --dependency-closure "$dependency_closure" --source-date-epoch "$(jq -r '.sourceDateEpoch' "$candidate")" --release-version "$(jq -r '.version' "$candidate")" --core-repo "$core_repository" --core-keyring "$core_keyring" --verify "$core_input_lock")
+input_verify_args=(--operation iso --core "$core_source" --edition "$edition_source" --bootstrap-archive "$bootstrap_archive" --bootstrap-signature "$bootstrap_signature" --bootstrap-url "$(jq -r '.bootstrap.url' "$core_input_lock")" --repository-snapshot-dir "$repository_snapshot_dir" --repository-snapshot-url "$(jq -r '.repositorySnapshot.url' "$core_input_lock")" --bootstrap-keyring "$bootstrap_keyring" --shelly-bootstrap "$shelly_bootstrap" --shelly-bootstrap-signature "$shelly_bootstrap_signature" --builder-manifest "$builder_manifest" --builder-manifest-signature "$builder_manifest_signature" --builder-keyring "$builder_keyring" --builder-repository "$builder_repository" --dependency-closure "$dependency_closure" --source-date-epoch "$(jq -r '.sourceDateEpoch' "$candidate")" --release-version "$(jq -r '.version' "$candidate")" --core-repo "$core_repository" --core-keyring "$core_keyring" --verify "$core_input_lock")
 if [[ "$edition" == managed ]]; then
   edition_source="$overlay_source"
-  input_verify_args=(--operation iso --core "$core_source" --edition "$edition_source" --bootstrap-archive "$bootstrap_archive" --bootstrap-signature "$bootstrap_signature" --bootstrap-url "$(jq -r '.bootstrap.url' "$core_input_lock")" --arch-snapshot-dir "$arch_snapshot_dir" --arch-snapshot-url "$(jq -r '.archSnapshot.url' "$core_input_lock")" --arch-keyring "$arch_keyring" --shelly-bootstrap "$shelly_bootstrap" --shelly-bootstrap-signature "$shelly_bootstrap_signature" --builder-manifest "$builder_manifest" --builder-manifest-signature "$builder_manifest_signature" --builder-keyring "$builder_keyring" --builder-repository "$builder_repository" --dependency-closure "$dependency_closure" --source-date-epoch "$(jq -r '.sourceDateEpoch' "$candidate")" --release-version "$(jq -r '.version' "$candidate")" --core-repo "$core_repository" --core-keyring "$core_keyring" --managed-repo "$managed_repository" --managed-keyring "$managed_keyring" --managed-input-lock "$overlay_input_lock" --verify "$core_input_lock")
+  input_verify_args=(--operation iso --core "$core_source" --edition "$edition_source" --bootstrap-archive "$bootstrap_archive" --bootstrap-signature "$bootstrap_signature" --bootstrap-url "$(jq -r '.bootstrap.url' "$core_input_lock")" --repository-snapshot-dir "$repository_snapshot_dir" --repository-snapshot-url "$(jq -r '.repositorySnapshot.url' "$core_input_lock")" --bootstrap-keyring "$bootstrap_keyring" --shelly-bootstrap "$shelly_bootstrap" --shelly-bootstrap-signature "$shelly_bootstrap_signature" --builder-manifest "$builder_manifest" --builder-manifest-signature "$builder_manifest_signature" --builder-keyring "$builder_keyring" --builder-repository "$builder_repository" --dependency-closure "$dependency_closure" --source-date-epoch "$(jq -r '.sourceDateEpoch' "$candidate")" --release-version "$(jq -r '.version' "$candidate")" --core-repo "$core_repository" --core-keyring "$core_keyring" --managed-repo "$managed_repository" --managed-keyring "$managed_keyring" --managed-input-lock "$overlay_input_lock" --verify "$core_input_lock")
 fi
 bash "$project_dir/scripts/verify-core-input-lock.sh" "${input_verify_args[@]}"
 devario_candidate_artifact_path "$candidate" "$source_image" >/dev/null || { echo 'Production source image is not one unambiguous exact candidate artifact.' >&2; exit 1; }

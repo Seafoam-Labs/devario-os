@@ -29,7 +29,7 @@ The installed system does not ship the `pacman` or `pacman-key` executables. It 
 
 ## What is included
 
-- Archiso profile with BIOS and UEFI boot support
+- Devario ISO profile with BIOS and UEFI boot support
 - Aqueous compositor with the Noctalia shell and Devario desktop defaults
 - greetd with Noctalia Greeter for installed logins and an automatic Aqueous
   `liveuser` session on the live image
@@ -53,7 +53,7 @@ ISO construction verifies that every Devario-owned package is present exactly
 once in the local repository before installing the live root. In particular,
 both `linux-cachyos-lts` and `linux-cachyos-lts-headers` must have been built by
 `build-packages-nspawn.sh`; the kernel recipe alone is not an installable
-artifact. The patched Archiso transaction also compares its requested package
+artifact. The Devario builder transaction also compares its requested package
 list with Shelly's installed inventory and refuses a partial root filesystem.
 
 The live and installed filesystems include `nvidia-open-dkms`, `nvidia-utils`,
@@ -77,6 +77,10 @@ partition mounted at `/boot`; legacy BIOS on GPT additionally requires a BIOS
 boot partition. The installer stops instead of writing an unbootable Limine
 configuration when those requirements are not met.
 
+The native ISO build prerequisites and pending full-image verification are
+documented in [ISO construction](docs/ISO-BUILDER.md). Snapshot and bootstrap
+URLs in release examples must be provisioned before use.
+
 ## Package-management boundary
 
 The Pacman and `pacman-key` executables are not invoked during package builds,
@@ -86,12 +90,7 @@ ISO construction, live use, installation, or installed-system operation:
 | --- | --- |
 | Live and installed system | `shelly`, `devario-alpm-runtime`, `devario-base`, and `devario-keyring` |
 | Package build host | Shelly synchronizes repositories and installs every declared build dependency. `makepkg` runs with `--nodeps`, automatic dependency probes disabled, and a strict Shelly inventory adapter; `repo-add` only writes repository metadata. |
-| ISO build host | Bundled Archiso v89 orchestration patched so synchronization, target installation, and package inventory all run through the repository's Shelly binary. |
-
-The vendor patch also converts Archiso's stock CI package setup and releng
-keyring service to Shelly. Those upstream paths are not used by Devario's staged
-profile, but keeping them Shelly-only prevents a dormant Pacman call from
-remaining in the patched source tree.
+| ISO build host | Pinned `devario-iso-builder` with a declarative manifest; synchronization, installation, and inventory run through Shelly. |
 
 `makepkg` remains the package archive builder and `repo-add` remains the
 repository database writer because Shelly does not replace those formats or
@@ -109,16 +108,14 @@ Shelly owns its runtime configuration and mutable package state:
 
 Some historical names remain only at upstream Arch compatibility boundaries:
 
-- `/etc/pacman.d/mirrorlist`
+- `/etc/pacman.d/mirrorlist` in the optional `shelly-arch-compat` package
 - `/usr/share/pacman/keyrings`, where Arch and Devario distribute public trust roots
 - Arch package archives, repository databases, signatures, and ALPM hooks
-- Archiso's `pacman_conf` profile setting
 
 Their presence does not mean `/usr/bin/pacman` or `/usr/bin/pacman-key` is present. Devario build scripts, runtime
 services, and installer configuration must never invoke either executable, `pacstrap`, or `pacman-conf`.
 
-`devario-alpm-runtime` also advertises a versioned virtual `pacman` provider because `archlinux-keyring` currently
-depends on that package name. It conflicts with and replaces the real package, but it does not contain either Pacman
+`devario-alpm-runtime` also advertises a versioned virtual `pacman` provider for optional compatible packages such as `archlinux-keyring`. It conflicts with and replaces the real package, but it does not contain either Pacman
 executable. This compatibility metadata is checked separately from the image-content rule.
 
 The packaged Shelly 3.1.2 source is patched at build time because upstream still delegates keyring and repository
@@ -187,10 +184,10 @@ into an otherwise stale system.
 ## Build prerequisites
 
 Build on an up-to-date Arch Linux or Arch-derived x86-64 system. Once Shelly is available on the build host, install the
-required Archiso and packaging tools through Shelly:
+required ISO assembly and packaging tools through Shelly:
 
 ```sh
-shelly install standard --upgrade archiso base-devel git limine
+shelly install standard --upgrade python libisoburn dosfstools mtools squashfs-tools openssl util-linux base-devel git limine
 ```
 
 For virtual-machine testing, the QEMU helper installs `qemu-desktop` and
@@ -209,7 +206,7 @@ Optimized derivative toolchains can stamp their startup objects with a higher
 ISA requirement even when an individual recipe requests baseline compilation.
 
 On a systemd host, the supplied nspawn wrapper downloads and verifies the
-official Arch bootstrap filesystem, injects the locally trusted Shelly package,
+explicitly supplied, signed Devario bootstrap filesystem, injects the locally trusted Shelly package,
 installs all build inputs through Shelly, and builds as an unprivileged user.
 It does not invoke the Pacman executable:
 
@@ -278,7 +275,7 @@ Validate package, profile, Calamares, service, and Shelly/Pacman-boundary invari
 ```
 
 Community is the default edition. The build first copies the canonical
-`archiso/` profile into a temporary directory, then applies the data-only
+`iso/` profile into a temporary directory, then applies the data-only
 contract in `editions/community/`. An edition directory contains:
 
 - `edition.conf` with validated display and ISO metadata
@@ -303,13 +300,12 @@ Validate an external edition explicitly:
 ./scripts/validate.sh --edition ../devario-managed-overlay
 ```
 
-Build the ISO. The wrapper verifies and patches its bundled Archiso v89 source,
-extracts the updated Shelly binary from the signed local repository, and uses
-that binary for the isolated target transaction. Each build initializes and
-populates a temporary Arch and Devario verification keyring in the work
-directory, passes its absolute path to the transaction, and deletes it
-afterward. The keyring stays outside `airootfs`, so its private bootstrap key
-is never packaged into the ISO:
+Build the ISO using the pinned Devario builder. The wrapper verifies the signed
+local `devario-core` and `seafoam-labs` repository closures, extracts the Devario
+Shelly binary, and initializes a temporary verification keyring outside the live
+root. The declarative profile lives in `iso/profile.json`. Supply the complete
+repositories through `DEVARIO_CORE_REPO_DIR` and `DEVARIO_SEAFOAM_REPO_DIR`.
+See [ISO builder prerequisites and verification](docs/ISO-BUILDER.md).
 
 ```sh
 sudo ./scripts/build-iso.sh
@@ -327,7 +323,7 @@ The nspawn wrapper mounts an external edition read-only at
 `/devario-edition`; it never copies private overlay sources into the core
 checkout.
 
-The resulting image is written to `out/`, and intermediate Archiso state is stored in `work/`. Override either location
+The resulting image is written to `out/`, and intermediate image state is stored in `work/`. Override either location
 when needed:
 
 ```sh
@@ -337,10 +333,10 @@ sudo DEVARIO_OUTPUT_DIR=/path/to/out \
 ```
 
 To reuse the baseline nspawn environment for ISO construction, use the nspawn
-wrapper. It prepares the container when necessary, installs the Archiso
+wrapper. It prepares the container when necessary, installs the ISO assembly
 toolchain through Shelly, grants the container only the additional mount and
-device-node capabilities needed by Archiso, and calls the same ISO builder.
-Its mutable Archiso work tree is created inside the container rather than on
+device-node capabilities needed by the image assembler, and calls the same ISO builder.
+Its mutable image work tree is created inside the container rather than on
 the project bind mount, avoiding user-namespace overflow ownership on target
 files. Only the completed output directory is host-bound:
 
@@ -387,16 +383,16 @@ DEVARIO_GNUPGHOME=/secure/devario-gnupg \
   ./scripts/init-repository-key.sh
 
 sudo env DEVARIO_RELEASE_BUILD=1 \
-  DEVARIO_BOOTSTRAP_URL=https://archive.example.org/archlinux-bootstrap-2026.08.14.tar.zst \
-  DEVARIO_ARCH_SNAPSHOT_URL=https://archive.archlinux.org/repos/2026/08/14/ \
+  DEVARIO_BOOTSTRAP_URL=https://archive.example.org/devario-bootstrap-2026.08.14.tar.zst \
+  DEVARIO_REPOSITORY_SNAPSHOT_URL=https://repo.seafoam-labs.org/snapshots/2026-08-14/ \
   DEVARIO_NSPAWN_ROOT=/var/lib/machines/devario-core-release-2026.08.14 \
   DEVARIO_GNUPGHOME=/secure/devario-gnupg \
   DEVARIO_SIGNING_KEY=<fingerprint> \
   ./scripts/build-packages-nspawn.sh --output /release/2026.08.14/packages
 
 sudo env DEVARIO_RELEASE_BUILD=1 \
-  DEVARIO_BOOTSTRAP_URL=https://archive.example.org/archlinux-bootstrap-2026.08.14.tar.zst \
-  DEVARIO_ARCH_SNAPSHOT_URL=https://archive.archlinux.org/repos/2026/08/14/ \
+  DEVARIO_BOOTSTRAP_URL=https://archive.example.org/devario-bootstrap-2026.08.14.tar.zst \
+  DEVARIO_REPOSITORY_SNAPSHOT_URL=https://repo.seafoam-labs.org/snapshots/2026-08-14/ \
   DEVARIO_NSPAWN_ROOT=/var/lib/machines/devario-iso-release-2026.08.14 \
   DEVARIO_GNUPGHOME=/secure/devario-gnupg \
   DEVARIO_SIGNING_KEY=<fingerprint> \
@@ -426,8 +422,8 @@ physically distinct:
 
 ```sh
 sudo env \
-  DEVARIO_BOOTSTRAP_URL=https://archive.example.org/archlinux-bootstrap-2026.08.14.tar.zst \
-  DEVARIO_ARCH_SNAPSHOT_URL=https://archive.archlinux.org/repos/2026/08/14/ \
+  DEVARIO_BOOTSTRAP_URL=https://archive.example.org/devario-bootstrap-2026.08.14.tar.zst \
+  DEVARIO_REPOSITORY_SNAPSHOT_URL=https://repo.seafoam-labs.org/snapshots/2026-08-14/ \
   DEVARIO_NSPAWN_ROOT=/var/lib/machines/devario-managed-release-2026.08.14 \
   DEVARIO_GNUPGHOME=/secure/devario-managed-gnupg \
   DEVARIO_SIGNING_KEY=<managed-fingerprint> \
@@ -530,8 +526,8 @@ Before publishing an image, verify that:
 ## Repository layout
 
 ```text
-archiso/                         Archiso profile and live filesystem overlay
-archiso/shelly.runtime.conf      Installed-system Shelly configuration template
+iso/                         Devario ISO profile and live filesystem overlay
+iso/shelly.runtime.conf      Installed-system Shelly configuration template
 docs/                            High-level product and architecture documentation
 packages/calamares/              Upstream Calamares package
 packages/ckbcomp/                Calamares keyboard-layout compiler helper
@@ -547,5 +543,5 @@ packages/devario-aqueous-desktop/ Complete desktop dependency set and target gre
 repo/core/                       Generated core-only local binary repository
 repo/managed/                    Reserved physical boundary for managed artifacts
 scripts/                         Package, validation, and ISO build entry points
-tools/devario-archiso/           Checksummed Archiso v89 source and Shelly bootstrap patch
+tools/devario-iso-builder/       Pinned Devario builder source archive and lock
 ```

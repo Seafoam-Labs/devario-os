@@ -18,7 +18,11 @@
         "url": "https://github.com/Seafoam-Labs/Aqueous",
         "revision": "001beb7d08ecb8e5b428b869dbb9351f8d97820c"
       },
-      "declaredLicenses": ["GPL-3.0-only", "MIT", "CC-BY-SA-4.0"],
+      "declaredLicenses": [
+        "GPL-3.0-only",
+        "MIT",
+        "CC-BY-SA-4.0"
+      ],
       "correspondingSource": true
     },
     {
@@ -31,44 +35,60 @@
         "url": "generated-from:packages/aqueous/aqueous-001beb7d08ecb8e5b428b869dbb9351f8d97820c.tar.gz#aqueous-0.4.6/compositor/build.zig.zon",
         "revision": "001beb7d08ecb8e5b428b869dbb9351f8d97820c"
       },
-      "declaredLicenses": ["MIT", "Unicode-3.0"],
+      "declaredLicenses": [
+        "MIT",
+        "Unicode-3.0"
+      ],
       "correspondingSource": true,
       "components": [
         {
           "name": "zig-pixman",
           "url": "https://codeberg.org/ifreund/zig-pixman/archive/v0.3.0.tar.gz",
           "revision": "v0.3.0",
-          "declaredLicenses": ["MIT"]
+          "declaredLicenses": [
+            "MIT"
+          ]
         },
         {
           "name": "zig-wayland",
           "url": "https://codeberg.org/ifreund/zig-wayland/archive/v0.6.0.tar.gz",
           "revision": "v0.6.0",
-          "declaredLicenses": ["MIT"]
+          "declaredLicenses": [
+            "MIT"
+          ]
         },
         {
           "name": "zig-wlroots",
           "url": "https://codeberg.org/ifreund/zig-wlroots/archive/v0.20.1.tar.gz",
           "revision": "v0.20.1",
-          "declaredLicenses": ["MIT"]
+          "declaredLicenses": [
+            "MIT"
+          ]
         },
         {
           "name": "zig-xkbcommon",
           "url": "https://codeberg.org/ifreund/zig-xkbcommon/archive/v0.4.0.tar.gz",
           "revision": "v0.4.0",
-          "declaredLicenses": ["MIT"]
+          "declaredLicenses": [
+            "MIT"
+          ]
         },
         {
           "name": "translate-c",
           "url": "https://codeberg.org/ziglang/translate-c/",
           "revision": "57c559cf581b1fcad90494eda219f98abeb155ce",
-          "declaredLicenses": ["MIT"]
+          "declaredLicenses": [
+            "MIT"
+          ]
         },
         {
           "name": "aro",
           "url": "https://github.com/Vexu/arocc",
           "revision": "5f5a050569a95ecc40a426f0c3666ae7ef987ede",
-          "declaredLicenses": ["MIT", "Unicode-3.0"]
+          "declaredLicenses": [
+            "MIT",
+            "Unicode-3.0"
+          ]
         }
       ],
       "notes": "The archive contains the complete cached component trees and their license files."
@@ -83,7 +103,9 @@
         "url": "https://gitlab.freedesktop.org/wlroots/wlroots",
         "revision": "0.20.2"
       },
-      "declaredLicenses": ["MIT"],
+      "declaredLicenses": [
+        "MIT"
+      ],
       "correspondingSource": true
     },
     {
@@ -96,7 +118,9 @@
         "url": "https://github.com/noctalia-dev/noctalia",
         "revision": "50f0f095053a4b5c10874c4e7080f55dc15d3b38"
       },
-      "declaredLicenses": ["MIT"],
+      "declaredLicenses": [
+        "MIT"
+      ],
       "correspondingSource": true
     },
     {
@@ -109,22 +133,10 @@
         "url": "https://github.com/noctalia-dev/noctalia-greeter",
         "revision": "4aa960dcff874dddd4d3d94d931df43a416ea9cf"
       },
-      "declaredLicenses": ["MIT"],
+      "declaredLicenses": [
+        "MIT"
+      ],
       "correspondingSource": true
-    },
-    {
-      "id": "archiso-v89",
-      "path": "tools/devario-archiso/archiso-v89.tar.gz",
-      "kind": "build-tool-source",
-      "size": 121505,
-      "sha256": "d4e98484aaa4880888765cdc8ee9bcabed98320c3e6372b5d9699e32d1a33040",
-      "upstream": {
-        "url": "https://gitlab.archlinux.org/archlinux/archiso/-/archive/v89/archiso-v89.tar.gz",
-        "revision": "v89"
-      },
-      "declaredLicenses": ["GPL-3.0-or-later"],
-      "correspondingSource": true,
-      "notes": "Devario applies the checked-in patches under tools/devario-archiso at build time."
     },
     {
       "id": "dracut-111",
@@ -139,6 +151,21 @@
       "declaredLicenses": [
         "GPL-2.0-or-later",
         "LGPL-2.1-or-later"
+      ],
+      "correspondingSource": true
+    },
+    {
+      "id": "devario-iso-builder-b4cbf2d7",
+      "path": "tools/devario-iso-builder/devario-iso-builder.tar.gz",
+      "kind": "upstream-source",
+      "size": 21367,
+      "sha256": "d34e01df3a7b8a821a24f5d6f030caadfafbe4f31bbd5db3dde0349202d362c8",
+      "upstream": {
+        "url": "https://github.com/Seafoam-Labs/devario-iso-builder",
+        "revision": "b4cbf2d790edcd34959a0570403bc4289783d636"
+      },
+      "declaredLicenses": [
+        "GPL-3.0-or-later"
       ],
       "correspondingSource": true
     }

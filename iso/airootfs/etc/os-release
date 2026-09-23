@@ -1,0 +1,11 @@
+NAME="Devario Community"
+PRETTY_NAME="Devario Community (Development)"
+ID=devario
+BUILD_ID=rolling
+VARIANT="Community"
+VARIANT_ID=community
+ANSI_COLOR="38;2;32;190;180"
+HOME_URL="https://github.com/Seafoam-Labs/devario-os"
+DOCUMENTATION_URL="https://github.com/Seafoam-Labs/devario-os/tree/main/docs"
+SUPPORT_URL="https://github.com/Seafoam-Labs/devario-os/discussions"
+BUG_REPORT_URL="https://github.com/Seafoam-Labs/devario-os/issues"

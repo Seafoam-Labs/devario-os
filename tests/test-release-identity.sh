@@ -8,7 +8,7 @@ cleanup() { rm -rf -- "$test_root"; }
 trap cleanup EXIT
 fail() { echo "Release-identity test failed: $*" >&2; exit 1; }
 
-cp "$project_dir/archiso/airootfs/etc/os-release" "$test_root/os-release"
+cp "$project_dir/iso/airootfs/etc/os-release" "$test_root/os-release"
 "$project_dir/scripts/render-release-os-release.py" \
   --file "$test_root/os-release" --edition community --variant Community \
   --release-version 2026.08.14
@@ -29,7 +29,7 @@ if "$project_dir/scripts/render-release-os-release.py" \
 fi
 
 for unsafe in '2026 08 14' '../2026' '2026@prod' '2026+prod' ''; do
-  cp "$project_dir/archiso/airootfs/etc/os-release" "$test_root/unsafe"
+  cp "$project_dir/iso/airootfs/etc/os-release" "$test_root/unsafe"
   if "$project_dir/scripts/render-release-os-release.py" \
       --file "$test_root/unsafe" --edition community --variant Community \
       --release-version "$unsafe" >/dev/null 2>&1; then
@@ -37,7 +37,7 @@ for unsafe in '2026 08 14' '../2026' '2026@prod' '2026+prod' ''; do
   fi
 done
 
-cp "$project_dir/archiso/airootfs/etc/os-release" "$test_root/mismatch"
+cp "$project_dir/iso/airootfs/etc/os-release" "$test_root/mismatch"
 if "$project_dir/scripts/render-release-os-release.py" \
     --file "$test_root/mismatch" --edition managed --variant Managed \
     --release-version test >/dev/null 2>&1; then

@@ -11,8 +11,8 @@ container_root="${DEVARIO_NSPAWN_ROOT:-/var/lib/machines/devario-managed-builder
 signing_home="${DEVARIO_GNUPGHOME:-}"; signing_key="${DEVARIO_SIGNING_KEY:-}"
 bootstrap_url="${DEVARIO_BOOTSTRAP_URL:-}"
 bootstrap_cache="${DEVARIO_BOOTSTRAP_CACHE:-/var/cache/devario/bootstrap}"
-arch_snapshot_url="${DEVARIO_ARCH_SNAPSHOT_URL:-}"
-arch_keyring="${DEVARIO_ARCH_KEYRING:-/usr/share/pacman/keyrings/archlinux.gpg}"
+repository_snapshot_url="${DEVARIO_REPOSITORY_SNAPSHOT_URL:-}"
+bootstrap_keyring="${DEVARIO_BOOTSTRAP_KEYRING:-$project_dir/packages/devario-keyring/devario.gpg}"
 container_user=devario-build
 
 usage() {
@@ -70,8 +70,8 @@ devario_validate_https_url "$bootstrap_url"
 [[ "$bootstrap_url" != */latest && "$bootstrap_url" != */latest/* ]] || {
   echo 'Managed release requires an immutable DEVARIO_BOOTSTRAP_URL.' >&2; exit 1;
 }
-[[ "$arch_snapshot_url" =~ ^https://archive\.archlinux\.org/repos/[0-9]{4}/[0-9]{2}/[0-9]{2}/$ ]] || {
-  echo 'Managed release requires an exact dated DEVARIO_ARCH_SNAPSHOT_URL.' >&2; exit 1;
+[[ "$repository_snapshot_url" =~ ^https://[a-z0-9.-]+(:[0-9]{1,5})?/snapshots/[A-Za-z0-9._-]+/$ ]] || {
+  echo 'Managed release requires an exact dated DEVARIO_REPOSITORY_SNAPSHOT_URL.' >&2; exit 1;
 }
 devario_verify_repository "$core_repo" devario-core "$core_keyring" production
 core_active="$DEVARIO_ACTIVE_SIGNER"
@@ -108,10 +108,10 @@ DEVARIO_RELEASE_BUILD=1 \
 DEVARIO_SHELLY_BOOTSTRAP_REPO="$core_repo" \
 DEVARIO_BOOTSTRAP_KEYRING_DIR="$core_keyring" \
 DEVARIO_BOOTSTRAP_URL="$bootstrap_url" \
-DEVARIO_ARCH_SNAPSHOT_URL="$arch_snapshot_url" \
+DEVARIO_REPOSITORY_SNAPSHOT_URL="$repository_snapshot_url" \
 DEVARIO_NSPAWN_ROOT="$container_root" \
 DEVARIO_BOOTSTRAP_CACHE="$bootstrap_cache" \
-DEVARIO_ARCH_KEYRING="$arch_keyring" \
+DEVARIO_BOOTSTRAP_KEYRING="$bootstrap_keyring" \
   "$script_dir/build-packages-nspawn.sh" --prepare-only
 
 temporary_dir="$(mktemp -d /tmp/devario-external-nspawn.XXXXXX)"; container_work=''
@@ -162,7 +162,7 @@ dependency_closure="$temporary_dir/dependency-closure.json"
 CONTAINER_ROOT="$container_root" python3 - > "$dependency_closure" <<'PY'
 import json,os,pathlib
 records=[]
-for desc in sorted((pathlib.Path(os.environ["CONTAINER_ROOT"])/"var/lib/pacman/local").glob("*/desc")):
+for desc in sorted((pathlib.Path(os.environ["CONTAINER_ROOT"])/"var/lib/shelly/local").glob("*/desc")):
  lines=desc.read_text().splitlines(); fields={}; i=0
  while i<len(lines):
   if lines[i].startswith("%") and lines[i].endswith("%") and i+1<len(lines): fields[lines[i][1:-1]]=lines[i+1]; i+=2
@@ -173,27 +173,27 @@ records.sort(key=lambda x:x["name"])
 if not records or len(records)!=len({x["name"] for x in records}): raise SystemExit("invalid dependency closure")
 print(json.dumps(records,sort_keys=True,separators=(",",":")))
 PY
-snapshot_id="${arch_snapshot_url#https://archive.archlinux.org/repos/}"; snapshot_id="${snapshot_id%/}"; snapshot_id="${snapshot_id//\//-}"
-arch_snapshot_dir="$bootstrap_cache/arch-snapshot-$snapshot_id"
-bootstrap_archive="$bootstrap_cache/archlinux-bootstrap-x86_64.tar.zst"; bootstrap_signature="$bootstrap_archive.sig"
+snapshot_id="${repository_snapshot_url##*/snapshots/}"; snapshot_id="${snapshot_id%/}"; snapshot_id="${snapshot_id//\//-}"
+repository_snapshot_dir="$bootstrap_cache/repository-snapshot-$snapshot_id"
+bootstrap_archive="$bootstrap_cache/devario-bootstrap-x86_64.tar.zst"; bootstrap_signature="$bootstrap_archive.sig"
 mapfile -t shelly_packages < <(find "$core_repo" -maxdepth 1 -type f -name 'shelly-[0-9]*.pkg.tar.zst' -print | sort -V)
 (( ${#shelly_packages[@]} == 1 )) || { echo 'Core input must contain exactly one Shelly bootstrap.' >&2; exit 1; }
 shelly_package="${shelly_packages[0]}"; shelly_signature="$shelly_package.sig"
 container_manifest="$container_root/etc/devario/controlled-builder.json"; install -d -m 0755 "$(dirname -- "$container_manifest")"
 root_digest="$($script_dir/tree-closure-digest.py --root "$container_root" --exclude dev --exclude proc --exclude sys --exclude run --exclude tmp --exclude var/tmp --exclude input --exclude output --exclude signing --exclude etc/resolv.conf --exclude etc/devario/controlled-builder.json --exclude etc/devario/controlled-builder.json.sig)"
 "$script_dir/write-controlled-builder-manifest.py" --root-tree-sha256 "$root_digest" \
-  --arch-snapshot-url "$arch_snapshot_url" --arch-snapshot-dir "$arch_snapshot_dir" \
+  --repository-snapshot-url "$repository_snapshot_url" --repository-snapshot-dir "$repository_snapshot_dir" \
   --bootstrap-archive "$bootstrap_archive" --bootstrap-signature "$bootstrap_signature" --bootstrap-url "$bootstrap_url" \
   --shelly-bootstrap "$shelly_package" --shelly-bootstrap-signature "$shelly_signature" \
   --dependency-closure "$dependency_closure" --output "$container_manifest"
 GNUPGHOME="$signing_home" gpg --batch --yes --detach-sign --local-user "$signing_key" --output "$container_manifest.sig" "$container_manifest"
 chmod 0444 "$container_manifest" "$container_manifest.sig"
 devario_validate_keyring_bundle "$managed_keyring" devario-managed production; devario_gpgv_active_signature "$container_manifest.sig" "$container_manifest"
-normalized_arch_keyring="$temporary_dir/archlinux.gpg"; gpg --batch --yes --dearmor --output "$normalized_arch_keyring" "$arch_keyring"
+normalized_bootstrap_keyring="$temporary_dir/bootstrap.gpg"; cp -- "$bootstrap_keyring" "$normalized_bootstrap_keyring"
 input_lock="$temporary_dir/CORE-INPUT-LOCK.json"
 "$script_dir/create-core-input-lock.sh" --operation external-packages --core "$project_dir" --edition "$overlay_dir" \
   --bootstrap-archive "$bootstrap_archive" --bootstrap-signature "$bootstrap_signature" --bootstrap-url "$bootstrap_url" \
-  --arch-snapshot-dir "$arch_snapshot_dir" --arch-snapshot-url "$arch_snapshot_url" --arch-keyring "$normalized_arch_keyring" \
+  --repository-snapshot-dir "$repository_snapshot_dir" --repository-snapshot-url "$repository_snapshot_url" --bootstrap-keyring "$normalized_bootstrap_keyring" \
   --shelly-bootstrap "$shelly_package" --shelly-bootstrap-signature "$shelly_signature" \
   --builder-manifest "$container_manifest" --builder-manifest-signature "$container_manifest.sig" \
   --builder-keyring "$managed_keyring" --builder-repository devario-managed --dependency-closure "$dependency_closure" \

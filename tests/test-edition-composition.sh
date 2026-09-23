@@ -50,7 +50,7 @@ compose() {
   local output_dir="$3"
   mkdir -p "$output_dir"
   devario_compose_profile \
-    "$core_dir/archiso" "$edition_dir" "$output_dir" "$core_dir"
+    "$core_dir/iso" "$edition_dir" "$output_dir" "$core_dir"
 }
 
 expect_failure() {
@@ -77,18 +77,18 @@ expect_contract_failure() {
 
 make_core() {
   local core_dir="$1"
-  mkdir -p "$core_dir/archiso/airootfs/etc" \
-    "$core_dir/archiso/late-airootfs/usr/share/devario" \
+  mkdir -p "$core_dir/iso/airootfs/etc" \
+    "$core_dir/iso/late-airootfs/usr/share/devario" \
     "$core_dir/editions"
   printf '%s\n' \
     aqueous \
     firefox \
     linux-cachyos-lts \
     shelly \
-    > "$core_dir/archiso/packages.x86_64"
-  printf '%s\n' 'base hostname' > "$core_dir/archiso/airootfs/etc/hostname"
+    > "$core_dir/iso/packages.x86_64"
+  printf '%s\n' 'base hostname' > "$core_dir/iso/airootfs/etc/hostname"
   printf '%s\n' 'base data' \
-    > "$core_dir/archiso/late-airootfs/usr/share/devario/base-data"
+    > "$core_dir/iso/late-airootfs/usr/share/devario/base-data"
 }
 
 core="$test_root/core"
@@ -98,9 +98,9 @@ community="$core/editions/community"
 write_config "$community" community
 community_output="$test_root/community-output"
 compose "$core" "$community" "$community_output"
-cmp -s "$core/archiso/packages.x86_64" "$community_output/packages.x86_64" \
+cmp -s "$core/iso/packages.x86_64" "$community_output/packages.x86_64" \
   || fail 'the empty Community edition changed the base package list'
-cmp -s "$core/archiso/airootfs/etc/hostname" \
+cmp -s "$core/iso/airootfs/etc/hostname" \
   "$community_output/airootfs/etc/hostname" \
   || fail 'the empty Community edition changed a base profile file'
 if grep -RInE \
@@ -263,11 +263,11 @@ printf 'devario_os_commit=%s\n' "$locked_commit" > "$external/base.lock"
 mkdir "$test_root/action-snapshot-output"
 DEVARIO_CORE_COMMIT="$locked_commit" DEVARIO_VALIDATED_ACTION_SNAPSHOT=1 \
 DEVARIO_ACTION_SNAPSHOT_ROOT="$action_core" DEVARIO_ACTION_SNAPSHOT_SENTINEL="$action_sentinel" \
-  devario_compose_profile "$action_core/archiso" "$external" "$test_root/action-snapshot-output" "$action_core" action-snapshot
+  devario_compose_profile "$action_core/iso" "$external" "$test_root/action-snapshot-output" "$action_core" action-snapshot
 mkdir "$test_root/missing-sentinel-output"
 if DEVARIO_CORE_COMMIT="$locked_commit" DEVARIO_VALIDATED_ACTION_SNAPSHOT=1 \
   DEVARIO_ACTION_SNAPSHOT_ROOT="$action_core" DEVARIO_ACTION_SNAPSHOT_SENTINEL="$test_root/missing" \
-  devario_compose_profile "$action_core/archiso" "$external" "$test_root/missing-sentinel-output" "$action_core" action-snapshot >/dev/null 2>&1; then
+  devario_compose_profile "$action_core/iso" "$external" "$test_root/missing-sentinel-output" "$action_core" action-snapshot >/dev/null 2>&1; then
   fail 'an action snapshot accepted a missing validation-only sentinel'
 fi
 printf '%s\n' 'devario_os_commit=0000000000000000000000000000000000000000' \

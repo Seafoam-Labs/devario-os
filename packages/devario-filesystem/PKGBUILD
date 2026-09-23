@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+pkgname=devario-filesystem
+pkgver=1
+pkgrel=1
+pkgdesc="Devario filesystem hierarchy and distribution identity"
+arch=('any')
+url="https://github.com/Seafoam-Labs/devario-os"
+license=('GPL-3.0-or-later')
+provides=('filesystem=2026.09.23')
+conflicts=('filesystem')
+replaces=('filesystem')
+backup=('etc/os-release' 'etc/issue' 'etc/hosts' 'etc/fstab' 'etc/crypttab'
+        'etc/passwd' 'etc/group' 'etc/shadow' 'etc/gshadow' 'etc/nsswitch.conf'
+        'etc/profile' 'etc/shells' 'etc/ld.so.conf' 'etc/resolv.conf'
+        'etc/subuid' 'etc/subgid')
+
+package() {
+  local dir
+  for dir in boot dev etc/skel etc/profile.d etc/ld.so.conf.d home mnt opt proc root run srv sys tmp \
+    usr/bin usr/include usr/lib usr/lib/ld.so.conf.d usr/lib/sysusers.d usr/lib/tmpfiles.d \
+    usr/local/bin usr/local/sbin usr/local/etc usr/local/include usr/local/lib usr/local/share/man usr/local/src \
+    usr/share/licenses usr/share/man usr/share/misc usr/share/pixmaps usr/src \
+    var/cache var/empty var/lib var/local var/log var/opt var/spool/mail var/tmp; do
+    install -dm755 "$pkgdir/$dir"
+  done
+  chmod 700 "$pkgdir/root"
+  chmod 1777 "$pkgdir/tmp" "$pkgdir/var/tmp"
+  ln -s usr/bin "$pkgdir/bin"
+  ln -s usr/bin "$pkgdir/sbin"
+  ln -s usr/lib "$pkgdir/lib"
+  ln -s usr/lib "$pkgdir/lib64"
+  ln -s bin "$pkgdir/usr/sbin"
+  ln -s lib "$pkgdir/usr/lib64"
+  ln -s ../run "$pkgdir/var/run"
+  ln -s ../run/lock "$pkgdir/var/lock"
+  ln -s spool/mail "$pkgdir/var/mail"
+  ln -s /proc/self/mounts "$pkgdir/etc/mtab"
+  printf '%s\n' 'NAME="Devario Community"' 'PRETTY_NAME="Devario Community (Development)"' \
+    'ID=devario' 'BUILD_ID=rolling' 'VARIANT="Community"' 'VARIANT_ID=community' \
+    > "$pkgdir/etc/os-release"
+  # Edition identity survives package upgrades through the backed-up /etc file.
+  ln -s ../../etc/os-release "$pkgdir/usr/lib/os-release"
+  printf 'Devario Linux \\r (\\l)\n\n' > "$pkgdir/etc/issue"
+  printf 'root:x:0:0:root:/root:/usr/bin/bash\n' > "$pkgdir/etc/passwd"
+  printf 'root:x:0:root\n' > "$pkgdir/etc/group"
+  printf 'root:!*::::::: \n' | sed 's/ $//' > "$pkgdir/etc/shadow"
+  printf 'root:!*::root\n' > "$pkgdir/etc/gshadow"
+  chmod 600 "$pkgdir/etc/shadow" "$pkgdir/etc/gshadow"
+  printf '127.0.0.1 localhost\n::1 localhost\n' > "$pkgdir/etc/hosts"
+  printf 'passwd: files systemd\ngroup: files [SUCCESS=merge] systemd\nshadow: files systemd\ngshadow: files systemd\nhosts: mymachines resolve [!UNAVAIL=return] files myhostname dns\nnetworks: files\nprotocols: files\nservices: files\nethers: files\nrpc: files\n' > "$pkgdir/etc/nsswitch.conf"
+  printf '/bin/sh\n/bin/bash\n/usr/bin/sh\n/usr/bin/bash\n' > "$pkgdir/etc/shells"
+  printf 'include /etc/ld.so.conf.d/*.conf\ninclude /usr/lib/ld.so.conf.d/*.conf\n' > "$pkgdir/etc/ld.so.conf"
+  printf '%s\n' 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/bin' \
+    'for profile in /etc/profile.d/*.sh; do' \
+    '  [ ! -r "$profile" ] || . "$profile"' 'done' 'unset profile' > "$pkgdir/etc/profile"
+  for dir in fstab crypttab resolv.conf subuid subgid; do
+    : > "$pkgdir/etc/$dir"
+  done
+  printf 'g wheel 998\ng network 90\ng power 98\ng storage 95\n' \
+    > "$pkgdir/usr/lib/sysusers.d/devario.conf"
+  printf 'd /run/lock 0755 root root -\nd /var/empty 0755 root root -\n' \
+    > "$pkgdir/usr/lib/tmpfiles.d/devario.conf"
+}

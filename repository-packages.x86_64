@@ -1,12 +1,14 @@
-# Complete package archive set for the Devario Community image repository.
+# Seed package checklist for the Devario Community image repositories.
 #
-# This is the install/runtime dependency closure of archiso/packages.x86_64
+# This starts from the former install/runtime dependency closure of iso/packages.x86_64
 # and every Devario package. It lets the image transaction use a hosted,
 # self-contained package source without embedding repository archives in the ISO.
 # Build-only dependencies are intentionally excluded. Regenerate this closure
-# whenever the selected Arch snapshot or a package dependency changes.
+# whenever repository snapshots or package dependencies change.
+# scripts/audit-iso-repositories.py reports current resolution gaps; this list
+# alone is not proof of dependency closure.
 
-# Devario-built packages (14)
+# Devario-owned package recipes
 aqueous
 aqueous-noctalia
 aqueous-session
@@ -15,6 +17,10 @@ ckbcomp
 devario-alpm-runtime
 devario-aqueous-desktop
 devario-base
+devario-boot
+devario-dracut
+devario-filesystem
+seafoam-keyring
 devario-keyring
 linux-cachyos-lts
 linux-cachyos-lts-headers
@@ -22,10 +28,9 @@ noctalia
 noctalia-greeter
 shelly
 
-# Packages mirrored from Arch core (183)
+# Upstream packages formerly sourced from Arch core; retain source provenance.
 acl
 amd-ucode
-archlinux-keyring
 attr
 audit
 bash
@@ -53,7 +58,6 @@ efibootmgr
 efivar
 expat
 file
-filesystem
 findutils
 gawk
 gc
@@ -161,8 +165,6 @@ lzo
 make
 man-db
 mdadm
-mkinitcpio
-mkinitcpio-busybox
 mpdecimal
 mpfr
 ncurses
@@ -173,7 +175,6 @@ nss
 openssh
 openssl
 p11-kit
-pacman-mirrorlist
 pam
 pambase
 patch
@@ -207,7 +208,7 @@ xz
 zlib
 zstd
 
-# Packages mirrored from Arch extra (426)
+# Upstream packages formerly sourced from Arch extra; retain source provenance.
 abseil-cpp
 accountsservice
 adwaita-cursors
@@ -481,7 +482,6 @@ lv2
 mailcap
 md4c
 mesa
-mkinitcpio-archiso
 mobile-broadband-provider-info
 mpg123
 mtdev

@@ -58,12 +58,14 @@ canonical=lambda value:(json.dumps(value,sort_keys=True,separators=(",",":"))+"\
 if manifest_bytes != canonical(manifest) or lock_bytes != canonical(lock): raise SystemExit("controlled-builder inputs must be canonical JSON")
 Draft202012Validator(json.loads((schemas/"controlled-builder.schema.json").read_text(),object_pairs_hook=no_duplicates)).validate(manifest)
 Draft202012Validator(json.loads((schemas/"core-input-lock.schema.json").read_text(),object_pairs_hook=no_duplicates)).validate(lock)
+builder_lock=json.loads((schemas.parent.parent/"tools/devario-iso-builder/source.lock.json").read_text())
+if lock["isoBuilder"] != {k:builder_lock[k] for k in ("repository","revision","sha256")}: raise SystemExit("ISO builder differs from input lock")
 controlled=lock["controlledBuilder"]
 if hashlib.sha256(manifest_bytes).hexdigest() != controlled["manifestSha256"]: raise SystemExit("input lock does not bind the builder manifest")
 if hashlib.sha256(pathlib.Path(os.environ["MANIFEST_SIGNATURE"]).read_bytes()).hexdigest() != controlled["manifestSignatureSha256"]: raise SystemExit("input lock does not bind the builder-manifest signature")
 if manifest["rootTreeSha256"] != controlled["rootTreeSha256"]: raise SystemExit("builder root identity differs from input lock")
 if manifest["rootTreeSha256"] != os.environ["ACTUAL_ROOT_TREE"]: raise SystemExit("live builder root differs from authenticated builder identity")
-for key in ("archSnapshot", "bootstrap", "shellyBootstrap"):
+for key in ("repositorySnapshot", "bootstrap", "shellyBootstrap", "isoBuilder"):
  if manifest[key] != lock[key]: raise SystemExit(f"builder {key} differs from input lock")
 if manifest["dependencyClosureSha256"] != controlled["dependencyClosureSha256"]: raise SystemExit("builder dependency closure differs from input lock")
 if lock["operation"] != os.environ["EXPECTED_OPERATION"]: raise SystemExit("controlled operation differs from input lock")
@@ -90,7 +92,7 @@ def sha(path):
  with path.open("rb") as stream:
   for block in iter(lambda:stream.read(1024*1024),b""): value.update(block)
  return value.hexdigest()
-for database in lock["archSnapshot"]["databases"]:
+for database in lock["repositorySnapshot"]["databases"]:
  path=pathlib.Path("/var/lib/shelly/sync")/(database["repository"]+".db")
  if sha(path) != database["sha256"]: raise SystemExit(f"live {database['repository']} database differs from input lock")
 records=[]

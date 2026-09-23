@@ -9,7 +9,7 @@ reproducibility='' acceptance='' edition_evidence='' source_image='' approval=''
 core_source='' overlay_source='' core_keyring='' managed_keyring='' core_repository='' managed_repository=''
 target_channel=''
 core_url='' managed_url=''
-bootstrap_archive='' bootstrap_signature='' arch_snapshot_dir='' arch_keyring='' shelly_bootstrap='' shelly_bootstrap_signature='' dependency_closure=''
+bootstrap_archive='' bootstrap_signature='' repository_snapshot_dir='' bootstrap_keyring='' shelly_bootstrap='' shelly_bootstrap_signature='' dependency_closure=''
 while (( $# )); do
   case "$1" in
     --candidate) candidate="$2"; shift 2;; --artifacts) artifacts="$2"; shift 2;; --metadata) metadata="$2"; shift 2;;
@@ -21,11 +21,11 @@ while (( $# )); do
     --core-source) core_source="$2"; shift 2;; --overlay-source) overlay_source="$2"; shift 2;; --core-keyring) core_keyring="$2"; shift 2;; --managed-keyring) managed_keyring="$2"; shift 2;;
     --core-repository) core_repository="$2"; shift 2;; --managed-repository) managed_repository="$2"; shift 2;;
     --core-url) core_url="$2"; shift 2;; --managed-url) managed_url="$2"; shift 2;;
-    --bootstrap-archive) bootstrap_archive="$2"; shift 2;; --bootstrap-signature) bootstrap_signature="$2"; shift 2;; --arch-snapshot-dir) arch_snapshot_dir="$2"; shift 2;; --arch-keyring) arch_keyring="$2"; shift 2;; --shelly-bootstrap) shelly_bootstrap="$2"; shift 2;; --shelly-bootstrap-signature) shelly_bootstrap_signature="$2"; shift 2;; --dependency-closure) dependency_closure="$2"; shift 2;;
+    --bootstrap-archive) bootstrap_archive="$2"; shift 2;; --bootstrap-signature) bootstrap_signature="$2"; shift 2;; --repository-snapshot-dir) repository_snapshot_dir="$2"; shift 2;; --bootstrap-keyring) bootstrap_keyring="$2"; shift 2;; --shelly-bootstrap) shelly_bootstrap="$2"; shift 2;; --shelly-bootstrap-signature) shelly_bootstrap_signature="$2"; shift 2;; --dependency-closure) dependency_closure="$2"; shift 2;;
     *) echo 'Usage: promote-candidate.sh --candidate FILE --artifacts DIR --metadata DIR --core-input-lock FILE --builder-manifest FILE --builder-manifest-signature FILE --builder-attestation FILE --builder-attestation-signature FILE --builder-output-tree DIR --reproducibility FILE --acceptance-manifest FILE --source-image ISO --approval FILE --approval-signature FILE --target-channel CHANNEL --destination DIR --core-source DIR --core-keyring DIR --core-repository DIR [managed: --overlay-input-lock FILE --overlay-source DIR --managed-keyring DIR --managed-repository DIR --edition-evidence managed-lock.json]' >&2; exit 2;;
   esac
 done
-for value in candidate artifacts metadata core_input_lock builder_manifest builder_manifest_signature builder_attestation builder_attestation_signature builder_output_tree reproducibility acceptance source_image approval approval_signature target_channel destination core_source core_keyring core_repository core_url bootstrap_archive bootstrap_signature arch_snapshot_dir arch_keyring shelly_bootstrap shelly_bootstrap_signature dependency_closure; do [[ -n "${!value}" ]] || { echo "Missing $value." >&2; exit 2; }; done
+for value in candidate artifacts metadata core_input_lock builder_manifest builder_manifest_signature builder_attestation builder_attestation_signature builder_output_tree reproducibility acceptance source_image approval approval_signature target_channel destination core_source core_keyring core_repository core_url bootstrap_archive bootstrap_signature repository_snapshot_dir bootstrap_keyring shelly_bootstrap shelly_bootstrap_signature dependency_closure; do [[ -n "${!value}" ]] || { echo "Missing $value." >&2; exit 2; }; done
 [[ ! -e "$destination" ]] || { echo 'Promotion destination already exists; immutable paths cannot be replaced.' >&2; exit 1; }
 edition="$(jq -er '.edition' "$candidate")" || { echo 'Cannot read candidate edition.' >&2; exit 1; }
 edition_evidence_json='null'
@@ -38,7 +38,7 @@ elif [[ -n "$edition_evidence" ]]; then
   echo 'Community promotion rejects edition-specific evidence.' >&2; exit 1
 fi
 
-candidate_args=(--candidate "$candidate" --artifacts "$artifacts" --metadata "$metadata" --core-input-lock "$core_input_lock" --builder-manifest "$builder_manifest" --builder-manifest-signature "$builder_manifest_signature" --builder-attestation "$builder_attestation" --builder-attestation-signature "$builder_attestation_signature" --builder-output-tree "$builder_output_tree" --core-source "$core_source" --core-keyring "$core_keyring" --core-repository "$core_repository" --source-image "$source_image" --core-url "$core_url" --bootstrap-archive "$bootstrap_archive" --bootstrap-signature "$bootstrap_signature" --arch-snapshot-dir "$arch_snapshot_dir" --arch-keyring "$arch_keyring" --shelly-bootstrap "$shelly_bootstrap" --shelly-bootstrap-signature "$shelly_bootstrap_signature" --dependency-closure "$dependency_closure")
+candidate_args=(--candidate "$candidate" --artifacts "$artifacts" --metadata "$metadata" --core-input-lock "$core_input_lock" --builder-manifest "$builder_manifest" --builder-manifest-signature "$builder_manifest_signature" --builder-attestation "$builder_attestation" --builder-attestation-signature "$builder_attestation_signature" --builder-output-tree "$builder_output_tree" --core-source "$core_source" --core-keyring "$core_keyring" --core-repository "$core_repository" --source-image "$source_image" --core-url "$core_url" --bootstrap-archive "$bootstrap_archive" --bootstrap-signature "$bootstrap_signature" --repository-snapshot-dir "$repository_snapshot_dir" --bootstrap-keyring "$bootstrap_keyring" --shelly-bootstrap "$shelly_bootstrap" --shelly-bootstrap-signature "$shelly_bootstrap_signature" --dependency-closure "$dependency_closure")
 if [[ "$(jq -r '.edition' "$candidate")" == managed ]]; then
   candidate_args+=(--overlay-input-lock "$overlay_input_lock" --overlay-source "$overlay_source" --managed-keyring "$managed_keyring" --managed-repository "$managed_repository" --managed-url "$managed_url")
 fi

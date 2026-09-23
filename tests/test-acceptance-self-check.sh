@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 set -euo pipefail
-project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"; check="$project_dir/archiso/airootfs/usr/lib/devario/acceptance-self-check"
-service="$project_dir/archiso/airootfs/etc/systemd/system/devario-acceptance-self-check.service"
+project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"; check="$project_dir/iso/airootfs/usr/lib/devario/acceptance-self-check"
+service="$project_dir/iso/airootfs/etc/systemd/system/devario-acceptance-self-check.service"
 root="$(mktemp -d /tmp/devario-self-check-test.XXXXXX)"; trap 'rm -rf -- "$root"' EXIT
 mkdir -p "$root/etc" "$root/var/lib/devario"; printf 'machine-id\n' > "$root/etc/machine-id"; printf '/dev/root / ext4 defaults 0 1\n' > "$root/etc/fstab"; : > "$root/var/lib/devario/shelly-keyring.ready"
 write_os_release() { printf 'ID=devario\nVARIANT_ID=%s\n' "$1" > "$root/etc/os-release"; }
@@ -17,7 +17,7 @@ output="$($check --root "$root" --mode installed --firmware bios --edition commu
 [[ "$output" == 'DEVARIO_ACCEPTANCE:PASS mode=installed firmware=bios edition=community' ]] || { echo 'Valid Community self-check did not pass.' >&2; exit 1; }
 grep -Fqx 'Requires=shelly-keyring-init.service' "$service" || { echo 'Acceptance service does not require successful keyring initialization.' >&2; exit 1; }
 grep -Eq '^After=.*\bshelly-keyring-init\.service\b' "$service" || { echo 'Acceptance service is not ordered after keyring initialization.' >&2; exit 1; }
-grep -Fqx 'Requires=shelly-storage-migrate.service' "$project_dir/archiso/airootfs/etc/systemd/system/shelly-keyring-init.service" || { echo 'Keyring initialization does not require Shelly storage migration.' >&2; exit 1; }
+grep -Fqx 'Requires=shelly-storage-migrate.service' "$project_dir/iso/airootfs/etc/systemd/system/shelly-keyring-init.service" || { echo 'Keyring initialization does not require Shelly storage migration.' >&2; exit 1; }
 rm -f "$root/var/lib/devario/shelly-keyring.ready"
 if "$check" --root "$root" --mode installed --firmware bios --edition community >/dev/null 2>&1; then echo 'Self-check passed without the keyring-ready marker.' >&2; exit 1; fi
 : > "$root/var/lib/devario/shelly-keyring.ready"

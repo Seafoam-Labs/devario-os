@@ -389,6 +389,8 @@ devario_compose_profile() {
     [ckbcomp]=1
     [devario-alpm-runtime]=1
     [devario-aqueous-desktop]=1
+    [devario-filesystem]=1
+    [seafoam-keyring]=1
     [devario-base]=1
     [devario-keyring]=1
     [greetd]=1

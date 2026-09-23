@@ -22,7 +22,7 @@ devario_is_plain_file() {
 
 devario_validate_repository_name() {
   case "$1" in
-    devario-core|devario-managed) return 0 ;;
+    devario-core|seafoam-labs|devario-managed) return 0 ;;
     *) devario_repository_error "unsupported repository identity: $1" ;;
   esac
 }
@@ -83,8 +83,8 @@ devario_load_package_sources() {
       continue
     fi
     if LC_ALL=C grep -q '[^ -~]' <<< "$line" \
-      || [[ ! "$line" =~ ^([A-Za-z0-9@._+][A-Za-z0-9@._+-]*)=(arch|core|managed)$ ]]; then
-      devario_repository_error "package-sources.conf line $line_number must be package_name=arch|core|managed"
+      || [[ ! "$line" =~ ^([A-Za-z0-9@._+][A-Za-z0-9@._+-]*)=(arch|core|seafoam|managed)$ ]]; then
+      devario_repository_error "package-sources.conf line $line_number must be package_name=arch|core|seafoam|managed"
       return 1
     fi
     package="${BASH_REMATCH[1]}"
@@ -123,9 +123,9 @@ devario_keyring_paths() {
     DEVARIO_KEYRING_TRUSTED="$bundle_dir/devario-trusted"
     DEVARIO_KEYRING_REVOKED="$bundle_dir/devario-revoked"
   else
-    DEVARIO_KEYRING_PUBLIC="$bundle_dir/devario-managed.gpg"
-    DEVARIO_KEYRING_TRUSTED="$bundle_dir/devario-managed-trusted"
-    DEVARIO_KEYRING_REVOKED="$bundle_dir/devario-managed-revoked"
+    DEVARIO_KEYRING_PUBLIC="$bundle_dir/$repository_name.gpg"
+    DEVARIO_KEYRING_TRUSTED="$bundle_dir/$repository_name-trusted"
+    DEVARIO_KEYRING_REVOKED="$bundle_dir/$repository_name-revoked"
   fi
   DEVARIO_KEYRING_ACTIVE="$bundle_dir/active-signer"
 }
@@ -287,7 +287,7 @@ devario_verify_keyring_package() {
   local listing member_listing count temporary_dir extracted error_message=''
   local -a source_files=() installed_files=()
   devario_keyring_paths "$bundle_dir" "$repository_name" || return 1
-  if [[ "$repository_name" == devario-core ]]; then prefix=devario-core; else prefix=devario-managed; fi
+  prefix="$repository_name"
   source_files=(
     "$DEVARIO_KEYRING_PUBLIC" "$DEVARIO_KEYRING_TRUSTED"
     "$DEVARIO_KEYRING_REVOKED" "$DEVARIO_KEYRING_ACTIVE"

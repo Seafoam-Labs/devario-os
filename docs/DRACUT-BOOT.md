@@ -25,10 +25,9 @@ repository compatibility alone does not enable every external kernel.
 
 The builder invokes `/usr/lib/devario/initramfs-update --mode live` after package
 hooks, DKMS, and overlays, before copying boot files. This always produces a
-generic image with embedded microcode. Archiso is the current media assembler;
-the fourth vendor patch only calls Devario's implementation. Use a fresh work
-directory when package/profile inputs change; Archiso's package-install cache
-is not an input-aware incremental build system.
+generic image with embedded microcode. The pinned `devario-iso-builder` assembles
+BIOS/UEFI media from a declarative profile. Every invocation requires a fresh
+work directory; no cached package-install stages are reused.
 
 Calamares copies `/run/devario/install-root`, a read-only bind of dracut's
 pristine `/run/rootfsbase`. It never copies the writable live overlay. The source

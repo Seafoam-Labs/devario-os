@@ -26,12 +26,12 @@ replacement alone cannot complete the migration.
 
 | Area | Current integration | Planned change |
 | --- | --- | --- |
-| ISO packages | `archiso/packages.x86_64` includes `mkinitcpio` and `mkinitcpio-archiso` | Select Devario's dracut package, boot integration package, and live dependencies |
+| ISO packages | `iso/packages.x86_64` includes `mkinitcpio` and `mkinitcpio-archiso` | Select Devario's dracut package, boot integration package, and live dependencies |
 | Edition contract | `scripts/lib/edition.sh` makes both packages immutable | Protect the replacement boot stack |
-| Live generation | `archiso/airootfs/etc/mkinitcpio.conf.d/archiso.conf` and `etc/mkinitcpio.d/linux-cachyos-lts.preset` | Separate dracut live configuration and explicit generation step |
+| Live generation | `iso/airootfs/etc/mkinitcpio.conf.d/archiso.conf` and `etc/mkinitcpio.d/linux-cachyos-lts.preset` | Separate dracut live configuration and explicit generation step |
 | Builder | Vendored Archiso v89 plus three patches in `tools/devario-archiso/` | Invoke Devario's generation command through a replaceable builder adapter |
 | Installer | `initcpiocfg`, `initcpio`, and preset copying in Calamares | Target dracut configuration and generation before Limine |
-| Installer source | `unpackfs.conf` copies `/run/archiso/airootfs` | Preserve a stable mounted, pristine installation source under dracut |
+| Installer source | `unpackfs.conf` copies `/run/iso/airootfs` | Preserve a stable mounted, pristine installation source under dracut |
 | Installed boot | `usr/lib/devario/limine-update` consumes fixed kernel/initramfs names | Preserve names; verify encryption, subvolume, and microcode handling |
 | Updates | Shelly loads `/usr/share/libalpm/hooks/`; Limine has a `95-` hook | Devario owns boot updates; Shelly hooks translate transaction events |
 | Validation | `scripts/validate.sh` asserts mkinitcpio presets and Archiso paths | Assert dracut configuration and actual generated-image behavior |
@@ -172,9 +172,9 @@ replacement alone cannot complete the migration.
    Wire the patch into `scripts/build-iso.sh`, source validation, and the vendor
    README. Keep the pinned Archiso archive unchanged. Install live configuration
    in a way that cannot influence installed-system rebuilds, and register any
-   executable helpers in `archiso/profiledef.sh` permissions.
+   executable helpers in `iso/profiledef.sh` permissions.
 
-   Replace the two mkinitcpio packages in `archiso/packages.x86_64` with the
+   Replace the two mkinitcpio packages in `iso/packages.x86_64` with the
    Devario dracut and boot integration packages, update the immutable package
    set in `scripts/lib/edition.sh`, and remove obsolete live
    configuration/presets once their replacements are working. Update BIOS,

@@ -1,0 +1,30 @@
+pkgname=seafoam-keyring
+pkgver=20260923
+pkgrel=1
+pkgdesc="Seafoam Labs repository signing keys"
+arch=('any')
+url="https://github.com/Seafoam-Labs/devario-os"
+license=('CC0-1.0')
+source=(
+  'seafoam-labs.gpg'
+  'seafoam-labs-trusted'
+  'seafoam-labs-revoked'
+  'active-signer'
+)
+sha256sums=(
+  'e4a35b1431350637d8babb5358865953f130e3b706c0d02e3babdb5e481a576a'
+  '442d605891a618ef4783f018521aac8bb609b1abb67f9db21ae4c94b642a1c03'
+  'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+  '0a08e600db32175055ed10052427e97425f6f626c273e0e95b722ea423769cab'
+)
+
+package() {
+  install -Dm644 "$srcdir/seafoam-labs.gpg" \
+    "$pkgdir/usr/share/pacman/keyrings/seafoam-labs.gpg"
+  install -Dm644 "$srcdir/seafoam-labs-trusted" \
+    "$pkgdir/usr/share/pacman/keyrings/seafoam-labs-trusted"
+  install -Dm644 "$srcdir/seafoam-labs-revoked" \
+    "$pkgdir/usr/share/pacman/keyrings/seafoam-labs-revoked"
+  install -Dm644 "$srcdir/active-signer" \
+    "$pkgdir/usr/share/devario/keyrings/seafoam-labs-active-signer"
+}

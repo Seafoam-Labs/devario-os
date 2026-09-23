@@ -59,7 +59,7 @@ jq -e --arg manifest "$(sha "$manifest")" --arg signature "$(sha "$manifest_sign
   .controlledBuilder.manifestSha256==$manifest and .controlledBuilder.manifestSignatureSha256==$signature and
   .controlledBuilder.rootTreeSha256==$builder[0].rootTreeSha256 and
   .controlledBuilder.dependencyClosureSha256==$builder[0].dependencyClosureSha256 and
-  .archSnapshot==$builder[0].archSnapshot and .bootstrap==$builder[0].bootstrap and .shellyBootstrap==$builder[0].shellyBootstrap
+  .repositorySnapshot==$builder[0].repositorySnapshot and .bootstrap==$builder[0].bootstrap and .shellyBootstrap==$builder[0].shellyBootstrap
 ' "$input_lock" >/dev/null || { echo 'Controlled-builder manifest does not match the input lock.' >&2; exit 1; }
 python3 "$project_dir/scripts/verify-builder-attestation.py" --attestation "$attestation" --input-lock "$input_lock" --output-tree "$output_tree"
 if (( allow_pending )); then echo 'Validated canonical build evidence semantics and exact attested output closure.'; exit 0; fi

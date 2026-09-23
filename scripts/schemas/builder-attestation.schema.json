@@ -1,56 +1,265 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object", "additionalProperties": false,
-  "required": ["schemaVersion", "operation", "edition", "inputLockSha256", "coreCommit", "sourceDateEpoch", "controlledBuilder", "archSnapshot", "bootstrap", "shellyBootstrap", "builderObservation", "outputs"],
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "operation",
+    "edition",
+    "inputLockSha256",
+    "coreCommit",
+    "sourceDateEpoch",
+    "controlledBuilder",
+    "repositorySnapshot",
+    "bootstrap",
+    "shellyBootstrap",
+    "builderObservation",
+    "outputs",
+    "isoBuilder"
+  ],
   "properties": {
-    "schemaVersion": {"const": 1},
-    "operation": {"enum": ["packages", "external-packages", "iso"]},
-    "edition": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
-    "inputLockSha256": {"$ref": "#/$defs/sha256"},
-    "managedInputLockSha256": {"$ref": "#/$defs/sha256"},
-    "coreCommit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
-    "sourceDateEpoch": {"type": "integer", "minimum": 1},
-    "releaseVersion": {"$ref": "#/$defs/releaseVersion"},
-    "controlledBuilder": {"type": "object"},
-    "archSnapshot": {"type": "object"},
-    "bootstrap": {"type": "object"},
-    "shellyBootstrap": {"type": "object"},
-    "builderObservation": {
-      "type": "object", "additionalProperties": false,
-      "required": ["architecture", "markerSha256", "packageInventorySha256"],
-      "properties": {"architecture": {"const": "x86_64"}, "markerSha256": {"$ref": "#/$defs/sha256"}, "packageInventorySha256": {"$ref": "#/$defs/sha256"}}
+    "schemaVersion": {
+      "const": 2
     },
-    "outputs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/file"}}
+    "operation": {
+      "enum": [
+        "packages",
+        "external-packages",
+        "iso"
+      ]
+    },
+    "edition": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "inputLockSha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "managedInputLockSha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "coreCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sourceDateEpoch": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "releaseVersion": {
+      "$ref": "#/$defs/releaseVersion"
+    },
+    "controlledBuilder": {
+      "type": "object"
+    },
+    "repositorySnapshot": {
+      "type": "object"
+    },
+    "bootstrap": {
+      "type": "object"
+    },
+    "shellyBootstrap": {
+      "type": "object"
+    },
+    "builderObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "architecture",
+        "markerSha256",
+        "packageInventorySha256"
+      ],
+      "properties": {
+        "architecture": {
+          "const": "x86_64"
+        },
+        "markerSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "packageInventorySha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/file"
+      }
+    },
+    "isoBuilder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "revision",
+        "sha256"
+      ],
+      "properties": {
+        "repository": {
+          "const": "https://github.com/Seafoam-Labs/devario-iso-builder"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    }
   },
   "allOf": [
     {
-      "if": {"properties": {"operation": {"const": "iso"}}, "required": ["operation"]},
-      "then": {"required": ["releaseVersion"]},
-      "else": {"not": {"required": ["releaseVersion"]}}
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "iso"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "required": [
+          "releaseVersion"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "releaseVersion"
+          ]
+        }
+      }
     },
     {
       "if": {
         "anyOf": [
-          {"properties": {"operation": {"const": "external-packages"}}, "required": ["operation"]},
-          {"properties": {"operation": {"const": "iso"}, "edition": {"const": "managed"}}, "required": ["operation", "edition"]}
+          {
+            "properties": {
+              "operation": {
+                "const": "external-packages"
+              }
+            },
+            "required": [
+              "operation"
+            ]
+          },
+          {
+            "properties": {
+              "operation": {
+                "const": "iso"
+              },
+              "edition": {
+                "const": "managed"
+              }
+            },
+            "required": [
+              "operation",
+              "edition"
+            ]
+          }
         ]
       },
-      "then": {"required": ["managedInputLockSha256"]},
-      "else": {"not": {"required": ["managedInputLockSha256"]}}
+      "then": {
+        "required": [
+          "managedInputLockSha256"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "managedInputLockSha256"
+          ]
+        }
+      }
     }
   ],
   "$defs": {
-    "releaseVersion": {"type": "string", "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
-    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "releaseVersion": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
     "file": {
-      "type": "object", "additionalProperties": false,
-      "required": ["path", "mode"],
-      "properties": {"path": {"type": "string", "minLength": 1}, "mode": {"enum": ["100644", "100755", "120000"]}, "target": {"type": "string"}, "size": {"type": "integer", "minimum": 0}, "sha256": {"$ref": "#/$defs/sha256"}},
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "mode"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "enum": [
+            "100644",
+            "100755",
+            "120000"
+          ]
+        },
+        "target": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
       "allOf": [
         {
-          "if": {"properties": {"mode": {"const": "120000"}}, "required": ["mode"]},
-          "then": {"required": ["target"], "not": {"anyOf": [{"required": ["size"]}, {"required": ["sha256"]}]}},
-          "else": {"required": ["size", "sha256"], "not": {"required": ["target"]}}
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "120000"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "target"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "size"
+                  ]
+                },
+                {
+                  "required": [
+                    "sha256"
+                  ]
+                }
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "size",
+              "sha256"
+            ],
+            "not": {
+              "required": [
+                "target"
+              ]
+            }
+          }
         }
       ]
     }

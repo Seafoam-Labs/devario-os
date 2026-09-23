@@ -253,9 +253,9 @@ def build(args: argparse.Namespace) -> dict[str, object]:
         "controlled builder manifest signature": args.builder_manifest_signature,
         "dependency closure": args.dependency_closure,
     }
-    for repository in ("core", "extra"):
-        locked_files[f"Arch {repository} database"] = args.arch_snapshot_dir / f"{repository}.db"
-        locked_files[f"Arch {repository} database signature"] = args.arch_snapshot_dir / f"{repository}.db.sig"
+    for repository in ("devario-core", "seafoam-labs"):
+        locked_files[f"Repository {repository} database"] = args.repository_snapshot_dir / f"{repository}.db"
+        locked_files[f"Repository {repository} database signature"] = args.repository_snapshot_dir / f"{repository}.db.sig"
     resolved_files: dict[str, Path] = {}
     for label, value in locked_files.items():
         path = value.resolve(strict=True)
@@ -263,15 +263,15 @@ def build(args: argparse.Namespace) -> dict[str, object]:
             raise ValueError(f"{label} is missing or unsafe")
         resolved_files[label] = path
     bootstrap = resolved_files["bootstrap archive"]
-    arch_keyring = args.arch_keyring.resolve(strict=True)
-    if not arch_keyring.is_file() or arch_keyring.is_symlink():
-        raise ValueError("Arch release keyring is missing or unsafe")
+    bootstrap_keyring = args.bootstrap_keyring.resolve(strict=True)
+    if not bootstrap_keyring.is_file() or bootstrap_keyring.is_symlink():
+        raise ValueError("Bootstrap release keyring is missing or unsafe")
     validate_credential_free_https_url(args.bootstrap_url, reject_latest=True)
     if not re.fullmatch(
-        r"https://archive\.archlinux\.org/repos/[0-9]{4}/[0-9]{2}/[0-9]{2}/",
-        args.arch_snapshot_url,
+        r"https://[a-z0-9.-]+(?::[0-9]{1,5})?/snapshots/[A-Za-z0-9._-]+/",
+        args.repository_snapshot_url,
     ):
-        raise ValueError("Arch snapshot URL must select an exact archive.archlinux.org date")
+        raise ValueError("Repository snapshot URL must select an immutable /snapshots/ identifier")
     if args.source_date_epoch != int(core_identity["sourceDateEpoch"]):
         raise ValueError("SOURCE_DATE_EPOCH must equal the verified core commit timestamp")
 
@@ -299,15 +299,15 @@ def build(args: argparse.Namespace) -> dict[str, object]:
         raise ValueError("dependency closure is not canonical JSON")
     dependency_closure = validate_dependency_closure(
         dependency_closure,
-        [resolved_files[f"Arch {repository} database"] for repository in ("core", "extra")],
+        [resolved_files[f"Repository {repository} database"] for repository in ("devario-core", "seafoam-labs")],
     )
 
-    verify_signature(resolved_files["bootstrap signature"], bootstrap, arch_keyring)
-    for repository in ("core", "extra"):
+    verify_signature(resolved_files["bootstrap signature"], bootstrap, bootstrap_keyring)
+    for repository in ("devario-core", "seafoam-labs"):
         verify_signature(
-            resolved_files[f"Arch {repository} database signature"],
-            resolved_files[f"Arch {repository} database"],
-            arch_keyring,
+            resolved_files[f"Repository {repository} database signature"],
+            resolved_files[f"Repository {repository} database"],
+            bootstrap_keyring,
         )
     if not args.core_keyring:
         raise ValueError("a core public-key bundle is required to verify Shelly bootstrap")
@@ -327,10 +327,14 @@ def build(args: argparse.Namespace) -> dict[str, object]:
     keyrings = []
     if args.core_repo:
         repositories.append(closure(args.core_repo, "devario-core", symlinks=True))
+    if args.seafoam_repo:
+        repositories.append(closure(args.seafoam_repo, "seafoam-labs", symlinks=True))
     if args.managed_repo:
         repositories.append(closure(args.managed_repo, "devario-managed", symlinks=True))
     if args.core_keyring:
         keyrings.append(closure(args.core_keyring, "devario-core"))
+    if args.seafoam_keyring:
+        keyrings.append(closure(args.seafoam_keyring, "seafoam-labs"))
     if args.managed_keyring:
         keyrings.append(closure(args.managed_keyring, "devario-managed"))
 
@@ -342,7 +346,8 @@ def build(args: argparse.Namespace) -> dict[str, object]:
         raise ValueError("release version is valid only for an ISO input lock")
 
     result = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
+        "isoBuilder": {k: v for k, v in json.loads((Path(__file__).resolve().parents[1] / "tools/devario-iso-builder/source.lock.json").read_text()).items() if k in ("repository", "revision", "sha256")},
         "operation": args.operation,
         "architecture": "x86_64",
         "core": core_identity,
@@ -359,15 +364,15 @@ def build(args: argparse.Namespace) -> dict[str, object]:
             "dependencyClosureSha256": hashlib.sha256(dependency_bytes).hexdigest(),
             "dependencyClosure": dependency_closure,
         },
-        "archSnapshot": {
-            "url": args.arch_snapshot_url,
+        "repositorySnapshot": {
+            "url": args.repository_snapshot_url,
             "databases": [
                 {
                     "repository": repository,
-                    "sha256": sha256(resolved_files[f"Arch {repository} database"]),
-                    "signatureSha256": sha256(resolved_files[f"Arch {repository} database signature"]),
+                    "sha256": sha256(resolved_files[f"Repository {repository} database"]),
+                    "signatureSha256": sha256(resolved_files[f"Repository {repository} database signature"]),
                 }
-                for repository in ("core", "extra")
+                for repository in ("devario-core", "seafoam-labs")
             ],
         },
         "bootstrap": {
@@ -393,7 +398,7 @@ def build(args: argparse.Namespace) -> dict[str, object]:
         if managed_lock_bytes != canonical(managed_lock_value):
             raise ValueError("managed input lock is not canonical JSON")
         result["managedInputLockSha256"] = hashlib.sha256(managed_lock_bytes).hexdigest()
-    for field in ("archSnapshot", "bootstrap", "shellyBootstrap"):
+    for field in ("repositorySnapshot", "bootstrap", "shellyBootstrap", "isoBuilder"):
         if builder_manifest[field] != result[field]:
             raise ValueError(f"controlled builder manifest does not match locked {field}")
     if builder_manifest["dependencyClosureSha256"] != result["controlledBuilder"]["dependencyClosureSha256"]:
@@ -415,9 +420,9 @@ def main() -> int:
     parser.add_argument("--bootstrap-archive", type=Path, required=True)
     parser.add_argument("--bootstrap-signature", type=Path, required=True)
     parser.add_argument("--bootstrap-url", required=True)
-    parser.add_argument("--arch-snapshot-dir", type=Path, required=True)
-    parser.add_argument("--arch-snapshot-url", required=True)
-    parser.add_argument("--arch-keyring", type=Path, required=True)
+    parser.add_argument("--repository-snapshot-dir", type=Path, required=True)
+    parser.add_argument("--repository-snapshot-url", required=True)
+    parser.add_argument("--bootstrap-keyring", type=Path, required=True)
     parser.add_argument("--shelly-bootstrap", type=Path, required=True)
     parser.add_argument("--shelly-bootstrap-signature", type=Path, required=True)
     parser.add_argument("--builder-manifest", type=Path, required=True)
@@ -429,6 +434,8 @@ def main() -> int:
     parser.add_argument("--release-version")
     parser.add_argument("--core-repo", type=Path)
     parser.add_argument("--core-keyring", type=Path)
+    parser.add_argument("--seafoam-repo", type=Path)
+    parser.add_argument("--seafoam-keyring", type=Path)
     parser.add_argument("--managed-repo", type=Path)
     parser.add_argument("--managed-keyring", type=Path)
     parser.add_argument("--managed-input-lock", type=Path)

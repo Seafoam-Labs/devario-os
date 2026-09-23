@@ -26,7 +26,7 @@ note() {
   echo "devario-limine: $*"
 }
 
-# The hook is already present while Archiso assembles the live root. Only an
+# The hook is already present while the Devario builder assembles the live root. Only an
 # explicit Calamares install, or a system marked by one, is a deployable target.
 if [[ "$install_mode" != true && ! -e "$installed_marker" ]]; then
   note "target installation marker is absent; skipping live-image transaction"

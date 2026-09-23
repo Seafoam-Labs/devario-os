@@ -141,16 +141,6 @@ for hook in 60-dracut-remove 90-dracut-install 60-mkinitcpio-remove 90-mkinitcpi
   [[ "$(readlink "$test_root/package/etc/shelly.d/hooks/$hook.hook")" == /dev/null ]] || fail "competing hook: $hook"
 done
 
-# All four vendor patches apply together and invoke Devario before copying images.
-mkdir "$test_root/vendor"
-bsdtar -xf "$project_dir/tools/devario-archiso/archiso-v89.tar.gz" -C "$test_root/vendor"
-for patch_file in "$project_dir"/tools/devario-archiso/*.patch; do
-  patch --fuzz=0 -d "$test_root/vendor/archiso-v89" -Np1 < "$patch_file" >/dev/null
-done
-bash -O extglob -n "$test_root/vendor/archiso-v89/archiso/mkarchiso"
-python3 - "$test_root/vendor/archiso-v89/archiso/mkarchiso" <<'PY'
-import pathlib, sys
-s = pathlib.Path(sys.argv[1]).read_text().split('_build_iso_base() {', 1)[1]
-assert s.index('_make_late_airootfs') < s.index('_make_devario_initramfs') < s.index('_make_boot_on_iso9660')
-PY
+# The independent assembler has its own package, mount and template contracts.
+python3 "$project_dir/scripts/run-iso-builder.py" --check
 echo 'Devario dracut generation, failure recovery, package and builder tests passed.'

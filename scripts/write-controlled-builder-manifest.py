@@ -33,8 +33,8 @@ def digest(path: Path) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root-tree-sha256", required=True)
-    parser.add_argument("--arch-snapshot-url", required=True)
-    parser.add_argument("--arch-snapshot-dir", type=Path, required=True)
+    parser.add_argument("--repository-snapshot-url", required=True)
+    parser.add_argument("--repository-snapshot-dir", type=Path, required=True)
     parser.add_argument("--bootstrap-archive", type=Path, required=True)
     parser.add_argument("--bootstrap-signature", type=Path, required=True)
     parser.add_argument("--bootstrap-url", required=True)
@@ -50,18 +50,19 @@ def main() -> int:
         if closure_bytes != canonical_closure:
             raise ValueError("dependency closure is not canonical JSON")
         data = {
-            "schemaVersion": 1,
+            "schemaVersion": 2,
+        "isoBuilder": {k: v for k, v in json.loads((Path(__file__).resolve().parents[1] / "tools/devario-iso-builder/source.lock.json").read_text()).items() if k in ("repository", "revision", "sha256")},
             "architecture": "x86_64",
             "rootTreeSha256": args.root_tree_sha256,
-            "archSnapshot": {
-                "url": args.arch_snapshot_url,
+            "repositorySnapshot": {
+                "url": args.repository_snapshot_url,
                 "databases": [
                     {
                         "repository": repository,
-                        "sha256": digest(args.arch_snapshot_dir / f"{repository}.db"),
-                        "signatureSha256": digest(args.arch_snapshot_dir / f"{repository}.db.sig"),
+                        "sha256": digest(args.repository_snapshot_dir / f"{repository}.db"),
+                        "signatureSha256": digest(args.repository_snapshot_dir / f"{repository}.db.sig"),
                     }
-                    for repository in ("core", "extra")
+                    for repository in ("devario-core", "seafoam-labs")
                 ],
             },
             "bootstrap": {
