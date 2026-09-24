@@ -4,7 +4,7 @@ Devario builds and signs `linux-cachyos-lts` in its own repository. The live
 and installed systems do not configure or trust a CachyOS binary repository.
 
 The recipe and configuration are derived from CachyOS `linux-cachyos-lts` at
-commit `972d31fe2cbfda19208501a9518152ab90cfa2cc`, currently packaging Linux
+commit `f6a87c3e8826aade3f62f15e968f9d6b99475909`, currently packaging Linux
 6.18.42. Devario deliberately changes the upstream processor selection to
 `generic_v1`; leaving it empty enables `X86_NATIVE_CPU` and can produce an ISO
 that only boots on the build machine's CPU class.
