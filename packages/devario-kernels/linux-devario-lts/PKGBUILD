@@ -85,27 +85,27 @@ _is_ci_build() {
     return $?
 }
 
-_pkgsuffix=cachyos-lts
+_pkgsuffix=devario-lts
 
 pkgbase="linux-$_pkgsuffix"
 _major=6.18
-_minor=52
+_minor=54
 #_minorc=$((_minor+1))
 #_rcver=rc8
 pkgver=${_major}.${_minor}
 _tagrel=1
 # Devario rebuild 1 of the upstream release, with a baseline x86-64 target.
-pkgrel=1.2
+pkgrel=1.1
 _stable=${_major}.${_minor}
 #_stable=${_major}
 #_stablerc=${_major}-${_rcver}
-_srctag=cachyos-${_major}.${_minor}-${_tagrel}
+_srctag=devario-${_major}.${_minor}-${_tagrel}
 _srcname=${_srctag}
-pkgdesc='Linux EEVDF + Cachy Sauce Kernel by CachyOS with other patches and improvements - Long Term Service'
+pkgdesc='Linux EEVDF by Devario with other patches and improvements - Long Term Service'
 _kernver="$pkgver-$pkgrel"
 _kernuname="${pkgver}-${_pkgsuffix}"
 arch=('x86_64')
-url="https://github.com/CachyOS/linux-cachyos"
+url="https://github.com/Seafoam-Labs/linux"
 license=('GPL-2.0-only')
 options=('!strip' '!debug' '!lto')
 makedepends=(
@@ -131,7 +131,7 @@ makedepends=(
 )
 
 source=(
-    "https://github.com/CachyOS/linux/releases/download/${_srctag}/${_srctag}.tar.gz"
+    "https://github.com/Seafoam-Labs/linux/releases/download/${_srctag}/${_srctag}.tar.gz"
     "config"
 )
 
@@ -533,5 +533,5 @@ for _p in "${pkgname[@]}"; do
     }"
 done
 
-b2sums=('80588ceec3ae2234a0396f9f5eedbca9162971c0f17f9ede19e1b7a8b2962077b061e5e4bdfa3c2af4466389f4474ce7e3a41250496772c84cd89c2efff1060d'
+b2sums=('d75b28308a20afebec1801c3517f54b3399b6a6e1423bf0066aad9da3c34029cbc3a7fb946a7a72bb7a0de12c203118bf1a4d9e474329159b8dc4b74b6de62c2'
         'ce16b1ba8acf0b47d212dcafe33f12c85643c57bab78e2dc9000ee495532c0c15d921d085dd778e02014cbf498ccf87efd6eb918033ee0fcc8a5850a48d96ce8')
