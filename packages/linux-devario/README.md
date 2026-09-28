@@ -7,13 +7,13 @@ The release tag resolves to commit
 `00a4b3afc99f9413ff9ad168c2fdbe3f788eb9e5`. It is deliberately independent of
 the moving `7.2/devario` branch.
 
-Makepkg clones the private repository using its Git source handler, checks out
-`devario-7.2.7-1`, and verifies the tag signature against the pinned release
-signer, `399521CE9D6D65B35EEF0F8C79AFA05ABDB26C5A` (Piotr Gorski).
-`prepare()` additionally rejects a checkout whose commit differs from the pin
-above. The Git source uses `SKIP` for its archive checksum; the config and
-included public key retain pinned SHA-256 checksums. Package signing uses the
-repository owner's separate signing key.
+Makepkg reads the release archive and detached signature from this directory.
+The archive, signature, config, and public key all have pinned SHA-256 checksums.
+Makepkg verifies the archive signature against release signer
+`399521CE9D6D65B35EEF0F8C79AFA05ABDB26C5A` (Piotr Gorski). The commit above
+records the release's source provenance; the archive is authenticated through
+its checksum and signature rather than a Git checkout. Package signing uses
+the repository owner's separate signing key.
 
 The configuration is adapted from Devario's existing
 `packages/linux-cachyos-lts/config`, then normalized with this release's
@@ -32,61 +32,52 @@ version. Neither package replaces or conflicts with `linux-cachyos-lts`.
 
 ## Build with Remora
 
-Register the package as **`linux-devario`** and upload these three flat files:
+Register the package as **`linux-devario`** and place these five files together
+at one level in its source directory:
 
 ```text
 PKGBUILD
 config
 release-signing-key.pub
+devario-7.2.7-1.tar.gz
+devario-7.2.7-1.tar.gz.asc
 ```
 
-No source archive or detached archive signature is needed. `.SRCINFO` and
-`README.md` are optional local documentation/metadata; omit `.SRCINFO` from
-Remora's web uploader, which rejects dotfiles.
+Use the supplied release asset, not a newly generated GitHub source snapshot:
+its bytes must match the pinned checksum. The builder needs no GitHub access.
+`.SRCINFO` and `README.md` are optional metadata/documentation; omit `.SRCINFO`
+from Remora's web uploader, which rejects dotfiles.
+
+The inspected Remora uploader limits each file to 1 MiB, while this archive is
+approximately 254 MiB. If that limit remains on your server, upload the four
+small input files and copy the tarball directly into the same server-side
+package directory (`<PkgbuildsDir>/<repository-id>/linux-devario/`) before
+queueing. Alternatively, register the complete directory as a local source.
+A server with a sufficiently increased upload limit can accept all five inputs
+through its uploader.
 
 Use Remora's **Makepkg** engine (`SystemSettings.BuildEngine = Makepkg`) on
-an x86-64 Arch-compatible builder with `base-devel`, Git, dependency
-installation, and package signing configured. Enable copying the uploaded
-package to its build workspace. A complete mirror of the kernel Git repository
-can require substantial disk space and download time on the first build.
+an x86-64 Arch-compatible builder with `base-devel`, dependency installation,
+and package signing configured. Enable copying the uploaded package into the
+build workspace. The inspected Shelly 3.1.6 engine rejects this large local
+archive during review because of its 32 MiB local-file limit.
 
-Before enqueueing:
+Before enqueueing, import the source signing key into Remora's configured
+**build user's** GPG keyring, replacing the example account and path:
 
-1. Configure noninteractive HTTPS Git access to `Seafoam-Labs/linux` for
-   Remora's configured **build user**. The service account's GitHub access alone
-   is insufficient if builds run as a different user. Keep credentials outside
-   the PKGBUILD and uploaded files.
-2. Ensure that authentication also works under makepkg: current makepkg ignores
-   the user's global Git config and reads `/etc/makepkg.d/gitconfig` (or the
-   file selected by `MAKEPKG_GIT_CONFIG`). For a build user already authenticated
-   with GitHub CLI, the administrator can configure that file with:
+```sh
+sudo -u builder gpg --import /path/to/linux-devario/release-signing-key.pub
+```
 
-   ```gitconfig
-   [credential "https://github.com"]
-       helper =
-       helper = !/usr/bin/gh auth git-credential
-   ```
-
-   This example requires `gh` on the builder and GitHub CLI credentials
-   accessible to the build user. An existing noninteractive credential helper
-   can be configured there instead. Test access as the build user with the same
-   Git configuration and environment that Remora uses.
-3. Import the source signing key into that user's GPG keyring, replacing the
-   example account and path with your settings:
-
-   ```sh
-   sudo -u builder gpg --import /path/to/linux-devario/release-signing-key.pub
-   ```
-
-   The public source key does not replace the builder's own private
-   package-signing key.
+Makepkg verifies sources before running `prepare()`, so the import must happen
+before the job. This public key does not replace the builder's own private
+package-signing key.
 
 Remora runs `makepkg --verifysource --noconfirm`, followed by
 `makepkg -sr --sign -f --noconfirm`, and collects both split packages using
-`makepkg --packagelist`. These commands clone/update the source automatically.
-The builder must support authentication, dependency installation, and signing
-without interactive prompts. Shelly engine support for this private signed Git
-source has not been validated.
+`makepkg --packagelist`. The builder must support dependency installation and
+signing without interactive prompts. All kernel sources are supplied locally;
+no clone or authenticated source download is performed.
 
 Rust requires matching `rust-src`, and bindgen requires libclang; these are
 declared in `makedepends`. Set `MAKEFLAGS` in the builder's makepkg configuration
@@ -114,15 +105,14 @@ compile NVIDIA DKMS against the headers, and test BIOS/UEFI boot, dracut
 generation, and a kernel upgrade. Source verification and successful
 configuration preparation alone do not establish those results.
 
-Checked on 2026-09-27: Bash syntax, makepkg metadata, local source checksums,
-Git tag signature, pinned commit, and `prepare()` from a Git checkout. Validation
-used a shallow clone of the release tag with `makepkg --nobuild --nodeps
---holdver`; the resulting kernel release is `7.2.7-1-devario`, with GCC/BFD,
-LTO disabled, x86-64-v3 selected, and Rust enabled. The earlier archive-based recipe also passed
-`modules_prepare`. A full mirror download, Remora job, complete kernel/package
-build, and boot/DKMS tests have not yet been run.
+Checked on 2026-09-27: Bash syntax, makepkg metadata, all local source checksums,
+archive signature, extraction, and `prepare()` passed with GCC/BFD, LTO disabled,
+x86-64-v3 selected, and Rust enabled. The kernel release is `7.2.7-1-devario`.
+An earlier archive-based configuration also passed `modules_prepare`. A complete
+kernel/package build, Remora job, and boot/DKMS tests have not yet been run.
 
 For an upstream update, change `_tag`, `_commit`, `_source_epoch`, `pkgver`,
-and normalized config/checksum together; verify the new tag's signing key.
-For a packaging-only rebuild, increment `pkgrel`; `_tag` remains unchanged.
-Regenerate `.SRCINFO` with `makepkg --printsrcinfo > .SRCINFO`.
+archive/signature checksums, and normalized config/checksum together; verify
+the new release's signing key. For a packaging-only rebuild, increment
+`pkgrel`; `_tag` remains unchanged. Regenerate `.SRCINFO` with
+`makepkg --printsrcinfo > .SRCINFO`.

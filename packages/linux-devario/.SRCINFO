@@ -13,7 +13,6 @@ pkgbase = linux-devario
 	makedepends = flex
 	makedepends = gcc
 	makedepends = gettext
-	makedepends = git
 	makedepends = kmod
 	makedepends = libelf
 	makedepends = llvm
@@ -31,11 +30,13 @@ pkgbase = linux-devario
 	options = !strip
 	options = !debug
 	options = !lto
-	source = devario-7.2.7-1::git+https://github.com/Seafoam-Labs/linux.git#tag=devario-7.2.7-1?signed
+	source = devario-7.2.7-1.tar.gz
+	source = devario-7.2.7-1.tar.gz.asc
 	source = config
 	source = release-signing-key.pub
 	validpgpkeys = 399521CE9D6D65B35EEF0F8C79AFA05ABDB26C5A
-	sha256sums = SKIP
+	sha256sums = ded1d9a0826e6c2cbf707467a30fb38e8ca3e9a95f74072abef3a44be238a29f
+	sha256sums = eaee93a2856366e9b43adeebb8d12d08898b7051f0dfa054f03b06619954ef6b
 	sha256sums = 061cb499b26c8290efc6d793f6eafba8d6960e38f758b9c6e109b7b5e61f2fa0
 	sha256sums = 3ea1546b77e17f279f854bc5a6cf9e9393fe67d323b2df1037038ebe4c4d5a63
 

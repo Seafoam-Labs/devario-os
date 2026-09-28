@@ -11,7 +11,7 @@ arch=('x86_64')
 url='https://github.com/Seafoam-Labs/linux'
 license=('GPL-2.0-only')
 makedepends=(
-  'bc' 'binutils' 'bison' 'clang' 'cpio' 'flex' 'gcc' 'gettext' 'git' 'kmod'
+  'bc' 'binutils' 'bison' 'clang' 'cpio' 'flex' 'gcc' 'gettext' 'kmod'
   'libelf' 'llvm' 'openssl' 'pahole' 'perl' 'python' 'rust' 'rust-bindgen'
   'rust-src' 'tar' 'xxhash' 'xz' 'zstd'
 )
@@ -23,15 +23,17 @@ _tag=devario-7.2.7-1
 _commit=00a4b3afc99f9413ff9ad168c2fdbe3f788eb9e5
 _source_epoch=1790264627
 source=(
-  # Makepkg clones the private repository and verifies the signed release tag.
-  # Configure Git authentication for Remora's build user outside this recipe.
-  "$_tag::git+https://github.com/Seafoam-Labs/linux.git#tag=$_tag?signed"
+  # Upload the signed release archive beside this recipe; no GitHub access is
+  # needed on the builder. Keep all input files at the same directory level.
+  "$_tag.tar.gz"
+  "$_tag.tar.gz.asc"
   'config'
   'release-signing-key.pub'
 )
 validpgpkeys=('399521CE9D6D65B35EEF0F8C79AFA05ABDB26C5A') # Piotr Gorski
 sha256sums=(
-  'SKIP' # Signed Git tag; prepare() also checks its exact commit.
+  'ded1d9a0826e6c2cbf707467a30fb38e8ca3e9a95f74072abef3a44be238a29f'
+  'eaee93a2856366e9b43adeebb8d12d08898b7051f0dfa054f03b06619954ef6b'
   '061cb499b26c8290efc6d793f6eafba8d6960e38f758b9c6e109b7b5e61f2fa0'
   '3ea1546b77e17f279f854bc5a6cf9e9393fe67d323b2df1037038ebe4c4d5a63'
 )
@@ -52,10 +54,6 @@ _make() {
 
 prepare() {
   cd "$_tag"
-  [[ "$(git rev-parse HEAD)" == "$_commit" ]] || {
-    error 'Release tag does not match the pinned commit.'
-    return 1
-  }
   [[ "$(_make -s kernelversion)" == "$pkgver" ]] || {
     error 'Release source does not match pkgver.'
     return 1
