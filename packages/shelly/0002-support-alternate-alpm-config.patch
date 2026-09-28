@@ -1,17 +1,10 @@
-From 3679d0b267d10d048ce76b8ae74c171a1f015bb6 Mon Sep 17 00:00:00 2001
 From: Devario maintainers <maintainers@devario.local>
-Date: Wed, 2 Sep 2026 13:35:15 -0400
-Subject: [PATCH] support alternate ALPM configuration
-
----
- Shelly.PackageManager/src/alpm/manager.zig | 3 ++-
- 1 file changed, 2 insertions(+), 1 deletion(-)
+Subject: [PATCH] 0002-support-alternate-alpm-config.patch
 
 diff --git a/Shelly.PackageManager/src/alpm/manager.zig b/Shelly.PackageManager/src/alpm/manager.zig
-index e436d34..01898f2 100644
 --- a/Shelly.PackageManager/src/alpm/manager.zig
 +++ b/Shelly.PackageManager/src/alpm/manager.zig
-@@ -208,7 +208,8 @@ pub const Manager = struct {
+@@ -260,7 +260,8 @@
          environ: std.process.Environ,
          options: InitOptions,
      ) InitError!*Manager {
@@ -20,6 +13,3 @@ index e436d34..01898f2 100644
 +            (environ.getPosix("SHELLY_ALPM_CONFIG") orelse "/etc/pacman.conf");
          const self = allocator.create(Manager) catch return InitError.InitFailed;
          errdefer allocator.destroy(self);
-
---
-2.55.0

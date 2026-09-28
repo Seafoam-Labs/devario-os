@@ -647,15 +647,15 @@ if ! grep -Eq "['\"]libalpm\\.so=16-64['\"]" \
   fail "Shelly must depend on the libalpm.so.16 ABI"
 fi
 
-if ! grep -Fxq 'pkgver=3.1.2' "$project_dir/packages/shelly/PKGBUILD"; then
-  fail "the Community Shelly package must track upstream 3.1.2"
+if ! grep -Fxq 'pkgver=3.1.6' "$project_dir/packages/shelly/PKGBUILD"; then
+  fail "the Community Shelly package must track upstream 3.1.6"
 fi
-if ! grep -Fxq '_commit=2172e9512a43ac001fe82b0f3809f785df89330f' \
+if ! grep -Fxq '_commit=d9d89773968a5a03beb5183c1101e0235e4f3524' \
   "$project_dir/packages/shelly/PKGBUILD" \
   || ! grep -Fq \
-    "'202949f096b4e2715ff0928b3d8e35b5cfe80e79ca392cbad4ed2b1ab854044f'" \
+    "'025329c8972e592b72fa7955bd6cea76ddd723278a9dfa148b83cae4f999c923'" \
     "$project_dir/packages/shelly/PKGBUILD"; then
-  fail "Shelly 3.1.2 must be pinned to its verified release commit archive"
+  fail "Shelly 3.1.6 must be pinned to its verified release commit archive"
 fi
 
 if grep -Eq "['\"]pacman([<>=][^'\"]*)?['\"]" \
@@ -672,7 +672,7 @@ if ! grep -Fq "'0001-remove-pacman-runtime-processes.patch'" \
   || ! grep -Fq 'sectionContains(files, "%FILES%", member_path)' \
     "$project_dir/packages/shelly/0001-remove-pacman-runtime-processes.patch" \
   || ! grep -Fq \
-    "'7cf4a7a59f90756c6ce7c7496d0a321f0728ac93d2cf7ac64f1ce6c046ca4d6e'" \
+    "'5f40ba156149bf1abf6b3b226cd3c25b07711a077cf593cd2e6e12fa1a42cc89'" \
     "$project_dir/packages/shelly/PKGBUILD"; then
   fail "Shelly must patch its remaining Pacman executable calls to native helpers"
 fi
@@ -682,7 +682,7 @@ if ! grep -Fq "'0002-support-alternate-alpm-config.patch'" \
   || ! grep -Fq 'SHELLY_ALPM_CONFIG' \
     "$project_dir/packages/shelly/0002-support-alternate-alpm-config.patch" \
   || ! grep -Fq \
-    "'292160e49be336d59622ed1fac0770add982184ecffef8a0d5de9822a1360922'" \
+    "'55310d154dbcff483e21e0953c7b679ce1a699ec14b09ba58b374d2aecf7922e'" \
     "$project_dir/packages/shelly/PKGBUILD"; then
   fail "Shelly must provide checksummed alternate ALPM config support"
 fi
@@ -693,7 +693,7 @@ if ! grep -Fq "'0003-use-shelly-runtime-paths.patch'" \
   || ! grep -Fq '/var/lib/shelly' \
     "$project_dir/packages/shelly/0003-use-shelly-runtime-paths.patch" \
   || ! grep -Fq \
-    "'e7233d315f77291cb809eb5440241445200231dcb2a632ef73e284e29c4336ec'" \
+    "'4f3ddd6dd229433a71263c7a0ed9f0f6690d676e0ec0e45f03bfee81bcc443d7'" \
     "$project_dir/packages/shelly/PKGBUILD"; then
   fail "Shelly must provide checksummed Shelly-owned runtime path defaults"
 fi
@@ -1425,6 +1425,10 @@ pacman_reference_is_allowed() {
       [[ "$text" == *0001-remove-pacman-runtime-processes.patch* ]]
       return
       ;;
+    packages/shelly/.SRCINFO)
+      [[ "$text" == $'\tsource = 0001-remove-pacman-runtime-processes.patch' ]]
+      return
+      ;;
     packages/shelly/0001-remove-pacman-runtime-processes.patch)
       # A removal patch necessarily contains the deleted upstream calls.
       return 0
@@ -1875,8 +1879,8 @@ if command -v bsdtar >/dev/null 2>&1; then
     if ! grep -Eq '^usr/bin/shelly-key$' <<< "$artifact_contents"; then
       fail "$(basename -- "$artifact") does not contain Shelly's native keyring helper"
     fi
-    if ! grep -Eq '^pkgver = 3\.1\.2-' <<< "$shelly_pkginfo"; then
-      fail "$(basename -- "$artifact") is not Shelly 3.1.2"
+    if ! grep -Eq '^pkgver = 3\.1\.6-' <<< "$shelly_pkginfo"; then
+      fail "$(basename -- "$artifact") is not Shelly 3.1.6"
     fi
     if ! grep -Fxq 'depend = libalpm.so=16-64' <<< "$shelly_pkginfo"; then
       fail "$(basename -- "$artifact") does not require the libalpm.so.16 ABI"

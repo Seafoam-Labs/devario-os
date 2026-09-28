@@ -28,7 +28,7 @@ _source_dir="pacman-${_upstream_commit}"
 # its install script skips pacman-key when that executable is absent.  This
 # versioned compatibility provide prevents the real pacman package from being
 # pulled into the image.  No pacman or pacman-key executable is shipped here.
-provides=("pacman=${pkgver}" 'libalpm.so')
+provides=("pacman=${pkgver}" 'libalpm.so=16-64')
 conflicts=('pacman')
 replaces=('pacman')
 backup=('etc/shelly.conf')

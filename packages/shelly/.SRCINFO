@@ -1,0 +1,49 @@
+pkgbase = shelly
+	pkgdesc = Shelly: a modern libalpm package manager for Devario
+	pkgver = 3.1.6
+	pkgrel = 1
+	url = https://github.com/Seafoam-Labs/Shelly-ALPM
+	arch = x86_64
+	license = GPL-3.0-only
+	makedepends = clang
+	makedepends = gettext
+	makedepends = go-md2man
+	makedepends = pkgconf
+	makedepends = ripgrep
+	makedepends = zig>=0.16
+	depends = devario-alpm-runtime>=7.1.0.r9.g54d9411-2
+	depends = libalpm.so=16-64
+	depends = gtk4
+	depends = glib2
+	depends = sudo
+	depends = tar
+	depends = bash
+	depends = git
+	depends = hicolor-icon-theme
+	depends = dbus
+	depends = glibc
+	depends = libarchive
+	depends = dconf
+	depends = gnupg
+	depends = zstd
+	depends = json-glib
+	depends = polkit
+	optdepends = fish: Fish shell completions
+	optdepends = zsh: Zsh shell completions
+	optdepends = libstarfish: dependency viewer for Arch packages
+	optdepends = shelly-flatpak-backend: Flatpak package-management support
+	optdepends = fuse2: run AppImages that require FUSE 2
+	provides = shelly=3.1.6
+	conflicts = shelly-git
+	conflicts = shelly-bin
+	backup = etc/shellybuild.conf
+	source = shelly-3.1.6.tar.gz::https://github.com/Seafoam-Labs/Shelly-ALPM/archive/d9d89773968a5a03beb5183c1101e0235e4f3524.tar.gz
+	source = 0001-remove-pacman-runtime-processes.patch
+	source = 0002-support-alternate-alpm-config.patch
+	source = 0003-use-shelly-runtime-paths.patch
+	sha256sums = 025329c8972e592b72fa7955bd6cea76ddd723278a9dfa148b83cae4f999c923
+	sha256sums = 5f40ba156149bf1abf6b3b226cd3c25b07711a077cf593cd2e6e12fa1a42cc89
+	sha256sums = 55310d154dbcff483e21e0953c7b679ce1a699ec14b09ba58b374d2aecf7922e
+	sha256sums = 4f3ddd6dd229433a71263c7a0ed9f0f6690d676e0ec0e45f03bfee81bcc443d7
+
+pkgname = shelly

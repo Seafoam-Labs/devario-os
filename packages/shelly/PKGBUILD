@@ -2,9 +2,9 @@
 # Upstream recipe: Seafoam Labs
 
 pkgname=shelly
-pkgver=3.1.2
+pkgver=3.1.6
 pkgrel=1
-_commit=2172e9512a43ac001fe82b0f3809f785df89330f
+_commit=d9d89773968a5a03beb5183c1101e0235e4f3524
 pkgdesc="Shelly: a modern libalpm package manager for Devario"
 arch=('x86_64')
 url="https://github.com/Seafoam-Labs/Shelly-ALPM"
@@ -54,10 +54,10 @@ source=(
   '0003-use-shelly-runtime-paths.patch'
 )
 sha256sums=(
-  '202949f096b4e2715ff0928b3d8e35b5cfe80e79ca392cbad4ed2b1ab854044f'
-  '7cf4a7a59f90756c6ce7c7496d0a321f0728ac93d2cf7ac64f1ce6c046ca4d6e'
-  '292160e49be336d59622ed1fac0770add982184ecffef8a0d5de9822a1360922'
-  'e7233d315f77291cb809eb5440241445200231dcb2a632ef73e284e29c4336ec'
+  '025329c8972e592b72fa7955bd6cea76ddd723278a9dfa148b83cae4f999c923'
+  '5f40ba156149bf1abf6b3b226cd3c25b07711a077cf593cd2e6e12fa1a42cc89'
+  '55310d154dbcff483e21e0953c7b679ce1a699ec14b09ba58b374d2aecf7922e'
+  '4f3ddd6dd229433a71263c7a0ed9f0f6690d676e0ec0e45f03bfee81bcc443d7'
 )
 _source_dir="Shelly-ALPM-${_commit}"
 

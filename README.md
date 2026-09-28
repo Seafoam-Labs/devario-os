@@ -118,13 +118,15 @@ services, and installer configuration must never invoke either executable, `pacs
 `devario-alpm-runtime` also advertises a versioned virtual `pacman` provider for optional compatible packages such as `archlinux-keyring`. It conflicts with and replaces the real package, but it does not contain either Pacman
 executable. This compatibility metadata is checked separately from the image-content rule.
 
-The packaged Shelly 3.1.2 source is patched at build time because upstream still delegates keyring and repository
-operations and isolated-root provisioning to legacy Pacman tools. Devario routes keyring actions through `shelly-key`
-or GnuPG, reads ownership and native-builder inventory information directly from `/var/lib/shelly`, defaults to
-`/etc/shelly.conf`, and supports `SHELLY_ALPM_CONFIG` for image roots. The package build and artifact validator enforce
-this boundary. Shelly's native non-isolated PKGBUILD builder is available, but `shelly build --isolated` is rejected
-until its root provisioning can be implemented without `pacstrap`. Existing installations are bridged during the
-package upgrade and materialized under the new paths by `shelly-storage-migrate.service` at the following boot.
+The Devario Shelly recipe targets upstream 3.1.6 and applies the distribution patches described in
+[`packages/shelly/README.md`](packages/shelly/README.md). Upstream now supplies native keyring and bootstrap
+operations. Devario pins keyring execution to `/usr/bin/shelly-key`, reads package ownership directly from the
+ALPM database, defaults to `/etc/shelly.conf` and `/var/lib/shelly`, and supports `SHELLY_ALPM_CONFIG` for image
+roots. The package build and artifact validator enforce this boundary. Shelly's native non-isolated PKGBUILD
+builder is available; `shelly build --isolated` remains rejected pending assessment of upstream's new root
+provisioning against Devario policy. Deployment belongs to the coordinated netinstall migration.
+Existing installations are bridged during the runtime package upgrade and materialized under the new paths by
+`shelly-storage-migrate.service` at the following boot.
 Verified legacy data is retained under `/var/lib/devario/shelly-path-migration/legacy`;
 `/usr/lib/devario/shelly-storage-migrate --rollback` can recreate current compatibility state during the rollback
 window.
