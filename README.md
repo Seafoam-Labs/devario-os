@@ -57,7 +57,23 @@ artifact. The Devario builder transaction also compares its requested package
 list with Shelly's installed inventory and refuses a partial root filesystem.
 
 The live and installed filesystems include `nvidia-open-dkms`, `nvidia-utils`,
-and the Devario kernel headers. A boot service detects NVIDIA PCI display
+and the Devario kernel headers. The desktop metapackage requires NVIDIA
+**615.71.09** for both driver packages. Before partitioning, Calamares detects
+NVIDIA display controllers and checks them against that release's open-driver
+PCI support table, including subsystem IDs. It verifies the packages, headers,
+DKMS sources, and firmware in the pristine installation payload. Unknown or
+unsupported NVIDIA hardware stops installation with a diagnostic.
+
+After copying the offline image, Calamares verifies or builds the modules for
+the target kernel and enables `NVIDIA_EARLY_KMS="true"` in the target's
+`/etc/devario-dracut.conf`. The active Devario boot builder includes and requests
+early loading of all four NVIDIA modules in both normal and fallback images,
+with firmware and modesetting configuration checked before publication.
+Non-NVIDIA installations retain the disabled default; the copied image still
+includes driver packages. See [the implementation plan](docs/CALAMARES-NVIDIA-PLAN.md)
+for scope, verification, and the future network-install integration.
+
+A boot service also detects NVIDIA PCI display
 controllers through sysfs, loads `nvidia_drm` with modesetting before greetd,
 and records `nvidia`, `partial`, `unavailable`, or `none` in
 `/run/devario/gpu-driver`. The `nvidia-utils` Nouveau blacklist is intentionally

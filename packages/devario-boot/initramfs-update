@@ -10,14 +10,16 @@ boot_dir=/boot
 config_dir=/usr/share/devario/dracut
 kernel_id=linux-cachyos-lts
 kernel_version=
+automation_config=/etc/devario-dracut.conf
 while (( $# )); do
   case "$1" in
-    --mode|--modules-root|--boot-dir|--config-dir|--kernel-id|--kver)
+    --mode|--modules-root|--boot-dir|--config-dir|--kernel-id|--kver|--automation-config)
       (( $# >= 2 )) || exit 64
       case "$1" in
         --mode) mode="$2" ;; --modules-root) modules_root="$2" ;;
         --boot-dir) boot_dir="$2" ;; --config-dir) config_dir="$2" ;;
         --kernel-id) kernel_id="$2" ;; --kver) kernel_version="$2" ;;
+        --automation-config) automation_config="$2" ;;
       esac
       shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 64 ;;
@@ -30,6 +32,49 @@ if [[ "$mode" == installed ]]; then
   mountpoint -q "$boot_dir" || { echo "$boot_dir must be mounted before updating boot files." >&2; exit 1; }
 fi
 [[ -s "$config_dir/$mode.conf" ]] || { echo "Missing $mode dracut configuration." >&2; exit 1; }
+nvidia_early_kms=false
+if [[ "$mode" == installed && -f "$automation_config" ]]; then
+  # Read only this setting back; other automation flags must not change the
+  # Devario fallback/UKI policy. Configuration is root-owned shell syntax.
+  nvidia_early_kms="$(NVIDIA_EARLY_KMS=false; source "$automation_config" || exit; printf '%s' "$NVIDIA_EARLY_KMS")"
+  case "$nvidia_early_kms" in
+    true|false) ;;
+    *) echo 'NVIDIA_EARLY_KMS must be true or false.' >&2; exit 1 ;;
+  esac
+fi
+nvidia_modules=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)
+nvidia_firmware=()
+if [[ "$nvidia_early_kms" == true ]]; then
+  for module in "${nvidia_modules[@]}"; do
+    # Inspect the selected tree, including --modules-root overrides, rather
+    # than accidentally finding modules in the build host's default tree.
+    module_files="$(find -L "$modules_root/$DEVARIO_KERNEL_VERSION" \
+      \( -name build -o -name source \) -prune -o -type f \
+      \( -name "${module}.ko" -o -name "${module}.ko.*" \
+      -o -name "${module//_/-}.ko" -o -name "${module//_/-}.ko.*" \) -print)"
+    if [[ -z "$module_files" || "$module_files" == *$'\n'* ]]; then
+      echo "Expected one $module module for $DEVARIO_KERNEL_VERSION; boot files were not changed." >&2
+      exit 1
+    fi
+    module_vermagic="$(modinfo -F vermagic "$module_files")"
+    [[ "${module_vermagic%% *}" == "$DEVARIO_KERNEL_VERSION" ]] || {
+      echo "$module was not built for $DEVARIO_KERNEL_VERSION." >&2; exit 1;
+    }
+    if [[ "$module" == nvidia ]]; then
+      nvidia_module_file="$module_files"
+      nvidia_version="$(modinfo -F version "$module_files")"
+      [[ -n "$nvidia_version" ]] || { echo 'Missing NVIDIA driver version.' >&2; exit 1; }
+    elif [[ "$(modinfo -F version "$module_files")" != "$nvidia_version" ]]; then
+      echo "NVIDIA module versions differ for $DEVARIO_KERNEL_VERSION." >&2
+      exit 1
+    fi
+  done
+  firmware_list="$(modinfo -F firmware "$nvidia_module_file")"
+  while IFS= read -r firmware; do
+    [[ -z "$firmware" ]] || nvidia_firmware+=("$firmware")
+  done <<< "$firmware_list"
+  (( ${#nvidia_firmware[@]} > 0 )) || { echo 'NVIDIA GSP firmware metadata is missing.' >&2; exit 1; }
+fi
 # Serialize direct invocations and package transactions on the same filesystem.
 exec 9>"$boot_dir/.devario-boot.lock"
 flock -x 9
@@ -63,13 +108,42 @@ if [[ "$mode" == live ]]; then
 else
   args+=(--hostonly --hostonly-mode sloppy)
 fi
+if [[ "$nvidia_early_kms" == true ]]; then
+  printf 'options nvidia_drm modeset=1\n' > "$stage/devario-nvidia.conf"
+  args+=(--force-drivers "${nvidia_modules[*]}"
+    --include "$stage/devario-nvidia.conf" /etc/modprobe.d/devario-nvidia.conf)
+fi
+inspect_nvidia() {
+  local contents="$1" module firmware
+  [[ "$nvidia_early_kms" == true ]] || return 0
+  for module in "${nvidia_modules[@]}"; do
+    grep -Eq "/${module//_/[-_]}\.ko(\.(xz|gz|zst))?$" "$contents" || {
+      echo "Generated initramfs lacks $module." >&2; return 1;
+    }
+  done
+  for firmware in "${nvidia_firmware[@]}"; do
+    # Require a regular payload file, not just a dangling firmware symlink.
+    # Drain the listing so pipefail cannot turn grep's early exit into SIGPIPE.
+    awk '$1 ~ /^-/ {print $9}' "$contents" | grep -Fx -e "usr/lib/firmware/$firmware" \
+      -e "usr/lib/firmware/$firmware.zst" -e "usr/lib/firmware/$firmware.xz" \
+      -e "lib/firmware/$firmware" -e "lib/firmware/$firmware.zst" \
+      -e "lib/firmware/$firmware.xz" >/dev/null || {
+      echo "Generated initramfs lacks NVIDIA firmware $firmware." >&2; return 1;
+    }
+  done
+  grep -Eq ' etc/modprobe.d/devario-nvidia.conf$' "$contents" || {
+    echo 'Generated initramfs lacks NVIDIA modesetting configuration.' >&2; return 1;
+  }
+}
 dracut "${args[@]}" "$stage/initramfs-$kernel_id.img"
 lsinitrd "$stage/initramfs-$kernel_id.img" > "$stage/default.contents"
 grep -Fq "lib/modules/$DEVARIO_KERNEL_VERSION/" "$stage/default.contents"
+inspect_nvidia "$stage/default.contents"
 if [[ "$mode" == installed ]]; then
   dracut "${args[@]}" --no-hostonly "$stage/initramfs-$kernel_id-fallback.img"
   lsinitrd "$stage/initramfs-$kernel_id-fallback.img" > "$stage/fallback.contents"
   grep -Fq "lib/modules/$DEVARIO_KERNEL_VERSION/" "$stage/fallback.contents"
+  inspect_nvidia "$stage/fallback.contents"
 fi
 # Generation/inspection and backup must succeed before replacing any active file.
 for file in "${files[@]}"; do

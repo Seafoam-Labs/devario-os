@@ -31,6 +31,38 @@ cat > "$test_root/bin/lsinitrd" <<'EOF'
 #!/bin/bash
 [[ "${FAIL_INSPECTION:-}" != yes ]] || exit 1
 echo usr/lib/modules/1.2-devario/kernel/driver.ko
+if [[ "${TEST_NVIDIA:-}" == yes ]]; then
+  for module in nvidia nvidia-modeset nvidia-uvm nvidia-drm; do
+    [[ "${OMIT_NVIDIA:-}" != "$module" ]] || continue
+    [[ "${OMIT_NVIDIA:-}" != fallback || "$1" != *fallback.img || "$module" != nvidia-drm ]] || continue
+    echo "-rw-r--r-- 1 root root 100 Jan 1 2026 usr/lib/modules/1.2-devario/updates/dkms/$module.ko.zst"
+  done
+  if [[ "${OMIT_NVIDIA:-}" != firmware ]]; then
+    echo '-rw-r--r-- 1 root root 100 Jan 1 2026 usr/lib/firmware/nvidia/615.71.09/gsp_tu10x.bin.zst'
+  fi
+  if [[ "${OMIT_NVIDIA:-}" != config ]]; then
+    echo '-rw-r--r-- 1 root root 100 Jan 1 2026 etc/modprobe.d/devario-nvidia.conf'
+  fi
+fi
+EOF
+cat > "$test_root/bin/modinfo" <<'EOF'
+#!/bin/bash
+printf '%s\n' "$*" >> "$TEST_ROOT/modinfo.calls"
+module_path="${*: -1}"
+[[ "$module_path" == "$TEST_ROOT/modules/1.2-devario/"* ]] || exit 1
+module="${module_path##*/}"
+[[ "${MISSING_MODULE:-}" != "${module%.ko}" ]] || exit 1
+if [[ "$*" == *'-F firmware'* ]]; then
+  echo nvidia/615.71.09/gsp_tu10x.bin
+elif [[ "$*" == *'-F vermagic'* ]]; then
+  echo "${MODULE_KERNEL:-1.2-devario} SMP"
+elif [[ "$*" == *'-F version'* ]]; then
+  if [[ "${MISMATCH_NVIDIA:-}" == yes && "$module" == nvidia_drm.ko ]]; then
+    echo 580.95.05
+  else
+    echo 615.71.09
+  fi
+fi
 EOF
 cat > "$test_root/bin/depmod" <<'EOF'
 #!/bin/bash
@@ -57,7 +89,8 @@ chmod +x "$test_root/bin/"*
 export PATH="$test_root/bin:$PATH"
 generate() {
   "$boot_package/initramfs-update" --modules-root "$test_root/modules" \
-    --boot-dir "$test_root/boot" --config-dir "$boot_package" "$@"
+    --boot-dir "$test_root/boot" --config-dir "$boot_package" \
+    --automation-config "$test_root/automation.conf" "$@"
 }
 generate --mode live
 [[ -s "$test_root/boot/initramfs-linux-cachyos-lts.img" ]] || fail 'live image absent'
@@ -98,6 +131,57 @@ grep -qx native-kernel "$test_root/boot/vmlinuz-linux-cachyos-lts" || fail 'new 
 [[ -s "$test_root/boot/initramfs-linux-cachyos-lts-fallback.img" ]] || fail 'installed fallback absent'
 generate --mode installed
 grep -qx old-kernel "$test_root/boot/devario-recovery/linux-cachyos-lts/vmlinuz-linux-cachyos-lts" || fail 'unconfirmed update overwrote recovery kernel'
+
+# NVIDIA must be complete for the target kernel in both images. Any missing
+# module or firmware must leave the working pair untouched.
+export TEST_NVIDIA=yes
+mkdir -p "$test_root/modules/1.2-devario/updates/dkms"
+for module in nvidia nvidia_modeset nvidia_uvm nvidia_drm; do
+  touch "$test_root/modules/1.2-devario/updates/dkms/$module.ko"
+done
+echo 'NVIDIA_EARLY_KMS="true"' > "$test_root/automation.conf"
+: > "$test_root/dracut.calls"
+generate --mode installed
+[[ "$(grep -c -- '--force-drivers nvidia nvidia_modeset nvidia_uvm nvidia_drm' "$test_root/dracut.calls")" == 2 ]] \
+  || fail 'NVIDIA was not requested for early loading in both images'
+grep -q -- '--include .* /etc/modprobe.d/devario-nvidia.conf' "$test_root/dracut.calls" \
+  || fail 'modesetting config was not explicitly included'
+echo working-kernel > "$test_root/boot/vmlinuz-linux-cachyos-lts"
+echo working-image > "$test_root/boot/initramfs-linux-cachyos-lts.img"
+echo working-fallback > "$test_root/boot/initramfs-linux-cachyos-lts-fallback.img"
+for module in nvidia nvidia_modeset nvidia_uvm nvidia_drm; do
+  export MISSING_MODULE="$module"
+  expect_failure generate --mode installed
+done
+unset MISSING_MODULE
+export MODULE_KERNEL=wrong-kernel
+expect_failure generate --mode installed
+unset MODULE_KERNEL
+export MISMATCH_NVIDIA=yes
+expect_failure generate --mode installed
+unset MISMATCH_NVIDIA
+mv "$test_root/modules/1.2-devario/updates/dkms/nvidia_uvm.ko" "$test_root/nvidia_uvm.ko"
+expect_failure generate --mode installed
+mv "$test_root/nvidia_uvm.ko" "$test_root/modules/1.2-devario/updates/dkms/nvidia_uvm.ko"
+for missing in nvidia nvidia-modeset nvidia-uvm nvidia-drm firmware config fallback; do
+  export OMIT_NVIDIA="$missing"
+  expect_failure generate --mode installed
+  grep -qx working-kernel "$test_root/boot/vmlinuz-linux-cachyos-lts" || fail 'NVIDIA validation replaced kernel'
+  grep -qx working-image "$test_root/boot/initramfs-linux-cachyos-lts.img" || fail 'NVIDIA validation replaced image'
+  grep -qx working-fallback "$test_root/boot/initramfs-linux-cachyos-lts-fallback.img" || fail 'NVIDIA validation replaced fallback'
+done
+unset OMIT_NVIDIA TEST_NVIDIA
+: > "$test_root/dracut.calls"
+: > "$test_root/modinfo.calls"
+generate --mode live
+[[ ! -s "$test_root/modinfo.calls" ]] || fail 'live generation queried NVIDIA hardware/modules'
+if grep -q -- '--force-drivers' "$test_root/dracut.calls"; then fail 'live generation inherited target NVIDIA configuration'; fi
+echo 'NVIDIA_EARLY_KMS="false"' > "$test_root/automation.conf"
+generate --mode installed
+[[ ! -s "$test_root/modinfo.calls" ]] || fail 'disabled NVIDIA policy queried modules'
+echo 'NVIDIA_EARLY_KMS="invalid"' > "$test_root/automation.conf"
+expect_failure generate --mode installed
+rm "$test_root/automation.conf"
 
 # Image signatures are required when verification is requested, including on
 # transports which supply a downloaded file rather than a block device.

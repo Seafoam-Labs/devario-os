@@ -22,14 +22,19 @@ find_nvidia_display_devices() {
     local class device vendor
 
     nvidia_devices=()
+    if [[ ! -d "$pci_devices_root" || ! -r "$pci_devices_root" || ! -x "$pci_devices_root" ]]; then
+        log "Cannot read PCI devices at $pci_devices_root" >&2
+        return 2
+    fi
     for device in "$pci_devices_root"/*; do
         [[ -d "$device" ]] || continue
-        [[ -r "$device/vendor" && -r "$device/class" ]] || continue
+        [[ -r "$device/vendor" && -r "$device/class" ]] || return 2
 
-        read -r vendor < "$device/vendor" || continue
-        read -r class < "$device/class" || continue
+        read -r vendor < "$device/vendor" || return 2
+        read -r class < "$device/class" || return 2
         vendor="${vendor,,}"
         class="${class,,}"
+        [[ "$vendor" =~ ^0x[0-9a-f]{4}$ && "$class" =~ ^0x[0-9a-f]{6}$ ]] || return 2
 
         # 0x10de is NVIDIA; PCI base class 0x03 is a display controller.
         # Matching the class excludes the GPU's separate HDMI audio function.
@@ -69,7 +74,7 @@ driver_state() {
 detect_only() {
     local device
 
-    find_nvidia_display_devices
+    find_nvidia_display_devices || return 2
     (( ${#nvidia_devices[@]} > 0 )) || return 1
     for device in "${nvidia_devices[@]}"; do
         printf '%s\n' "${device##*/}"
@@ -79,7 +84,11 @@ detect_only() {
 setup_driver() {
     local state
 
-    find_nvidia_display_devices
+    if ! find_nvidia_display_devices; then
+        write_state unavailable
+        log "PCI detection failed."
+        return 0
+    fi
     if (( ${#nvidia_devices[@]} == 0 )); then
         write_state none
         return 0

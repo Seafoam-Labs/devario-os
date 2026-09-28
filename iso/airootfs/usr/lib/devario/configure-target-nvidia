@@ -1,0 +1,195 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Verify the offline NVIDIA payload, then configure the installed target."""
+import argparse
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+
+HELPER = "/usr/lib/devario/configure-target-nvidia"
+SUPPORT = Path("/usr/share/devario/nvidia-supported-gpus.json")
+MODULES = ("nvidia", "nvidia_modeset", "nvidia_uvm", "nvidia_drm")
+FIRMWARE = ("gsp_tu10x.bin", "gsp_ga10x.bin", "ucodes_tu10x.bin", "ucodes_ga10x.bin")
+
+
+def log(message):
+    print(f"Devario NVIDIA: {message}", flush=True)
+
+
+def output(*args):
+    return subprocess.check_output(args, text=True).strip()
+
+
+def detect():
+    result = subprocess.run(["/usr/lib/devario/gpu-driver-setup", "--detect"],
+                            text=True, stdout=subprocess.PIPE, check=False)
+    if result.returncode == 1:
+        return []
+    if result.returncode != 0:
+        raise RuntimeError("Cannot inspect PCI hardware; detection did not complete")
+    root = Path(os.environ.get("DEVARIO_PCI_DEVICES_ROOT", "/sys/bus/pci/devices"))
+    devices = []
+    for address in result.stdout.splitlines():
+        if not re.fullmatch(r"[0-9a-fA-F]{4}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-7]", address):
+            raise RuntimeError("Invalid PCI address from detector")
+        ids = []
+        for field in ("device", "subsystem_vendor", "subsystem_device"):
+            value = (root / address / field).read_text().strip().lower()
+            if not re.fullmatch(r"0x[0-9a-f]{4}", value):
+                raise RuntimeError(f"Invalid {field} for {address}")
+            ids.append(value[2:])
+        devices.append({"address": address, "ids": ids})
+    if not devices:
+        raise RuntimeError("Detector returned success without a display controller")
+    return devices
+
+
+def check_support(devices, support):
+    supported = set(support["pciIds"])
+    for device in devices:
+        ids = device["ids"]
+        if len(ids) != 3 or any(not re.fullmatch(r"[0-9a-f]{4}", i) for i in ids):
+            raise RuntimeError("Malformed PCI device information")
+        if ids[0] not in supported and " ".join(ids) not in supported:
+            raise RuntimeError(f"Unsupported NVIDIA GPU {device['address']} ({' '.join(ids)}): "
+                               f"not supported by the {support['driverVersion']} open driver")
+        log(f"supported GPU {device['address']} ({' '.join(ids)})")
+
+
+def check_packages(version):
+    inventory = json.loads(output("shelly", "list", "standard", "--show-hidden", "--json"))
+    if not isinstance(inventory, list):
+        raise RuntimeError("Shelly did not return an installed package list")
+    packages = {p["Name"]: p["Version"] for p in inventory}
+    for name in ("nvidia-open-dkms", "nvidia-utils", "dkms", "gcc", "make", "patch"):
+        if name not in packages:
+            raise RuntimeError(f"Offline installation payload is missing {name}")
+        log(f"{name} {packages[name]}")
+    for name in ("nvidia-open-dkms", "nvidia-utils"):
+        upstream = packages[name].split(":")[-1].rsplit("-", 1)[0]
+        if upstream != version:
+            raise RuntimeError(f"{name} must be {version}, found {packages[name]}")
+    return packages
+
+
+def check_payload(devices, root=Path("/")):
+    support = json.loads((root / SUPPORT.relative_to("/")).read_text())
+    version = support["driverVersion"]
+    check_support(devices, support)
+    packages = check_packages(version)
+    # Use exactly the same kernel selection contract as prepare-target-kernel
+    # and boot-update. No uname or assumptions about the running live kernel.
+    kernel = output("bash", "-eu", "-c",
+                    'source /usr/lib/devario/kernel.sh; '
+                    'devario_kernel_select /usr/lib/modules linux-cachyos-lts; '
+                    'printf "%s" "$DEVARIO_KERNEL_VERSION"')
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._+-]*", kernel):
+        raise RuntimeError("Invalid target kernel version")
+    for name in ("linux-cachyos-lts", "linux-cachyos-lts-headers"):
+        if name not in packages:
+            raise RuntimeError(f"Offline installation payload is missing {name}")
+    if packages["linux-cachyos-lts"] != packages["linux-cachyos-lts-headers"]:
+        raise RuntimeError("Target kernel and header package versions differ")
+    build = root / "usr/lib/modules" / kernel / "build"
+    if not (build / "Makefile").is_file() or (build / "include/config/kernel.release").read_text().strip() != kernel:
+        raise RuntimeError(f"Headers do not match target kernel {kernel}")
+    if not (root / f"usr/src/nvidia-{version}/dkms.conf").is_file():
+        raise RuntimeError(f"Missing NVIDIA {version} DKMS sources")
+    for firmware in FIRMWARE:
+        base = root / f"usr/lib/firmware/nvidia/{version}/{firmware}"
+        if not any(Path(str(base) + suffix).is_file() for suffix in ("", ".zst", ".xz")):
+            raise RuntimeError(f"Missing NVIDIA firmware {base}")
+    log(f"verified offline payload for target kernel {kernel}")
+    return kernel, version
+
+
+def modules_ready(kernel, version):
+    try:
+        for module in MODULES:
+            if output("modinfo", "-k", kernel, "-F", "version", module) != version:
+                return False
+            if output("modinfo", "-k", kernel, "-F", "vermagic", module).split()[0] != kernel:
+                return False
+        return output("modinfo", "-k", kernel, "-F", "license", "nvidia") == "Dual MIT/GPL"
+    except (subprocess.CalledProcessError, IndexError):
+        return False
+
+
+def atomic_write(path, text):
+    path = Path(path)
+    if path.is_symlink():
+        raise RuntimeError(f"Refusing to replace configuration symlink: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    metadata = path.stat() if path.exists() else None
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            stream.write(text)
+            stream.flush()
+            os.fchmod(stream.fileno(), metadata.st_mode & 0o777 if metadata else 0o644)
+            if metadata:
+                os.fchown(stream.fileno(), metadata.st_uid, metadata.st_gid)
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def enable_kms(config=Path("/etc/devario-dracut.conf"),
+               modprobe=Path("/etc/modprobe.d/devario-nvidia.conf")):
+    previous = config.read_text() if config.exists() else ""
+    lines = [line for line in previous.splitlines(keepends=True)
+             if not re.match(r"^\s*(?:export\s+)?NVIDIA_EARLY_KMS\s*=", line)]
+    text = "".join(lines)
+    if text and not text.endswith("\n"):
+        text += "\n"
+    text += 'NVIDIA_EARLY_KMS="true"\n'
+    atomic_write(modprobe, "# Managed by the Devario installer.\noptions nvidia_drm modeset=1\n")
+    atomic_write(config, text)
+
+
+def configure(devices):
+    kernel, version = check_payload(devices)
+    if not modules_ready(kernel, version):
+        log(f"building NVIDIA {version} modules for {kernel}; DKMS logs are in /var/lib/dkms")
+        subprocess.run(["dkms", "autoinstall", "-k", kernel], check=True)
+    subprocess.run(["depmod", "-a", kernel], check=True)
+    if not modules_ready(kernel, version):
+        raise RuntimeError(f"NVIDIA {version} modules are incomplete or incompatible with {kernel}")
+    enable_kms()
+    log(f"enabled NVIDIA_EARLY_KMS for {version} / {kernel}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    modes = parser.add_mutually_exclusive_group()
+    for name in ("preflight", "check-payload", "configure"):
+        modes.add_argument(f"--{name}", action="store_const", const=name, dest="mode")
+    mode = parser.parse_args().mode or "configure"
+    if mode == "check-payload":
+        check_payload(json.load(sys.stdin))
+        return
+    devices = detect()
+    if not devices:
+        log("no NVIDIA display controllers; early KMS remains disabled")
+        return
+    if mode == "preflight":
+        # Validate the pristine root actually copied by unpackfs, not packages
+        # that might have been changed in the writable live session.
+        subprocess.run(["chroot", "/run/devario/install-root", HELPER, "--check-payload"],
+                       input=json.dumps(devices), text=True, check=True)
+    else:
+        configure(devices)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError, KeyError, RuntimeError, subprocess.CalledProcessError) as error:
+        print(f"Devario NVIDIA installation failed: {error}", file=sys.stderr)
+        sys.exit(1)

@@ -4,7 +4,7 @@
 # Devario boot and initramfs
 
 Devario owns its boot lifecycle. `devario-dracut` builds pinned upstream dracut
-111 and provides the compatible `dracut` and `initramfs` package capabilities.
+112 and provides the compatible `dracut` and `initramfs` package capabilities.
 `devario-boot` owns configuration, kernel discovery, initramfs generation,
 recovery files, and Limine deployment. Shelly's ALPM hooks are transaction
 adapters; the generator does not call a package manager or require Arch identity.
@@ -48,6 +48,16 @@ host command line. Limine supplies root, encryption, Btrfs subvolume, and resume
 arguments from target configuration. Initramfs files embed early microcode;
 Limine does not load a second external microcode image.
 
+Calamares validates NVIDIA 615.71.09 hardware compatibility and the offline
+payload before partitioning. After copying it, the installer verifies/builds
+the target kernel's NVIDIA modules and sets `NVIDIA_EARLY_KMS="true"` in
+`/etc/devario-dracut.conf`. Installed generation honors this flag, checks all
+four modules in the selected kernel tree, and forces early loading with DRM
+modesetting. Both generated images must contain the modules, their declared
+firmware, and modesetting configuration before either image is published.
+Live generation ignores this installed-system setting. Driver and firmware
+updates use the same checks through the existing post-DKMS boot hook.
+
 Generation requires mounted `/boot`, holds a lock, stages files on the boot
 filesystem, and inspects them with `lsinitrd` before publishing. Errors during
 publication attempt to restore the old files. This is not a filesystem-wide
@@ -67,7 +77,9 @@ sudo /usr/lib/devario/boot-update
 ```
 
 The lower-level generator accepts `--mode`, `--kver`, `--kernel-id`,
-`--modules-root`, `--boot-dir`, and `--config-dir`. Default policy files live in
+`--modules-root`, `--boot-dir`, `--config-dir`, and `--automation-config`.
+The last overrides `/etc/devario-dracut.conf` for installed generation.
+Default policy files live in
 `/usr/share/devario/dracut/`. Use an explicit configuration directory for custom
 generation; never regenerate an installed image with the live configuration.
 

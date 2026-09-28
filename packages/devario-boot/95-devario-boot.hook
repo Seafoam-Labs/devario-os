@@ -9,6 +9,7 @@ Target = usr/lib/modules/*/extramodules/*
 Target = usr/lib/modules/*/build/Makefile
 Target = usr/src/*/dkms.conf
 Target = usr/lib/firmware/*-ucode/*
+Target = usr/lib/firmware/nvidia/*
 
 [Trigger]
 Operation = Install
@@ -22,6 +23,7 @@ Target = lvm2
 Target = amd-ucode
 Target = intel-ucode
 Target = nvidia-open-dkms
+Target = nvidia-utils
 Target = linux-cachyos-lts-headers
 Target = limine
 

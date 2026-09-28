@@ -83,6 +83,11 @@ required_files=(
   "$profile_dir/airootfs/etc/calamares/modules/partition.conf"
   "$profile_dir/airootfs/etc/calamares/modules/limine.conf"
   "$profile_dir/airootfs/etc/calamares/modules/prepare_target.conf"
+  "$profile_dir/airootfs/etc/calamares/modules/nvidia_preflight.conf"
+  "$profile_dir/airootfs/etc/calamares/modules/nvidia.conf"
+  "$profile_dir/airootfs/usr/lib/devario/configure-target-nvidia"
+  "$profile_dir/airootfs/usr/share/devario/nvidia-supported-gpus.json"
+  "$project_dir/tests/test-configure-target-nvidia.py"
   "$profile_dir/airootfs/etc/calamares/modules/services-systemd.conf"
   "$profile_dir/airootfs/etc/greetd/config.toml"
   "$profile_dir/airootfs/etc/polkit-1/rules.d/49-devario-live-installer.rules"
@@ -263,6 +268,10 @@ done < <(find "$project_dir/release" "$project_dir/scripts" -maxdepth 1 -type f 
 
 if ! bash "$project_dir/tests/test-gpu-driver-setup.sh"; then
   fail "GPU driver setup behavior tests failed"
+fi
+if ! DEVARIO_PROFILE_DIR="$profile_dir" \
+  python3 "$project_dir/tests/test-configure-target-nvidia.py"; then
+  fail "Calamares NVIDIA installation behavior tests failed"
 fi
 if ! DEVARIO_PROFILE_DIR="$profile_dir" \
   bash "$project_dir/tests/test-prepare-target-kernel.sh"; then
@@ -487,7 +496,7 @@ declare -A pinned_desktop_sources=(
   ["packages/aqueous/wlroots-0.20.2.tar.gz"]='972c7ac44b17828f4702bfae7cd8347346a3fb5b2c1076cfa2c3fcedac5ec343'
   ["packages/aqueous/0001-devario-default-applications.patch"]='096170a6d8fdd2e582b6a0a0b95ee26988094934d1a622ea1f04321bf341027d'
   ["packages/devario-aqueous-desktop/devario-gpu-driver.service"]='5eaa5d9565feaf0b0447b0ff91bf1c1082c56740edd37968d25b09c518294470'
-  ["packages/devario-aqueous-desktop/gpu-driver-setup"]='0bdca27486e6dfb88a650cb2e7f70e4c6e2d813901c8d8274f4bc087de630634'
+  ["packages/devario-aqueous-desktop/gpu-driver-setup"]='533cfa381f0d7eb1ef1e5da15037992fd5f59c539cfe6d4a8f14e6d6d3aeb99f'
   ["packages/devario-aqueous-desktop/greetd-config.toml"]='16afecd6b0f64351c92ed780d1cdb5d3efa1e793b679da5dde98bb39a124e7d7'
   ["packages/devario-aqueous-desktop/greetd-gpu-driver.conf"]='a997663d00e362e780c6d29989bcb9dfdb50d5b00142322bee207d68be8c3801'
 )
