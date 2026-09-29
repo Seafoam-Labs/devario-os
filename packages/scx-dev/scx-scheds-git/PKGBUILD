@@ -1,0 +1,126 @@
+# Maintainer: Peter Jung ptr1337 <admin@ptr1337.dev>
+# Maintainer: Piotr Górski <lucjan.lucjanov@gmail.com>
+# Contributor: Tejun Heo <tj@kernel.org>
+
+# Available profiles: “release”, “release-tiny”, “release-fast“
+# See: https://github.com/sched-ext/scx/blob/main/Cargo.toml
+_mode=release
+
+pkgname=scx-scheds-git
+_gitname=scx
+pkgver=1.1.3.r462.g7b301d545
+pkgrel=1
+pkgdesc='sched_ext schedulers and tools'
+url='https://github.com/sched-ext/scx'
+arch=('x86_64')
+license=('GPL-2.0-only')
+depends=(
+  libseccomp
+  libelf
+  zlib
+)
+makedepends=(
+  cargo
+  clang
+  git
+  llvm
+  llvm-libs
+)
+optdepends=(
+'scx-tools: scx_loader, scxctl and scxtui - A DBUS Interface for Managing sched_ext Schedulers '
+)
+options=(!lto)
+provides=("scx-scheds")
+conflicts=("scx-scheds")
+source=("git+https://github.com/sched-ext/scx")
+sha256sums=('SKIP')
+
+_backports=(
+4e68aa81cdeb6c29fdd532a3ea01f6ea0d88da81 # scheds: Introduce scx_maestro
+a9c0fd1f02d9bfb58bc4c68843058ddf839d0ac7 # scx_maestro: Honor cgroup cpu.weight for tasks and sub-schedulers
+812938a996f06c8f43bc8c78bfb145d05f071ba5 # scx_maestro: Allow to enable/disable NUMA and SMT optimizations
+b5e2db1092a6e7192a4b25565ea740ae1e7cd2ea # scx_maestro: Don't update deadline in case of re-enqueue
+958c12d02d6feff15adc0cca14f354500533855b # scx_maestro: Introduce completely fair scheduling
+05f062f5676538efef58f5c5b41d94bd4baf78cd # scx_maestro: Make enqueue + CPU kick more reliable
+3a544f1e4c1ad98b49fbdff3820129d52eea5e5e # scx_maestro: Enforce preemption each tick on CPU contention
+aa97a262aff62e70213a1e0ab94d302d4002b0df # scx_maestro: Temporarily drop sub-sched support
+72f9da57751a0b186c9400f93c1dde1466587c17 # scx_maestro: bump to 1.1.1
+a851079797f2b36d81b04d1bbbf937f34884bbcc # scx_maestro: fix formatting
+035b3c06d48225212eef80197f685ca295bbdc26 # scx_maestro: bump to 1.1.2
+aabadd3bef560e0e7301cd7b9ebcd0211b280f5a # scx_maestro: Use scx_bpf_task_set_slice() setter
+adccda155f726a88cab955b803dfdd8528ec4d37 # scx_maestro: bump to 1.1.3
+fb4f0a93be7031877c742c19b6de940e0ddff3df # scx_maestro: bump libbpf to 0.27.0
+be10069d0e98e9716cc1742154b9e9e3fa0c6ce0 # scx_maestro: migrate to Rust edition 2024 and rust-version 1.91
+ec5f81da16d47bd81e360ed7509539004c4ef466 # scx_maestro: fix formatting
+0894133d6767d8b15c90ff39ab9f38e25eed86cc # scx_maestro: bump libbpf to 0.27.1
+7159bef4fe117fc839028eb94ce9a2899d8efb83 # scx_maestro: bump libbpf to 0.27.2
+968d593c9c65591596c6e269c2acc5cbaa7500c2 # scx_pandemonium: bump to 5.21.0
+e30a7b2b2117909f912dc0389778ff69a797e4f9 # scx_pandemonium: bump to 5.22.0
+2bd52d483343e16d2598a5298cdccd25b5962939 # scx_flow: bump to 4.2.41-o1
+c7bb51a73a903a2ba5f7777624a83bed667ebe5e # scx_flow: bump to 4.2.46-o1
+0ac43709ec13a8832820df3d2b084c36f0c974bc # scx_flow: bump to 4.5.1
+ac7e865f8ddbcffcb75a5bd3024a4aca9ddc9023 # scx_cake: STATE: record the 2026-09-26 revert to 9db04489e and its findings
+6fa7d9050f199deeae7c484f4a578641a4684448 # scx_cake: STATE: restore the full round history after the revert
+a4f5ee6619d26d7dee0abf62517a7873f2c27c6c # scx_cake: bound the vtime lead a task holds over the frontier
+96c95fba8f9974fcf586f4510e1037de075e3112 # scx_cake: update pool serving and document game testing
+)
+
+_reverts=(
+)
+
+pkgver() {
+  cd $_gitname
+  git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd $_gitname
+
+  local _c _l
+   for _c in "${_backports[@]}"; do
+     if [[ "${_c}" == *..* ]]; then _l='--reverse'; else _l='--max-count=1'; fi
+     git log --oneline "${_l}" "${_c}"
+     git cherry-pick --mainline 1 --no-commit "${_c}"
+   done
+   for _c in "${_reverts[@]}"; do
+     if [[ "${_c}" == *..* ]]; then _l='--reverse'; else _l='--max-count=1'; fi
+     git log --oneline "${_l}" "${_c}"
+     git revert --mainline 1 --no-commit "${_c}"
+   done
+
+  local src
+   for src in "${source[@]}"; do
+     src="${src%%::*}"
+     src="${src##*/}"
+     [[ $src = *.patch ]] || continue
+     echo "Applying patch $src..."
+     patch -Np1 < "../$src"
+   done
+
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  cd $_gitname
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  cargo build \
+     --profile=$_mode \
+     --frozen \
+     --workspace \
+     --exclude scx_rlfifo \
+     --exclude scx_characterize \
+     --exclude xtask \
+     --exclude vmlinux_docify \
+     --exclude scx_arena_selftests
+}
+
+package() {
+  cd $_gitname
+
+  # Install all built executables (skip .so and .d files)
+  find target/$_mode \
+    -maxdepth 1 -type f -executable ! -name '*.so' \
+    -exec install -Dm755 -t "$pkgdir/usr/bin/" {} +
+}
