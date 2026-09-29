@@ -8,7 +8,7 @@ _mode=release
 
 pkgname=scx-scheds-git
 _gitname=scx
-pkgver=1.1.3.r462.g7b301d545
+pkgver=1.1.3.r462.g7b301d54
 pkgrel=1
 pkgdesc='sched_ext schedulers and tools'
 url='https://github.com/sched-ext/scx'
@@ -32,7 +32,7 @@ optdepends=(
 options=(!lto)
 provides=("scx-scheds")
 conflicts=("scx-scheds")
-source=("git+https://github.com/sched-ext/scx")
+source=("git+https://github.com/Seafoam-Labs/scx")
 sha256sums=('SKIP')
 
 _backports=(

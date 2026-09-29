@@ -28,7 +28,7 @@ makedepends=(
 options=(!lto)
 provides=("scxctl" "scx-tools")
 conflicts=("scxctl" "scx-tools")
-source=("git+https://github.com/sched-ext/scx-loader")
+source=("git+https://github.com/Seafoam-Labs/scx-loader")
 sha256sums=('SKIP')
 
 _backports=(
