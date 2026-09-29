@@ -372,7 +372,7 @@ for required_package in \
   aqueous aqueous-session aqueous-noctalia \
   calamares ckbcomp devario-alpm-runtime devario-aqueous-desktop \
   devario-base devario-boot devario-dracut devario-keyring greetd limine noctalia noctalia-greeter shelly fastfetch \
-  linux-cachyos-lts linux-cachyos-lts-headers nvidia-open-dkms nvidia-utils \
+  linux-devario-lts linux-devario-lts-headers nvidia-open-dkms nvidia-utils \
   vulkan-intel vulkan-radeon vulkan-swrast xorg-xwayland; do
   if ! package_is_listed "$required_package"; then
     fail "packages.x86_64 does not include $required_package"
@@ -400,7 +400,7 @@ declare -A expected_pkgnames=(
   [devario-boot]=devario-boot
   [devario-dracut]=devario-dracut
   [devario-keyring]=devario-keyring
-  [linux-cachyos-lts]=linux-cachyos-lts
+  [linux-devario-lts]=linux-devario-lts
   [noctalia]=noctalia
   [noctalia-greeter]=noctalia-greeter
   [aqueous]=aqueous
@@ -418,23 +418,23 @@ for package_dir_name in "${!expected_pkgnames[@]}"; do
         fail "aqueous/PKGBUILD does not declare split package $split_pkgname"
       fi
     done
-  elif [[ "$package_dir_name" == linux-cachyos-lts ]]; then
+  elif [[ "$package_dir_name" == linux-devario-lts ]]; then
     if ! grep -Fqx 'pkgbase="linux-$_pkgsuffix"' "$pkgbuild" \
       || ! grep -Fqx 'pkgname=("$pkgbase")' "$pkgbuild"; then
-      fail "linux-cachyos-lts/PKGBUILD does not declare its kernel split package"
+      fail "linux-devario-lts/PKGBUILD does not declare its kernel split package"
     fi
   elif ! grep -Eq "^[[:space:]]*pkgname=['\"]?${expected_pkgname}['\"]?[[:space:]]*$" "$pkgbuild"; then
     fail "$package_dir_name/PKGBUILD does not declare pkgname=$expected_pkgname"
   fi
 done
 
-kernel_pkgbuild="$project_dir/packages/linux-cachyos-lts/PKGBUILD"
-kernel_config="$project_dir/packages/linux-cachyos-lts/config"
+kernel_pkgbuild="$project_dir/packages/linux-devario-lts/PKGBUILD"
+kernel_config="$project_dir/packages/linux-devario-lts/config"
 expected_kernel_config_b2='81fafd3adcaf3b690d8d4791693e68c7ae921d103ebfd70e8d0ae15cd05ecde5e6672ae43c3a7875686d883c1f5b82d2c8b37b40aee8dcb0563913f9dd6469b6'
 actual_kernel_config_b2="$(b2sum "$kernel_config")"
 actual_kernel_config_b2="${actual_kernel_config_b2%% *}"
 if [[ "$actual_kernel_config_b2" != "$expected_kernel_config_b2" ]]; then
-  fail "linux-cachyos-lts/config failed its pinned BLAKE2 checksum"
+  fail "linux-devario-lts/config failed its pinned BLAKE2 checksum"
 fi
 for required_kernel_recipe_text in \
   '972d31fe2cbfda19208501a9518152ab90cfa2cc' \
@@ -449,12 +449,12 @@ for required_kernel_recipe_text in \
   '"$modulesdir/devario-kernel"' \
   "$expected_kernel_config_b2"; do
   if ! grep -Fq "$required_kernel_recipe_text" "$kernel_pkgbuild"; then
-    fail "linux-cachyos-lts packaging is missing: $required_kernel_recipe_text"
+    fail "linux-devario-lts packaging is missing: $required_kernel_recipe_text"
   fi
 done
 if grep -Eq "^[[:space:]]*['\"]?SKIP['\"]?([[:space:]]|$)" "$kernel_pkgbuild" \
   || grep -Fq '_processor_opt:=}' "$kernel_pkgbuild"; then
-  fail "linux-cachyos-lts must use pinned sources and an unconditional baseline CPU target"
+  fail "linux-devario-lts must use pinned sources and an unconditional baseline CPU target"
 fi
 
 for ckbcomp_dependency in perl xkeyboard-config; do
@@ -606,7 +606,7 @@ fi
 desktop_meta="$project_dir/packages/devario-aqueous-desktop/PKGBUILD"
 for desktop_dependency in \
   aqueous aqueous-session aqueous-noctalia noctalia noctalia-greeter greetd \
-  linux-cachyos-lts-headers nvidia-open-dkms nvidia-utils; do
+  linux-devario-lts-headers nvidia-open-dkms nvidia-utils; do
   if ! grep -Eq "['\"]${desktop_dependency}([<>=][^'\"]*)?['\"]" "$desktop_meta"; then
     fail "the Devario desktop metapackage must depend on $desktop_dependency"
   fi
@@ -757,7 +757,7 @@ for shelly_build_call in \
     fail "build-packages.sh is missing: $shelly_build_call"
   fi
 done
-for desktop_build_package in linux-cachyos-lts noctalia noctalia-greeter aqueous devario-aqueous-desktop; do
+for desktop_build_package in linux-devario-lts noctalia noctalia-greeter aqueous devario-aqueous-desktop; do
   if ! grep -Eq "^[[:space:]]+${desktop_build_package}[[:space:]]*$" \
     "$package_build_script"; then
     fail "build-packages.sh omits $desktop_build_package from its package order"
@@ -943,10 +943,10 @@ if ! grep -Fq 'core_keyring_source="${DEVARIO_CORE_KEYRING_DIR:-$project_dir/pac
 fi
 
 for required_kernel_preflight_text in \
-  'linux-cachyos-lts' \
-  'linux-cachyos-lts-headers' \
+  'linux-devario-lts' \
+  'linux-devario-lts-headers' \
   'Missing required package artifacts:' \
-  'build-packages-nspawn.sh linux-cachyos-lts' \
+  'build-packages-nspawn.sh linux-devario-lts' \
   'run-iso-builder.py'; do
   if ! grep -Fq "$required_kernel_preflight_text" \
     "$project_dir/scripts/build-iso.sh"; then
@@ -1137,7 +1137,7 @@ prepare_target_kernel="$profile_dir/airootfs/usr/lib/devario/prepare-target-kern
 for required_kernel_install_text in \
   '/usr/lib/devario/prepare-target-kernel' \
   'rm -f /usr/lib/devario/prepare-target-kernel' \
-  'test -s /boot/vmlinuz-linux-cachyos-lts'; do
+  'test -s /boot/vmlinuz-linux-devario-lts'; do
   if ! grep -Fq "$required_kernel_install_text" "$prepare_target"; then
     fail "Calamares target preparation is missing: $required_kernel_install_text"
   fi
@@ -1161,8 +1161,8 @@ for live_boot_config in \
   "$profile_dir/grub/loopback.cfg" \
   "$profile_dir/syslinux/devario_sys-linux.cfg" \
   "$profile_dir/syslinux/devario_pxe-linux.cfg"; do
-  if ! grep -Fq 'vmlinuz-linux-cachyos-lts' "$live_boot_config" \
-    || ! grep -Fq 'initramfs-linux-cachyos-lts.img' "$live_boot_config" \
+  if ! grep -Fq 'vmlinuz-linux-devario-lts' "$live_boot_config" \
+    || ! grep -Fq 'initramfs-linux-devario-lts.img' "$live_boot_config" \
     || ! grep -Fq 'root=live:' "$live_boot_config" \
     || ! grep -Fq 'rd.overlay=1' "$live_boot_config"; then
     fail "${live_boot_config#"$project_dir/"} does not boot the CachyOS LTS live kernel"
@@ -1181,9 +1181,9 @@ if [[ ! -x "$limine_update" ]]; then
   fail "the installed Limine update helper must be executable"
 fi
 for limine_helper_text in \
-  'path: boot():/vmlinuz-linux-cachyos-lts' \
-  'module_path: boot():/initramfs-linux-cachyos-lts.img' \
-  'module_path: boot():/initramfs-linux-cachyos-lts-fallback.img' \
+  'path: boot():/vmlinuz-linux-devario-lts' \
+  'module_path: boot():/initramfs-linux-devario-lts.img' \
+  'module_path: boot():/initramfs-linux-devario-lts-fallback.img' \
   'install -Dm0644 "$limine_share/BOOTX64.EFI"' \
   'limine bios-install "$disk_device"' \
   'installed_marker=/var/lib/devario/limine-installed' \
@@ -1642,7 +1642,7 @@ if command -v bsdtar >/dev/null 2>&1; then
     for expected_artifact_package in \
       aqueous aqueous-noctalia aqueous-session calamares ckbcomp \
       devario-filesystem seafoam-keyring devario-alpm-runtime devario-aqueous-desktop devario-base devario-boot devario-dracut devario-keyring \
-      linux-cachyos-lts linux-cachyos-lts-headers \
+      linux-devario-lts linux-devario-lts-headers \
       noctalia noctalia-greeter shelly; do
       expected_artifacts=(
         "$project_dir"/repo/core/"$expected_artifact_package"-[0-9]*.pkg.tar.zst
@@ -1767,7 +1767,7 @@ if command -v bsdtar >/dev/null 2>&1; then
       fi
     done
     for required_nvidia_dependency in \
-      linux-cachyos-lts-headers nvidia-open-dkms nvidia-utils; do
+      linux-devario-lts-headers nvidia-open-dkms nvidia-utils; do
       if ! grep -Eq \
         "^depend = ${required_nvidia_dependency}([<>=].*)?$" \
         <<< "$desktop_meta_pkginfo"; then

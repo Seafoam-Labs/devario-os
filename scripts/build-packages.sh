@@ -24,7 +24,7 @@ package_order=(
   devario-base
   devario-dracut
   devario-boot
-  linux-cachyos-lts
+  linux-devario-lts
   shelly
   ckbcomp
   noctalia

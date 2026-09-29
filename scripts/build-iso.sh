@@ -209,8 +209,8 @@ required_devario_packages=(
   devario-boot
   devario-dracut
   devario-keyring
-  linux-cachyos-lts
-  linux-cachyos-lts-headers
+  linux-devario-lts
+  linux-devario-lts-headers
   noctalia
   noctalia-greeter
   shelly
@@ -268,7 +268,7 @@ if (( ${#missing_devario_packages[@]} || ${#duplicate_devario_packages[@]} )); t
   fi
   echo "Build and sign the required packages before constructing the ISO." >&2
   echo "For the custom kernel, run:" >&2
-  echo "  sudo ./scripts/build-packages-nspawn.sh linux-cachyos-lts" >&2
+  echo "  sudo ./scripts/build-packages-nspawn.sh linux-devario-lts" >&2
   exit 1
 fi
 
