@@ -23,9 +23,6 @@ package_order=(
   devario-base
   devario-boot
   ckbcomp
-  noctalia
-  noctalia-greeter
-  aqueous
   devario-aqueous-desktop
   calamares
 )
@@ -458,14 +455,6 @@ for package_name in "${selected_package_order[@]}"; do
       rm -f -- "$repo_dir/$(basename -- "$artifact").sig"
     fi
   done
-
-  # Aqueous's package check uses Noctalia's official plugin validator. Install
-  # the just-built pinned Noctalia artifact through Shelly before reaching the
-  # Aqueous build, keeping even this inter-package build edge Shelly-only.
-  if [[ "$package_name" == noctalia ]]; then
-    echo "Installing the pinned Noctalia build for Aqueous validation through Shelly..."
-    shelly install standard --no-confirm "${artifacts[@]}"
-  fi
 done
 
 shopt -s nullglob

@@ -196,9 +196,11 @@ fi
 # more expensive Devario ISO transaction so a stale or incomplete local repository
 # cannot produce a kernel-less target root.
 required_devario_packages=(
-  aqueous
-  aqueous-noctalia
+  aqueous-core
+  aqueous-integration-pearl
+  aqueous-shell-pearl
   aqueous-session
+  xdg-desktop-portal-aqueous
   calamares
   ckbcomp
   devario-aqueous-desktop
@@ -210,8 +212,7 @@ required_devario_packages=(
   devario-keyring
   linux-devario
   linux-devario-headers
-  noctalia
-  noctalia-greeter
+  pearl
   shelly
 )
 declare -A required_core_package_set=()

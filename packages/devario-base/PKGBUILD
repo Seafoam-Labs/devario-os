@@ -2,7 +2,7 @@
 
 pkgname=devario-base
 pkgver=3
-pkgrel=7
+pkgrel=8
 pkgdesc="Minimal package set defining a base Devario installation"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -40,6 +40,10 @@ depends=(
   'systemd-sysvcompat'
   'iputils'
   'iproute2'
+  'curl'
+  'inxi'
+  'python'
+  'sudo'
 )
 optdepends=('linux-devario: bare-metal support')
 provides=("base=${pkgver}")
@@ -48,15 +52,20 @@ replaces=('base' 'devario-alpm-runtime')
 
 backup=('etc/shelly.conf')
 install='devario-base.install'
-source=('shelly.conf' 'shelly-storage-migrate' 'shelly-storage-migrate.service' 'devario-base.install')
+source=('shelly.conf' 'shelly-storage-migrate' 'shelly-storage-migrate.service' 'devario-base.install'
+        'devario-report.sh' 'devario-report.desktop')
 sha256sums=(
   '6ff7d46aac499013eccc83d4bd977bbdb929f28c7df7572177e1851b92d578d5'
   '0fafdbb0f41e471dea9ce0a5f0b79bd216b443926f7f4c99d6b11d9f536d5b52'
   'f7df4b2ed5e8db335dea4c44912a4f18f843742d14bdae584453d6c5218d7aa9'
   '2a594dab826f2599528d8a96b388fadd163a9df079e579756365a24df507cb72'
+  '119b53a8143666fec4dbd22373857651bbe8d14206722209016f71b3fd9a84e6'
+  '80393599bf8724177dafe28a258f59756c1713e52a3777fff1663df82deb634d'
 )
 
 package() {
+  install -Dm755 "$srcdir/devario-report.sh" "$pkgdir/usr/bin/devario-report.sh"
+  install -Dm644 "$srcdir/devario-report.desktop" "$pkgdir/usr/share/applications/devario-report.desktop"
   install -Dm644 "$srcdir/shelly.conf" "$pkgdir/etc/shelly.conf"
   install -Dm755 "$srcdir/shelly-storage-migrate" "$pkgdir/usr/lib/devario/shelly-storage-migrate"
   install -Dm644 "$srcdir/shelly-storage-migrate.service" \

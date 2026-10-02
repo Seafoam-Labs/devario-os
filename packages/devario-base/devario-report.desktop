@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Devario Report
+Comment=Collect system diagnostics and share a public bug report
+Exec=ghostty -e /usr/bin/devario-report.sh --desktop
+TryExec=ghostty
+Icon=dialog-information
+Terminal=false
+Categories=System;
+Keywords=bug;report;diagnostics;logs;support;
+StartupNotify=false

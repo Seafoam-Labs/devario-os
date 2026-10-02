@@ -1,7 +1,8 @@
 alsa-utils
 amd-ucode
-aqueous
-aqueous-noctalia
+aqueous-core
+aqueous-integration-pearl
+aqueous-shell-pearl
 aqueous-session
 btrfs-progs
 calamares
@@ -37,8 +38,8 @@ mesa
 nbd
 networkmanager
 nfs-utils
-noctalia
-noctalia-greeter
+pearl
+pearl-greeter-git
 noto-fonts
 ntfs-3g
 nvidia-open-dkms
@@ -69,3 +70,4 @@ xdg-user-dirs
 xdg-utils
 xfsprogs
 xorg-xwayland
+xdg-desktop-portal-aqueous

@@ -84,9 +84,10 @@ jq -e '
 
 jq -e '
   .schemaVersion == 1 and
-  (.artifacts | length) == 7 and
+  (.artifacts | length) > 0 and
   all(.artifacts[]; (.sha256 | test("^[0-9a-f]{64}$")) and .correspondingSource)
 ' "$project_dir/release/source-manifest.json" >/dev/null
+cmp "$project_dir/release/source-manifest.json" "$output_dir/source-manifest.json"
 
 if find "$output_dir" -maxdepth 1 -type f -name '*.sig' -print -quit | grep -q .; then
   echo "The keyless metadata generator unexpectedly created a signature." >&2

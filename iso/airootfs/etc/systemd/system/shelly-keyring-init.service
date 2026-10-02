@@ -2,7 +2,7 @@
 Description=Initialize the Shelly package-manager keyring
 Requires=shelly-storage-migrate.service
 After=shelly-storage-migrate.service time-sync.target
-Before=greetd.service
+Before=pearl-greeter.service
 ConditionPathExists=!/var/lib/devario/shelly-keyring.ready
 
 [Service]

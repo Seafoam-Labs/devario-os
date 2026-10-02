@@ -1,0 +1,5 @@
+[Unit]
+Description=Devario Live Graphical Session
+Wants=NetworkManager.service pearl-greeter.service shelly-storage-migrate.service shelly-keyring-init.service
+After=NetworkManager.service pearl-greeter.service shelly-storage-migrate.service shelly-keyring-init.service
+AllowIsolate=yes

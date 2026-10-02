@@ -81,7 +81,7 @@ make_core() {
     "$core_dir/iso/late-airootfs/usr/share/devario" \
     "$core_dir/editions"
   printf '%s\n' \
-    aqueous \
+    aqueous-core \
     firefox \
     linux-devario \
     shelly \
@@ -144,8 +144,8 @@ expect_failure 'stale replacement allowlist entry' compose \
 
 bad_package="$core/editions/bad-package"
 write_config "$bad_package" bad-package
-printf '%s\n' aqueous > "$bad_package/packages.add"
-printf '%s\n' aqueous=core > "$bad_package/package-sources.conf"
+printf '%s\n' aqueous-core > "$bad_package/packages.add"
+printf '%s\n' aqueous-core=core > "$bad_package/package-sources.conf"
 expect_failure 'addition of an existing package' compose \
   "$core" "$bad_package" "$test_root/add-existing-output"
 printf '%s\n' 'not installed' > "$bad_package/packages.add"

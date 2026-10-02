@@ -28,6 +28,11 @@ For the kernel, include the exact Seafoam Labs release source and signature, Dev
 changes. For offline Zig caches, retain the cache itself, every embedded
 license, and the immutable URL/revision recorded for every cached component.
 
+Kernel and dracut recipes are maintained outside this OS repository. Their
+external build must retain the same source and configuration evidence. Removing
+their former paths from the OS source manifest does not remove their binaries
+from the release source-index coverage requirement.
+
 For third-party binary packages copied from Arch or another repository, record
 the package digest and version and retain or mirror the exact corresponding
 source package when the applicable license requires distribution of source.

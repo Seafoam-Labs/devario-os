@@ -2,12 +2,13 @@
 
 **Devario network installation, kernel, Shelly, and desktop implementation plan**
 
-Status: network installer and desktop migration proposed; the kernel recipe
-in `packages/linux-devario/` is now selected by the build, ISO, installer,
-and boot paths. Shelly 3.1.6-2 with its native RLPM backend is now
+Status: network installer migration proposed; `linux-devario` is now selected
+by the ISO, installer, and boot paths. Kernel and dracut recipes are maintained
+outside this OS repository and supplied as signed packages.
+Shelly 3.1.6-2 with its native RLPM backend is now
 supplied by `devario-core`; the local Shelly and ALPM runtime recipes are
-retired. The installer and desktop migration remain unimplemented; earlier
-desktop prototypes are set aside.
+retired. The desktop now uses published Aqueous/Pearl packages and Pearl Greeter.
+The network installer migration remains unimplemented.
 Repository inspection: 2026-10-02.
 
 Make network installation provision Devario from signed packages in
@@ -108,14 +109,15 @@ configuration takes precedence.
 Replace explicit Aqueous and DMS/Noctalia shell selections in the ISO and target
 manifests with `devario-desktop`. Do not substitute the general
 `aqueous-desktop` metapackage: it includes other integrations and Welcome.
-Remove the old local Aqueous and Noctalia shell recipes from the default build
-order and from mandatory artifact checks. Retain their source provenance.
+The old local Aqueous and Noctalia recipes have been retired; their provenance
+remains in Git history. The current desktop policy selects the published
+Aqueous 0.9.1 Pearl components directly and supplies the Pearl session default.
 
 Move GPU detection, installed greetd configuration, and Devario application
 defaults out of the conflicting `devario-aqueous-desktop` package into a
 separate support package. Keep the login greeter independent of the desktop
-shell; preserving the existing Noctalia login greeter does not require the
-Noctalia desktop shell. Coordinate this support package with the new kernel
+shell. Pearl Greeter now runs through its packaged `pearl-greeter.service`.
+Coordinate this support package with the new kernel
 headers; the current desktop package already selects `linux-devario-headers`.
 
 Update `scripts/build-packages.sh`, `scripts/build-iso.sh`,
@@ -144,7 +146,7 @@ behavior remains functional.
 
 **3. Package and publish the Seafoam kernel**
 
-Create `packages/linux-devario/` with a reviewed configuration and a split
+Maintain the external `linux-devario` recipe with a reviewed configuration and a split
 kernel/headers PKGBUILD. Fetch the private source in an authenticated build
 preparation step, pin the selected release tag and its full commit above, and
 checksum the exact source artifact consumed by the controlled build. Keep credentials outside recipes,
@@ -263,10 +265,11 @@ Update `README.md`, `docs/ISO-BUILDER.md`, `docs/DRACUT-BOOT.md`, installation
 instructions, acceptance matrices, and provenance. Replace outdated claims that
 all installations only copy the live filesystem.
 
-The validator now checks the Seafoam Labs kernel source and configuration pins.
-`packages/devario-dracut/dracut-install` still contains a Pacman invocation
-rejected by the executable boundary check. Resolve these in the coordinated
-kernel/boot migration. Install `jsonschema` in the validation environment so
+`scripts/validate-kernel-package.sh` checks the Seafoam Labs kernel source and
+configuration pins in an explicitly supplied external recipe directory.
+The relocated dracut package must retain Devario's executable boundary; inspect
+its hooks and runtime commands in that package's source and built artifacts.
+Install `jsonschema` in the validation environment so
 the release-contract tests actually execute.
 
 **Delivery order and completion criteria**

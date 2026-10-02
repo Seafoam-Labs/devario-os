@@ -3,7 +3,7 @@
 
 # Devario boot and initramfs
 
-Devario owns its boot lifecycle. `devario-dracut` builds pinned upstream dracut
+Devario owns its boot lifecycle. The externally maintained `devario-dracut` package builds pinned upstream dracut
 112 and provides the compatible `dracut` and `initramfs` package capabilities.
 `devario-boot` owns configuration, kernel discovery, initramfs generation,
 recovery files, and Limine deployment. Shelly's ALPM hooks are transaction

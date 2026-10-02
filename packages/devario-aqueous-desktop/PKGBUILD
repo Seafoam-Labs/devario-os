@@ -2,17 +2,19 @@
 
 pkgname=devario-aqueous-desktop
 pkgver=1
-pkgrel=6
-pkgdesc="Complete Aqueous and Noctalia desktop environment for Devario"
+pkgrel=7
+pkgdesc="Complete Aqueous and Pearl desktop environment for Devario"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
 license=('GPL-3.0-or-later')
 depends=(
-  'aqueous=0.4.6.r0.g001beb7-1'
-  'aqueous-session=0.4.6.r0.g001beb7-1'
-  'aqueous-noctalia=0.4.6.r0.g001beb7-1'
-  'noctalia=5.0.0.r0.g50f0f09-1'
-  'noctalia-greeter=1.0.0.r0.g4aa960d-3'
+  'aqueous-core=0.9.1-1'
+  'aqueous-session=0.9.1-1'
+  'xdg-desktop-portal-aqueous=0.9.1-1'
+  'aqueous-integration-pearl=0.9.1-1'
+  'aqueous-shell-pearl=0.9.1-1'
+  'pearl'
+  'pearl-greeter-git'
   'greetd'
   'ghostty'
   'nemo'
@@ -42,20 +44,27 @@ depends=(
   'vulkan-radeon'
   'vulkan-swrast'
 )
+# Retire the old integration and its unconditional Noctalia user service.
+conflicts=('aqueous-noctalia')
+replaces=('aqueous-noctalia')
+backup=('etc/xdg/aqueous/session.toml')
 source=(
+  'session.toml'
   'greetd-config.toml'
   'gpu-driver-setup'
   'devario-gpu-driver.service'
   'greetd-gpu-driver.conf'
 )
 sha256sums=(
-  '16afecd6b0f64351c92ed780d1cdb5d3efa1e793b679da5dde98bb39a124e7d7'
+  '2cecdd6b68deaedc81997669b26ddfb705c458c8de9d8fdd465aaae35eba845b'
+  'f2d467b8a555bc335c5a27074660d2520636b69157fcb5137072a9b3a08bf68a'
   '533cfa381f0d7eb1ef1e5da15037992fd5f59c539cfe6d4a8f14e6d6d3aeb99f'
-  '5eaa5d9565feaf0b0447b0ff91bf1c1082c56740edd37968d25b09c518294470'
+  'ec8e672fb2e7a451bd97ca9ccbc4ade0a91a7f0e097a5e3a6ce99ec144871807'
   'a997663d00e362e780c6d29989bcb9dfdb50d5b00142322bee207d68be8c3801'
 )
 
 package() {
+  install -Dm644 "$srcdir/session.toml" "$pkgdir/etc/xdg/aqueous/session.toml"
   install -Dm644 "$srcdir/greetd-config.toml" \
     "$pkgdir/usr/share/devario/greetd/config.toml"
   install -Dm755 "$srcdir/gpu-driver-setup" \
@@ -63,5 +72,5 @@ package() {
   install -Dm644 "$srcdir/devario-gpu-driver.service" \
     "$pkgdir/usr/lib/systemd/system/devario-gpu-driver.service"
   install -Dm644 "$srcdir/greetd-gpu-driver.conf" \
-    "$pkgdir/usr/lib/systemd/system/greetd.service.d/20-devario-gpu-driver.conf"
+    "$pkgdir/usr/lib/systemd/system/pearl-greeter.service.d/20-devario-gpu-driver.conf"
 }

@@ -9,8 +9,9 @@
 # alone is not proof of dependency closure.
 
 # Devario-owned package recipes
-aqueous
-aqueous-noctalia
+aqueous-core
+aqueous-integration-pearl
+aqueous-shell-pearl
 aqueous-session
 calamares
 ckbcomp
@@ -23,8 +24,8 @@ seafoam-keyring
 devario-keyring
 linux-devario
 linux-devario-headers
-noctalia
-noctalia-greeter
+pearl
+pearl-greeter-git
 shelly
 
 # Upstream packages formerly sourced from Arch core; retain source provenance.
@@ -308,6 +309,7 @@ hwinfo
 hwloc
 imath
 intel-ucode
+inxi
 iso-codes
 jack2
 jasper
@@ -633,3 +635,4 @@ zeromq
 zimg
 zix
 zlib-ng
+xdg-desktop-portal-aqueous

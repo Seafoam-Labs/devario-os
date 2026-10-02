@@ -5,6 +5,12 @@ relocation in `dc737f4`. The instructions below preserve the build requirements
 for the 7.2.7-1 recipe; apply them in the external package source checkout.
 The OS builder consumes signed kernel and header packages from `devario-core`.
 
+Run `scripts/validate-kernel-package.sh /path/to/linux-devario` from the OS
+checkout to validate this version's recipe and configuration in their external
+location. This preserves the source checks separately from OS validation;
+source signature verification and package builds remain the package builder's
+responsibility. The image build still requires both signed binary packages.
+
 This standalone recipe builds `linux-devario` and `linux-devario-headers`
 **7.2.7-1** from the signed **devario-7.2.7-1** release of
 [Seafoam-Labs/linux](https://github.com/Seafoam-Labs/linux/releases/tag/devario-7.2.7-1).

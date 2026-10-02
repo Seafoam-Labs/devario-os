@@ -216,13 +216,11 @@ class NvidiaTests(unittest.TestCase):
         recipe = (PROJECT / "packages/devario-aqueous-desktop/PKGBUILD").read_text()
         for name in ("nvidia-open-dkms", "nvidia-utils"):
             self.assertIn(f"'{name}={VERSION}'", recipe)
-        default = (PROJECT / "packages/devario-dracut/devario-dracut.conf").read_text()
-        self.assertIn('#NVIDIA_EARLY_KMS="false"', default)
-        self.assertNotIn('\nNVIDIA_EARLY_KMS="true"', default)
 
     def test_local_package_checksums(self):
         import hashlib
-        for name in ("devario-boot", "devario-dracut", "devario-aqueous-desktop"):
+        # Kernel/dracut recipes are validated by their external package build.
+        for name in ("devario-boot", "devario-aqueous-desktop"):
             folder = PROJECT / "packages" / name
             # Read recipe metadata; this does not execute its build functions.
             metadata = subprocess.check_output([

@@ -1,0 +1,14 @@
+[terminal]
+vt = 7
+switch = true
+
+[general]
+source_profile = false
+
+[default_session]
+command = "/usr/lib/pearl/pearl-greeter-host"
+user = "pearl-greeter"
+
+[initial_session]
+command = "/usr/local/bin/devario-aqueous-live-session"
+user = "liveuser"

@@ -27,8 +27,8 @@ The installed system does not ship the `pacman` or `pacman-key` executables. It 
 ## What is included
 
 - Devario ISO profile with BIOS and UEFI boot support
-- Aqueous compositor with the Noctalia shell and Devario desktop defaults
-- greetd with Noctalia Greeter for installed logins and an automatic Aqueous
+- Aqueous compositor with the Pearl shell and Devario desktop defaults
+- greetd with Pearl Greeter for installed logins and an automatic Aqueous
   `liveuser` session on the live image
 - NetworkManager, PipeWire, Firefox, and common filesystem tools
 - Seafoam Labs Devario kernel targeting x86-64-v3 hardware
@@ -43,14 +43,37 @@ The installed system does not ship the `pacman` or `pacman-key` executables. It 
 - Shelly-backed repository search, installation, removal, upgrades, and keyring initialization
 - Persistent first-boot initialization of the Arch Linux and Devario signing keyrings
 
+`devario-base` also installs **Devario Report** in the application menu and the
+`devario-report.sh` command. It collects hardware details, scheduler information,
+kernel messages, current and previous boot warnings, and the Shelly package
+inventory. It redacts local usernames, home paths, hostname, IP/MAC addresses,
+and email addresses before offering a public upload to
+[paste.c-net.org](https://paste.c-net.org/). Review the saved report before sharing;
+redaction cannot guarantee removal of every private detail.
+
+Run `devario-report.sh --no-upload` to collect locally, or `devario-report.sh
+--upload` to publish without the prompt. The command writes `devario-report.log`
+in the current directory (`LOG_FILENAME` can override it) and keeps the previous
+report as `.old`. The menu launcher opens Ghostty, saves reports under
+`${XDG_STATE_HOME:-~/.local/state}/devario/reports`, and keeps the window open
+so the link can be copied. Administrator authentication is requested for system
+logs. Reports remain available locally if the paste service fails.
+
+Pearl runs inside the packaged Aqueous UWSM session. Devario sets
+`/etc/xdg/aqueous/session.toml` to select Pearl; an existing user selection
+takes precedence. Pearl Greeter uses its own `pearl-greeter.service`, the
+`pearl-greeter` account, and VT7. The live autologin configuration is applied
+in `iso/late-airootfs` after package hooks; installation restores the packaged
+login template without live autologin.
+
 Calamares does not invoke a package manager during installation. Its `unpackfs` module copies the prepared live root
 filesystem, and the remaining modules configure that copy for the target machine.
 
 ISO construction verifies that every Devario-owned package is present exactly
 once in the local repository before installing the live root. In particular,
-both `linux-devario` and `linux-devario-headers` must have been built by
-`build-packages-nspawn.sh`; the kernel recipe alone is not an installable
-artifact. The Devario builder transaction also compares its requested package
+`linux-devario`, `linux-devario-headers`, and `devario-dracut` must be supplied
+as signed packages from the external package build. Their recipes are maintained
+outside this OS repository. The Devario builder transaction also compares its requested package
 list with Shelly's installed inventory and refuses a partial root filesystem.
 
 The live and installed filesystems include `nvidia-open-dkms`, `nvidia-utils`,
@@ -252,12 +275,13 @@ Initialize a local development signing key and export its public material into t
 ./scripts/init-repository-key.sh
 ```
 
-Build Calamares, its `ckbcomp` helper, the Devario base and keyring packages,
-the pinned x86-64-v3 `linux-devario` kernel and headers, and the pinned
-Aqueous, Noctalia, Noctalia Greeter,
-session, and desktop packages. If a local fingerprint exists, the script signs
-every package and the repository database automatically. Shelly is supplied
-by `devario-core`:
+Build Calamares, its `ckbcomp` helper, the Devario base, boot and keyring packages,
+and Devario's desktop
+policy package. If a local fingerprint exists, the script signs every package
+and the repository database automatically. The kernel, headers, dracut,
+Shelly, Aqueous 0.9.1, its Pearl
+integration, and Pearl come from `devario-core`; `pearl-greeter-git` comes from
+`seafoam-labs` and provides Pearl Greeter:
 
 ```sh
 ./scripts/build-packages.sh
@@ -266,19 +290,21 @@ by `devario-core`:
 Core artifacts are written only to `repo/core/`; that directory is never
 shared with managed-edition artifacts.
 
-Pass package-directory names to rebuild only selected packages while retaining
-the other existing repository artifacts. Kernel updates should be built in the
-official baseline container so host ISA settings cannot leak into release
-artifacts:
+Pass local package-directory names to rebuild only selected packages while
+retaining the other existing repository artifacts. Kernel and dracut updates
+belong in the external package repository. Build them in its controlled baseline
+environment and supply signed artifacts to the staged `devario-core` repository
+before constructing the ISO. To check the pinned 7.2.7-1 kernel recipe in that
+source checkout:
 
 ```sh
-sudo ./scripts/build-packages-nspawn.sh linux-devario
+./scripts/validate-kernel-package.sh /path/to/linux-devario
 ```
 
 The kernel recipe pins Seafoam Labs' signed `devario-7.2.7-1` release archive
 and configuration with SHA-256 checksums. The kernel targets x86-64-v3 while
 host build tools target baseline x86-64. Updating it is a maintainer operation
-documented in `packages/linux-devario/README.md`; installed systems receive
+documented in [Kernel packaging](docs/KERNEL-PACKAGING.md); installed systems receive
 the resulting binary exclusively from the signed Devario repository.
 
 Validate package, profile, Calamares, service, and Shelly/Pacman-boundary invariants:
@@ -490,14 +516,14 @@ Before publishing an image, verify that:
 
 1. The ISO boots in both BIOS and UEFI modes.
 2. greetd automatically starts `liveuser` through UWSM in the Aqueous session,
-   with Noctalia running as the shell.
-3. The Noctalia application launcher lists Calamares, and `Super+I` opens it
+   with Pearl running as the shell.
+3. The Pearl application launcher lists Install Devario and opens Calamares
    through Polkit.
 4. Automatic and manual partitioning complete successfully.
 5. The installed system boots through Limine without the ISO attached in both
    UEFI and legacy BIOS modes.
-6. NetworkManager and greetd are enabled on the installed system.
-7. Noctalia Greeter lists `Aqueous`, authenticates a user, and starts the
+6. NetworkManager and `pearl-greeter.service` are enabled on the installed system.
+7. Pearl Greeter lists `Aqueous`, authenticates a user, and starts the
    packaged UWSM session.
 8. `command -v shelly` succeeds, while `command -v pacman` and `command -v pacman-key` fail.
 9. Shelly comes from `devario-core`, uses its native RLPM backend, and runs without `devario-alpm-runtime`.
@@ -523,13 +549,15 @@ Before publishing an image, verify that:
 - Devario maintainers must track Seafoam Labs kernel security releases, rebuild and
   sign the pinned kernel promptly, and publish corresponding source materials.
 - The current local development repository was built on a CachyOS x86-64-v4
-  host. Aqueous itself is baseline, but the locally built C++ desktop packages
-  and the pre-existing Calamares artifact inherit the host's v4 startup-object
-  requirement. Rebuild all release artifacts on official baseline Arch before
+  host. The pre-existing Calamares artifact inherits the host's v4
+  startup-object requirement. Rebuild all release artifacts on official baseline Arch before
   publishing a generally bootable x86-64 image.
 - Shelly's optional AUR workflow still requires a makepkg-compatible build toolchain. That toolchain is intentionally
   absent from the default live and installed systems; the supported default runtime covers signed binary repositories
   and local package archives.
+- The inspected `aqueous-core 0.9.1-1` repository artifact retains a build-machine
+  directory after `$ORIGIN/../lib/aqueous` in its ELF RUNPATH. It fails the strict
+  artifact check until that package is rebuilt with only its private library path.
 - The live image leaves Calamares installed on the target until removal is covered by automated installation tests.
 - Secure Boot is not configured.
 - Pre-Turing NVIDIA GPUs are unsupported because the image intentionally keeps
@@ -547,10 +575,7 @@ packages/ckbcomp/                Calamares keyboard-layout compiler helper
 packages/shelly/                 Documentation for the repository-supplied Shelly package
 packages/devario-base/           Base dependencies, Shelly configuration, and storage migration
 packages/devario-keyring/        Devario public package-signing keys
-packages/linux-devario/      Pinned x86-64-v3 Devario kernel recipe
-packages/aqueous/                Aqueous compositor, UWSM session, and Noctalia integration
-packages/noctalia/               Pinned Noctalia shell package
-packages/noctalia-greeter/       Pinned greetd-native Noctalia Greeter package
+docs/KERNEL-PACKAGING.md         External kernel build requirements
 packages/devario-aqueous-desktop/ Complete desktop dependency set and target greetd template
 repo/core/                       Generated core-only local binary repository
 repo/managed/                    Reserved physical boundary for managed artifacts

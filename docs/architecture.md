@@ -22,7 +22,7 @@ flowchart LR
     Repo --> Image
     Image --> System["Installed Devario system"]
     Shelly --> System
-    Desktop["Aqueous + Noctalia"] --> System
+    Desktop["Aqueous + Pearl"] --> System
     Installer["Calamares + Limine"] --> System
     Edition["Optional external edition data"] -. "validated composition" .-> Profile
 ```
@@ -30,7 +30,7 @@ flowchart LR
 | Component | Responsibility |
 | --- | --- |
 | Devario ISO profile | Defines the live image, installer environment, boot media, and installed-system defaults. |
-| Aqueous and Noctalia | Provide the Wayland compositor, shell, greeter, and desktop session. |
+| Aqueous and Pearl | Provide the Wayland compositor, shell, greeter, and desktop session. |
 | Calamares | Copies the tested live root and configures the target installation. |
 | Limine | Boots installed systems through UEFI or legacy BIOS. |
 | `devario-dracut` and `devario-boot` | Supply the pinned initramfs generator and Devario-owned kernel, image, recovery, and boot-update policy. |

@@ -47,6 +47,6 @@ rm -f -- "$test_root/coincidental-tag.bin"
 # Scan a large compressed vendored source fixture whose random byte stream
 # contains plausible packet-tag and length octets but no canonical OpenPGP key.
 "$project_dir/scripts/reject-secret-material.py" \
-  --tree "$project_dir/packages/noctalia-greeter" >/dev/null
+  --tree "$project_dir/tools/devario-iso-builder" >/dev/null
 
 echo 'Secret-material rejection tests passed.'

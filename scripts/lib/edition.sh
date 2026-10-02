@@ -382,9 +382,11 @@ devario_compose_profile() {
   declare -A add_set=()
   declare -A remove_set=()
   declare -A immutable_packages=(
-    [aqueous]=1
-    [aqueous-noctalia]=1
+    [aqueous-core]=1
+    [aqueous-integration-pearl]=1
+    [aqueous-shell-pearl]=1
     [aqueous-session]=1
+    [xdg-desktop-portal-aqueous]=1
     [calamares]=1
     [ckbcomp]=1
     [devario-aqueous-desktop]=1
@@ -401,8 +403,8 @@ devario_compose_profile() {
     [nbd]=1
     [nfs-utils]=1
     [networkmanager]=1
-    [noctalia]=1
-    [noctalia-greeter]=1
+    [pearl]=1
+    [pearl-greeter-git]=1
     [shelly]=1
     [squashfs-tools]=1
     [sudo]=1

@@ -88,10 +88,11 @@ required_files=(
   "$profile_dir/airootfs/usr/lib/devario/configure-target-nvidia"
   "$profile_dir/airootfs/usr/share/devario/nvidia-supported-gpus.json"
   "$project_dir/tests/test-configure-target-nvidia.py"
+  "$project_dir/tests/test-pearl-desktop.py"
   "$profile_dir/airootfs/etc/calamares/modules/services-systemd.conf"
-  "$profile_dir/airootfs/etc/greetd/config.toml"
+  "$profile_dir/late-airootfs/etc/greetd/config.toml"
   "$profile_dir/airootfs/etc/polkit-1/rules.d/49-devario-live-installer.rules"
-  "$profile_dir/airootfs/etc/systemd/system/default.target"
+  "$profile_dir/late-airootfs/etc/systemd/system/devario-live.target"
   "$profile_dir/airootfs/etc/systemd/system/devario-acceptance-self-check.service"
   "$profile_dir/airootfs/etc/systemd/system/multi-user.target.wants/devario-acceptance-self-check.service"
   "$profile_dir/airootfs/etc/systemd/system/shelly-keyring-init.service"
@@ -114,21 +115,16 @@ required_files=(
   "$project_dir/packages/devario-base/shelly-storage-migrate"
   "$project_dir/packages/devario-base/shelly-storage-migrate.service"
   "$project_dir/packages/devario-base/devario-base.install"
+  "$project_dir/packages/devario-base/devario-report.sh"
+  "$project_dir/packages/devario-base/devario-report.desktop"
+  "$project_dir/tests/test-devario-report.py"
   "$project_dir/packages/devario-boot/PKGBUILD"
   "$project_dir/packages/devario-boot/initramfs-update"
   "$project_dir/packages/devario-boot/boot-update"
   "$project_dir/tests/test-dracut-boot.sh"
   "$project_dir/tests/test-dracut-live-qemu.sh"
-  "$project_dir/packages/noctalia/PKGBUILD"
-  "$project_dir/packages/noctalia/noctalia-50f0f095053a4b5c10874c4e7080f55dc15d3b38.tar.gz"
-  "$project_dir/packages/noctalia-greeter/PKGBUILD"
-  "$project_dir/packages/noctalia-greeter/noctalia-greeter-4aa960dcff874dddd4d3d94d931df43a416ea9cf.tar.gz"
-  "$project_dir/packages/aqueous/PKGBUILD"
-  "$project_dir/packages/aqueous/aqueous-001beb7d08ecb8e5b428b869dbb9351f8d97820c.tar.gz"
-  "$project_dir/packages/aqueous/aqueous-zig-cache-001beb7d.tar.zst"
-  "$project_dir/packages/aqueous/wlroots-0.20.2.tar.gz"
-  "$project_dir/packages/aqueous/0001-devario-default-applications.patch"
   "$project_dir/packages/devario-aqueous-desktop/PKGBUILD"
+  "$project_dir/packages/devario-aqueous-desktop/session.toml"
   "$project_dir/packages/devario-aqueous-desktop/devario-gpu-driver.service"
   "$project_dir/packages/devario-aqueous-desktop/gpu-driver-setup"
   "$project_dir/packages/devario-aqueous-desktop/greetd-config.toml"
@@ -140,6 +136,8 @@ required_files=(
   "$project_dir/scripts/init-repository-key.sh"
   "$project_dir/scripts/build-packages-nspawn.sh"
   "$project_dir/scripts/build-packages.sh"
+  "$project_dir/scripts/validate-kernel-package.sh"
+  "$project_dir/docs/KERNEL-PACKAGING.md"
   "$project_dir/scripts/build-iso-nspawn.sh"
   "$project_dir/scripts/build-iso.sh"
   "$project_dir/scripts/makepkg-shelly-adapter.sh"
@@ -253,6 +251,7 @@ done < <(
   printf '%s\n' "$project_dir/tests/test-prepare-target-kernel.sh"
   printf '%s\n' "$project_dir/packages/devario-base/shelly-storage-migrate"
   printf '%s\n' "$project_dir/packages/devario-base/devario-base.install"
+  printf '%s\n' "$project_dir/packages/devario-base/devario-report.sh"
 )
 
 while IFS= read -r python_file; do
@@ -261,6 +260,12 @@ while IFS= read -r python_file; do
   fi
 done < <(find "$project_dir/release" "$project_dir/scripts" -maxdepth 1 -type f -name '*.py' -print | sort)
 
+if ! python3 "$project_dir/tests/test-pearl-desktop.py"; then
+  fail "Pearl desktop and live login integration tests failed"
+fi
+if ! python3 "$project_dir/tests/test-devario-report.py"; then
+  fail "Devario report behavior and packaging tests failed"
+fi
 if ! bash "$project_dir/tests/test-gpu-driver-setup.sh"; then
   fail "GPU driver setup behavior tests failed"
 fi
@@ -367,9 +372,9 @@ package_is_listed() {
 }
 
 for required_package in \
-  aqueous aqueous-session aqueous-noctalia \
+  aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous \
   calamares ckbcomp devario-aqueous-desktop \
-  devario-base devario-boot devario-dracut devario-keyring greetd limine noctalia noctalia-greeter shelly fastfetch \
+  devario-base devario-boot devario-dracut devario-keyring greetd limine pearl pearl-greeter-git shelly fastfetch \
   linux-devario linux-devario-headers nvidia-open-dkms nvidia-utils \
   vulkan-intel vulkan-radeon vulkan-swrast xorg-xwayland; do
   if ! package_is_listed "$required_package"; then
@@ -378,6 +383,7 @@ for required_package in \
 done
 
 for forbidden_package in \
+  noctalia noctalia-greeter aqueous-noctalia aqueous-integration-noctalia aqueous-shell-noctalia \
   devario-alpm-runtime mkinitcpio mkinitcpio-archiso pacman base linux grub os-prober lightdm lightdm-gtk-greeter xfce4 xfce4-goodies \
   xorg-server xorg-xinit greetd-agreety greetd-tuigreet vulkan-nouveau; do
   if package_is_listed "$forbidden_package"; then
@@ -395,30 +401,18 @@ declare -A expected_pkgnames=(
   [devario-base]=devario-base
   [devario-boot]=devario-boot
   [devario-keyring]=devario-keyring
-  [noctalia]=noctalia
-  [noctalia-greeter]=noctalia-greeter
-  [aqueous]=aqueous
 )
 
 for package_dir_name in "${!expected_pkgnames[@]}"; do
   expected_pkgname="${expected_pkgnames[$package_dir_name]}"
   pkgbuild="$project_dir/packages/$package_dir_name/PKGBUILD"
-  if [[ "$package_dir_name" == aqueous ]]; then
-    if ! grep -Eq '^[[:space:]]*pkgbase=aqueous[[:space:]]*$' "$pkgbuild"; then
-      fail "aqueous/PKGBUILD does not declare pkgbase=aqueous"
-    fi
-    for split_pkgname in aqueous aqueous-session aqueous-noctalia; do
-      if ! grep -Fq "'$split_pkgname'" "$pkgbuild"; then
-        fail "aqueous/PKGBUILD does not declare split package $split_pkgname"
-      fi
-    done
-  elif ! grep -Eq "^[[:space:]]*pkgname=['\"]?${expected_pkgname}['\"]?[[:space:]]*$" "$pkgbuild"; then
+  if ! grep -Eq "^[[:space:]]*pkgname=['\"]?${expected_pkgname}['\"]?[[:space:]]*$" "$pkgbuild"; then
     fail "$package_dir_name/PKGBUILD does not declare pkgname=$expected_pkgname"
   fi
 done
 
-# Kernel source/configuration checks belong to the external package repository.
-# This tree validates the selected kernel, boot integration, and supplied artifacts.
+# validate-kernel-package.sh checks an explicit external recipe directory.
+# OS validation checks the selected kernel, boot integration, and supplied artifacts.
 
 for ckbcomp_dependency in perl xkeyboard-config; do
   if ! grep -Eq "['\"]${ckbcomp_dependency}([<>=][^'\"]*)?['\"]" \
@@ -449,15 +443,9 @@ if ! grep -Fq "'0001-devario-wayland-runtime.patch'" "$calamares_pkgbuild" \
 fi
 
 declare -A pinned_desktop_sources=(
-  ["packages/noctalia/noctalia-50f0f095053a4b5c10874c4e7080f55dc15d3b38.tar.gz"]='bcc34b2cfcb3650fa4e0197625c88918d5411c8a1532b9652497e205e491217c'
-  ["packages/noctalia-greeter/noctalia-greeter-4aa960dcff874dddd4d3d94d931df43a416ea9cf.tar.gz"]='4e42a6056037efe6f9b162c8341d7a0514a49595e30fec2098c05ffb1b993af6'
-  ["packages/aqueous/aqueous-001beb7d08ecb8e5b428b869dbb9351f8d97820c.tar.gz"]='0f17fa6457b966354ed22c724777961f853d99dc68bf255f27b1fd02f0667c84'
-  ["packages/aqueous/aqueous-zig-cache-001beb7d.tar.zst"]='b2495e18a20391446189f44d3eff762845c4883da78b7042ba99fdd10189b310'
-  ["packages/aqueous/wlroots-0.20.2.tar.gz"]='972c7ac44b17828f4702bfae7cd8347346a3fb5b2c1076cfa2c3fcedac5ec343'
-  ["packages/aqueous/0001-devario-default-applications.patch"]='096170a6d8fdd2e582b6a0a0b95ee26988094934d1a622ea1f04321bf341027d'
-  ["packages/devario-aqueous-desktop/devario-gpu-driver.service"]='5eaa5d9565feaf0b0447b0ff91bf1c1082c56740edd37968d25b09c518294470'
+  ["packages/devario-aqueous-desktop/devario-gpu-driver.service"]='ec8e672fb2e7a451bd97ca9ccbc4ade0a91a7f0e097a5e3a6ce99ec144871807'
   ["packages/devario-aqueous-desktop/gpu-driver-setup"]='533cfa381f0d7eb1ef1e5da15037992fd5f59c539cfe6d4a8f14e6d6d3aeb99f'
-  ["packages/devario-aqueous-desktop/greetd-config.toml"]='16afecd6b0f64351c92ed780d1cdb5d3efa1e793b679da5dde98bb39a124e7d7'
+  ["packages/devario-aqueous-desktop/greetd-config.toml"]='f2d467b8a555bc335c5a27074660d2520636b69157fcb5137072a9b3a08bf68a'
   ["packages/devario-aqueous-desktop/greetd-gpu-driver.conf"]='a997663d00e362e780c6d29989bcb9dfdb50d5b00142322bee207d68be8c3801'
 )
 for pinned_path in "${!pinned_desktop_sources[@]}"; do
@@ -468,107 +456,16 @@ for pinned_path in "${!pinned_desktop_sources[@]}"; do
   fi
 done
 
-for desktop_recipe in noctalia noctalia-greeter aqueous devario-aqueous-desktop; do
+for desktop_recipe in devario-aqueous-desktop; do
   if grep -Eq "^[[:space:]]*['\"]?SKIP['\"]?([[:space:]]|$)" \
     "$project_dir/packages/$desktop_recipe/PKGBUILD"; then
     fail "$desktop_recipe contains an unchecked source"
   fi
 done
 
-for pinned_revision in \
-  50f0f095053a4b5c10874c4e7080f55dc15d3b38 \
-  4aa960dcff874dddd4d3d94d931df43a416ea9cf \
-  001beb7d08ecb8e5b428b869dbb9351f8d97820c; do
-  if ! grep -R -Fq "$pinned_revision" \
-    "$project_dir/packages/noctalia/PKGBUILD" \
-    "$project_dir/packages/noctalia-greeter/PKGBUILD" \
-    "$project_dir/packages/aqueous/PKGBUILD"; then
-    fail "desktop package metadata is missing pinned revision $pinned_revision"
-  fi
-done
-
-aqueous_pkgbuild="$project_dir/packages/aqueous/PKGBUILD"
-for required_aqueous_build_text in \
-  'AQUEOUS_WLROOTS_CACHE_DIR="$srcdir"' \
-  'ZIG_GLOBAL_CACHE_DIR="$srcdir"' \
-  '-Dcpu=baseline' \
-  '-Doptimize=ReleaseSafe' \
-  '-Dxwayland' \
-  '-Dllvm' \
-  '-Dman-pages=true' \
-  'noctalia plugins lint'; do
-  if ! grep -Fq -- "$required_aqueous_build_text" "$aqueous_pkgbuild"; then
-    fail "Aqueous packaging is missing: $required_aqueous_build_text"
-  fi
-done
-if ! grep -Fq 'spawn:firefox' \
-  "$project_dir/packages/aqueous/0001-devario-default-applications.patch" \
-  || ! grep -Fq 'spawn:pkexec calamares' \
-    "$project_dir/packages/aqueous/0001-devario-default-applications.patch"; then
-  fail "Aqueous defaults must expose Firefox and the live Calamares installer"
-fi
-
-if command -v bsdtar >/dev/null 2>&1; then
-  zig_cache_listing="$(
-    bsdtar -tf "$project_dir/packages/aqueous/aqueous-zig-cache-001beb7d.tar.zst"
-  )"
-  for zig_dependency in pixman wayland wlroots xkbcommon translate_c aro; do
-    if ! grep -Eq "^p/${zig_dependency}-" <<< "$zig_cache_listing"; then
-      fail "the offline Aqueous Zig cache is missing $zig_dependency"
-    fi
-  done
-
-  aqueous_source="$project_dir/packages/aqueous/aqueous-001beb7d08ecb8e5b428b869dbb9351f8d97820c.tar.gz"
-  aqueous_desktop_entry="$(
-    bsdtar -xOf "$aqueous_source" aqueous-0.4.6/aqueous.desktop
-  )"
-  aqueous_wm_wrapper="$(
-    bsdtar -xOf "$aqueous_source" aqueous-0.4.6/packaging/aqueous-wm.sh
-  )"
-  aqueous_init_wrapper="$(
-    bsdtar -xOf "$aqueous_source" aqueous-0.4.6/packaging/aqueous-init
-  )"
-  if ! grep -Fxq 'Exec=uwsm start -- aqueous-wm' <<< "$aqueous_desktop_entry" \
-    || ! grep -Fxq 'TryExec=uwsm' <<< "$aqueous_desktop_entry" \
-    || ! grep -Fxq 'DesktopNames=Aqueous' <<< "$aqueous_desktop_entry"; then
-    fail "the pinned Aqueous Wayland session does not use UWSM"
-  fi
-  if ! grep -Fq '/usr/bin/aqueous -c /usr/bin/aqueous-init' <<< "$aqueous_wm_wrapper" \
-    || ! grep -Fq 'uwsm finalize' <<< "$aqueous_init_wrapper" \
-    || ! grep -Fq 'graphical-session.target' <<< "$aqueous_init_wrapper"; then
-    fail "the pinned Aqueous source lacks the required UWSM session lifecycle"
-  fi
-
-  greeter_source="$project_dir/packages/noctalia-greeter/noctalia-greeter-4aa960dcff874dddd4d3d94d931df43a416ea9cf.tar.gz"
-  greeter_source_listing="$(bsdtar -tf "$greeter_source")"
-  for greeter_source_path in \
-    noctalia-greeter-1.0.0/assets/noctalia.svg \
-    noctalia-greeter-1.0.0/scripts/noctalia-greeter-session \
-    noctalia-greeter-1.0.0/data/tmpfiles.d/noctalia-greeter.conf; do
-    if ! grep -Fxq "$greeter_source_path" <<< "$greeter_source_listing"; then
-      fail "the pinned Noctalia Greeter source is missing $greeter_source_path"
-    fi
-  done
-fi
-
-for greeter_dependency in greetd wlroots0.20 dbus; do
-  if ! grep -Eq "['\"]${greeter_dependency}([<>=][^'\"]*)?['\"]" \
-    "$project_dir/packages/noctalia-greeter/PKGBUILD"; then
-    fail "Noctalia Greeter must depend on $greeter_dependency"
-  fi
-done
-if grep -Eq "^[[:space:]]*conflicts=.*['\"]greetd-agreety['\"]" \
-  "$project_dir/packages/noctalia-greeter/PKGBUILD"; then
-  fail "Noctalia Greeter must coexist with greetd's required agreety fallback"
-fi
-if ! grep -Fq -- '--buildtype=plain' \
-  "$project_dir/packages/noctalia-greeter/PKGBUILD"; then
-  fail "Noctalia Greeter must use a portable non-native Meson build type"
-fi
-
 desktop_meta="$project_dir/packages/devario-aqueous-desktop/PKGBUILD"
 for desktop_dependency in \
-  aqueous aqueous-session aqueous-noctalia noctalia noctalia-greeter greetd \
+  aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous pearl pearl-greeter-git greetd \
   linux-devario-headers nvidia-open-dkms nvidia-utils; do
   if ! grep -Eq "['\"]${desktop_dependency}([<>=][^'\"]*)?['\"]" "$desktop_meta"; then
     fail "the Devario desktop metapackage must depend on $desktop_dependency"
@@ -594,10 +491,10 @@ if grep -Eq 'modprobe_command.*nouveau|modprobe[[:space:]]+nouveau' \
   "$gpu_driver_setup"; then
   fail "the NVIDIA setup helper must not bypass nvidia-utils' Nouveau blacklist"
 fi
-if ! grep -Fxq 'Before=greetd.service' "$gpu_driver_unit" \
+if ! grep -Fxq 'Before=pearl-greeter.service' "$gpu_driver_unit" \
   || ! grep -Fxq 'ExecStart=/usr/lib/devario/gpu-driver-setup --setup' \
     "$gpu_driver_unit"; then
-  fail "the NVIDIA setup service must complete before greetd"
+  fail "the NVIDIA setup service must complete before Pearl Greeter"
 fi
 for required_gpu_dropin_text in \
   'Wants=devario-gpu-driver.service' \
@@ -650,7 +547,7 @@ for shelly_build_call in \
     fail "build-packages.sh is missing: $shelly_build_call"
   fi
 done
-for desktop_build_package in noctalia noctalia-greeter aqueous devario-aqueous-desktop; do
+for desktop_build_package in devario-aqueous-desktop; do
   if ! grep -Eq "^[[:space:]]+${desktop_build_package}[[:space:]]*$" \
     "$package_build_script"; then
     fail "build-packages.sh omits $desktop_build_package from its package order"
@@ -680,11 +577,6 @@ for required_repository_cleanup_text in \
     fail "build-packages.sh does not remove superseded package artifacts safely"
   fi
 done
-if ! grep -Fq 'if [[ "$package_name" == noctalia ]]' "$package_build_script" \
-  || ! grep -Fq 'shelly install standard --no-confirm "${artifacts[@]}"' \
-    "$package_build_script"; then
-  fail "the pinned Noctalia build must be installed through Shelly before Aqueous validation"
-fi
 
 if command -v makepkg >/dev/null 2>&1; then
   makepkg_metadata_root="$(mktemp -d /tmp/devario-makepkg-metadata.XXXXXX)"
@@ -929,7 +821,7 @@ else
 fi
 
 keyring_unit="$profile_dir/airootfs/etc/systemd/system/shelly-keyring-init.service"
-default_target="$profile_dir/airootfs/etc/systemd/system/default.target"
+live_target="$profile_dir/late-airootfs/etc/systemd/system/devario-live.target"
 prepare_target="$profile_dir/airootfs/etc/calamares/modules/prepare_target.conf"
 services_systemd="$profile_dir/airootfs/etc/calamares/modules/services-systemd.conf"
 calamares_settings="$profile_dir/airootfs/etc/calamares/settings.conf"
@@ -938,7 +830,7 @@ partition_config="$profile_dir/airootfs/etc/calamares/modules/partition.conf"
 limine_config="$profile_dir/airootfs/etc/calamares/modules/limine.conf"
 limine_update="$project_dir/packages/devario-boot/limine-update"
 limine_hook="$project_dir/packages/devario-boot/95-devario-boot.hook"
-live_greetd_config="$profile_dir/airootfs/etc/greetd/config.toml"
+live_greetd_config="$profile_dir/late-airootfs/etc/greetd/config.toml"
 installed_greetd_config="$project_dir/packages/devario-aqueous-desktop/greetd-config.toml"
 live_session_wrapper="$profile_dir/airootfs/usr/local/bin/devario-aqueous-live-session"
 live_installer_desktop="$profile_dir/airootfs/usr/share/applications/install-devario.desktop"
@@ -1088,17 +980,17 @@ fi
 
 if grep -Eq '^[[:space:]]*-[[:space:]]*displaymanager[[:space:]]*$' \
   "$calamares_settings"; then
-  fail "Calamares must not rewrite Devario's Noctalia Greeter configuration"
+  fail "Calamares must not rewrite Devario's Pearl Greeter configuration"
 fi
 if [[ -e "$profile_dir/airootfs/etc/calamares/modules/displaymanager.conf" ]]; then
   fail "the obsolete Calamares display-manager configuration is still present"
 fi
 
 for greetd_config in "$live_greetd_config" "$installed_greetd_config"; do
-  if ! grep -Fqx 'command = "/usr/bin/noctalia-greeter-session -- --session Aqueous"' \
+  if ! grep -Fqx 'command = "/usr/lib/pearl/pearl-greeter-host"' \
     "$greetd_config" \
-    || ! grep -Fqx 'user = "greeter"' "$greetd_config"; then
-    fail "${greetd_config#"$project_dir/"} does not launch Noctalia Greeter with Aqueous selected"
+    || ! grep -Fqx 'user = "pearl-greeter"' "$greetd_config"; then
+    fail "${greetd_config#"$project_dir/"} does not launch Pearl Greeter with Aqueous selected"
   fi
 done
 if ! grep -Fqx '[initial_session]' "$live_greetd_config" \
@@ -1116,7 +1008,7 @@ fi
 if ! grep -Fq \
   'install -Dm644 /usr/share/devario/greetd/config.toml /etc/greetd/config.toml' \
   "$prepare_target"; then
-  fail "Calamares does not restore the installed Noctalia Greeter template"
+  fail "Calamares does not restore the installed Pearl Greeter template"
 fi
 if ! grep -Fq 'rm -f /usr/local/bin/devario-aqueous-live-session' \
   "$prepare_target"; then
@@ -1137,24 +1029,24 @@ if ! grep -Fq \
   "$prepare_target"; then
   fail "Calamares does not remove the live-only installer authorization"
 fi
-if ! grep -A3 -F 'name: greetd.service' "$services_systemd" \
+if ! grep -A3 -F 'name: pearl-greeter.service' "$services_systemd" \
   | grep -Fq 'action: enable'; then
-  fail "Calamares must enable greetd on the installed system"
+  fail "Calamares must enable Pearl Greeter on the installed system"
 fi
-if ! grep -A3 -F 'name: greetd.service' "$services_systemd" \
+if ! grep -A3 -F 'name: pearl-greeter.service' "$services_systemd" \
   | grep -Fq 'mandatory: true'; then
-  fail "Calamares must treat greetd enablement as mandatory"
+  fail "Calamares must treat Pearl Greeter enablement as mandatory"
 fi
-if ! grep -Eq '^(Wants|After)=.*greetd\.service' "$default_target"; then
-  fail "the live default target does not start greetd"
+if ! grep -Eq '^(Wants|After)=.*pearl-greeter\.service' "$live_target"; then
+  fail "the live readiness target does not start Pearl Greeter"
 fi
-if ! grep -Fxq 'Before=greetd.service' "$keyring_unit"; then
-  fail "the keyring initialization service must finish before greetd"
+if ! grep -Fxq 'Before=pearl-greeter.service' "$keyring_unit"; then
+  fail "the keyring initialization service must finish before Pearl Greeter"
 fi
 
 legacy_desktop_references="$(
   grep -RInEi --exclude='*.tar.*' --exclude='*.pkg.tar.*' \
-    '(^|[^[:alnum:]_-])(lightdm|xfce4?(-goodies)?|tuigreet)([^[:alnum:]_-]|$)' \
+    '(^|[^[:alnum:]_-])(noctalia(-greeter)?|lightdm|xfce4?(-goodies)?|tuigreet)([^[:alnum:]_-]|$)' \
     "$profile_dir" 2>/dev/null || true
 )"
 if [[ -n "$legacy_desktop_references" ]]; then
@@ -1162,10 +1054,10 @@ if [[ -n "$legacy_desktop_references" ]]; then
   fail "the Devario ISO profile retains a legacy desktop or greeter reference"
 fi
 if [[ -e "$profile_dir/airootfs/etc/skel/Desktop/install-devario.desktop" ]]; then
-  fail "the live installer must be discovered through Noctalia, not an XFCE desktop folder"
+  fail "the live installer must be discovered through Pearl, not an XFCE desktop folder"
 fi
 if [[ ! -f "$live_installer_desktop" ]]; then
-  fail "the Noctalia launcher is missing the Install Devario desktop entry"
+  fail "the Pearl launcher is missing the Install Devario desktop entry"
 fi
 if ! grep -Fqx 'Exec=/usr/bin/pkexec /usr/bin/calamares' \
   "$live_installer_desktop"; then
@@ -1198,8 +1090,8 @@ for required_line in \
   fi
 done
 
-if ! grep -Eq '^(Wants|After)=.*shelly-keyring-init\.service' "$default_target"; then
-  fail "the live default target does not order shelly-keyring-init.service"
+if ! grep -Eq '^(Wants|After)=.*shelly-keyring-init\.service' "$live_target"; then
+  fail "the live readiness target does not order shelly-keyring-init.service"
 fi
 
 if grep -Fq 'rm -f /etc/systemd/system/shelly-keyring-init.service' "$prepare_target"; then
@@ -1435,9 +1327,9 @@ if command -v shelly >/dev/null 2>&1; then
     while IFS= read -r package_name; do
       [[ -n "$package_name" && "$package_name" != \#* ]] || continue
       case "$package_name" in
-        aqueous|aqueous-session|aqueous-noctalia|calamares|ckbcomp|\
-        devario-filesystem|seafoam-keyring|shelly-arch-compat|devario-aqueous-desktop|devario-base|devario-boot|devario-dracut|devario-keyring|\
-        devario-managed-keyring|noctalia|noctalia-greeter)
+        calamares|ckbcomp|\
+        devario-filesystem|seafoam-keyring|shelly-arch-compat|devario-aqueous-desktop|devario-base|devario-boot|devario-keyring|\
+        devario-managed-keyring)
           continue
           ;;
       esac
@@ -1477,11 +1369,11 @@ if command -v bsdtar >/dev/null 2>&1; then
   base_artifacts=("$project_dir"/repo/core/devario-base-[0-9]*.pkg.tar.zst)
   shelly_artifacts=("$project_dir"/repo/core/shelly-[0-9]*.pkg.tar.zst)
   ckbcomp_artifacts=("$project_dir"/repo/core/ckbcomp-[0-9]*.pkg.tar.zst)
-  aqueous_artifacts=("$project_dir"/repo/core/aqueous-[0-9]*.pkg.tar.zst)
+  aqueous_artifacts=("$project_dir"/repo/core/aqueous-core-[0-9]*.pkg.tar.zst)
   aqueous_session_artifacts=("$project_dir"/repo/core/aqueous-session-*.pkg.tar.zst)
-  aqueous_noctalia_artifacts=("$project_dir"/repo/core/aqueous-noctalia-*.pkg.tar.zst)
-  noctalia_artifacts=("$project_dir"/repo/core/noctalia-[0-9]*.pkg.tar.zst)
-  noctalia_greeter_artifacts=("$project_dir"/repo/core/noctalia-greeter-[0-9]*.pkg.tar.zst)
+  aqueous_pearl_artifacts=("$project_dir"/repo/core/aqueous-integration-pearl-*.pkg.tar.zst)
+  pearl_artifacts=("$project_dir"/repo/core/pearl-[0-9]*.pkg.tar.zst)
+  pearl_greeter_artifacts=("$project_dir"/repo/seafoam/pearl-greeter-git-*.pkg.tar.zst)
   desktop_meta_artifacts=("$project_dir"/repo/core/devario-aqueous-desktop-[0-9]*.pkg.tar.zst)
 
   stale_repository_files=("$project_dir"/repo/core/*.old "$project_dir"/repo/core/*.old.sig)
@@ -1491,10 +1383,9 @@ if command -v bsdtar >/dev/null 2>&1; then
 
   if (( ${#devario_artifacts[@]} )); then
     for expected_artifact_package in \
-      aqueous aqueous-noctalia aqueous-session calamares ckbcomp \
+      calamares ckbcomp \
       devario-filesystem seafoam-keyring devario-aqueous-desktop devario-base devario-boot devario-dracut devario-keyring \
-      linux-devario linux-devario-headers \
-      noctalia noctalia-greeter; do
+      linux-devario linux-devario-headers; do
       expected_artifacts=(
         "$project_dir"/repo/core/"$expected_artifact_package"-[0-9]*.pkg.tar.zst
       )
@@ -1518,8 +1409,8 @@ if command -v bsdtar >/dev/null 2>&1; then
       usr/bin/aqueous \
       usr/bin/aqueousctl \
       usr/lib/aqueous/libwlroots-0.20.so \
-      usr/share/man/man1/aqueous.1.gz \
-      usr/share/man/man1/aqueousctl.1.gz; do
+      usr/share/man/man1/aqueous.1 \
+      usr/share/man/man1/aqueousctl.1; do
       if ! grep -Fxq "$required_path" <<< "$artifact_contents"; then
         fail "$(basename -- "$artifact") is missing $required_path"
       fi
@@ -1531,7 +1422,7 @@ if command -v bsdtar >/dev/null 2>&1; then
           | grep -Fq 'Library runpath: [$ORIGIN/../lib/aqueous]'; then
         :
       else
-        fail "$(basename -- "$artifact") does not use its private patched wlroots"
+        fail "$(basename -- "$artifact") must use only its private wlroots directory in its runtime library search path"
       fi
       rm -rf -- "$aqueous_extract_dir"
     fi
@@ -1543,7 +1434,7 @@ if command -v bsdtar >/dev/null 2>&1; then
       usr/bin/aqueous-init \
       usr/bin/aqueous-wm \
       usr/share/wayland-sessions/aqueous.desktop \
-      etc/uwsm/env-aqueous \
+      etc/xdg/uwsm/env-aqueous \
       usr/share/xdg-desktop-portal/aqueous-portals.conf \
       usr/lib/systemd/user/aqueous-session.target; do
       if ! grep -Fxq "$required_path" <<< "$artifact_contents"; then
@@ -1559,50 +1450,36 @@ if command -v bsdtar >/dev/null 2>&1; then
     fi
   done
 
-  for artifact in "${aqueous_noctalia_artifacts[@]}"; do
+  for artifact in "${aqueous_pearl_artifacts[@]}"; do
     artifact_contents="$(bsdtar -tf "$artifact")"
     for required_path in \
-      usr/bin/aqueous-config \
-      usr/lib/systemd/user/noctalia.service \
-      usr/lib/systemd/user/graphical-session.target.wants/noctalia.service \
-      usr/share/aqueous/noctalia/config.toml \
-      usr/share/aqueous/noctalia-plugins/settings/plugin.toml; do
+      usr/lib/systemd/user/aqueous-pearl.service \
+      usr/lib/systemd/user/graphical-session.target.wants/aqueous-pearl.service \
+      usr/lib/systemd/user/pearl.service.d/50-aqueous-selection.conf; do
       if ! grep -Fxq "$required_path" <<< "$artifact_contents"; then
         fail "$(basename -- "$artifact") is missing $required_path"
       fi
     done
   done
 
-  for artifact in "${noctalia_artifacts[@]}"; do
+  for artifact in "${pearl_artifacts[@]}"; do
     artifact_contents="$(bsdtar -tf "$artifact")"
-    if ! grep -Fxq 'usr/bin/noctalia' <<< "$artifact_contents" \
-      || ! grep -Eq '^usr/share/noctalia/assets/' <<< "$artifact_contents"; then
-      fail "$(basename -- "$artifact") lacks the Noctalia binary or required assets"
-    fi
-  done
-
-  for artifact in "${noctalia_greeter_artifacts[@]}"; do
-    artifact_contents="$(bsdtar -tf "$artifact")"
-    greeter_pkginfo="$(bsdtar -xOf "$artifact" .PKGINFO)"
-    for required_path in \
-      usr/bin/noctalia-greeter \
-      usr/bin/noctalia-greeter-compositor \
-      usr/bin/noctalia-greeter-session \
-      usr/bin/noctalia-greeter-apply-appearance \
-      usr/lib/tmpfiles.d/noctalia-greeter.conf; do
+    for required_path in usr/bin/pearl usr/bin/pearlctl usr/bin/pearl-lock; do
       if ! grep -Fxq "$required_path" <<< "$artifact_contents"; then
         fail "$(basename -- "$artifact") is missing $required_path"
       fi
     done
-    if ! grep -Eq '^usr/share/noctalia-greeter/assets/' <<< "$artifact_contents"; then
-      fail "$(basename -- "$artifact") lacks the required greeter assets"
-    fi
-    if ! grep -Fxq 'provides = greetd-greeter' <<< "$greeter_pkginfo"; then
-      fail "$(basename -- "$artifact") does not provide a greetd greeter"
-    fi
-    if grep -Fxq 'conflict = greetd-agreety' <<< "$greeter_pkginfo"; then
-      fail "$(basename -- "$artifact") conflicts with greetd's required fallback greeter"
-    fi
+  done
+
+  for artifact in "${pearl_greeter_artifacts[@]}"; do
+    artifact_contents="$(bsdtar -tf "$artifact")"
+    for required_path in usr/bin/pearl-greeter usr/lib/pearl/pearl-greeter-host \
+      usr/lib/systemd/system/pearl-greeter.service usr/lib/sysusers.d/pearl-greeter.conf \
+      usr/lib/tmpfiles.d/pearl-greeter.conf etc/pearl/greeter.json; do
+      if ! grep -Fxq "$required_path" <<< "$artifact_contents"; then
+        fail "$(basename -- "$artifact") is missing $required_path"
+      fi
+    done
   done
 
   for artifact in "${desktop_meta_artifacts[@]}"; do
@@ -1611,8 +1488,9 @@ if command -v bsdtar >/dev/null 2>&1; then
     for required_path in \
       usr/lib/devario/gpu-driver-setup \
       usr/lib/systemd/system/devario-gpu-driver.service \
-      usr/lib/systemd/system/greetd.service.d/20-devario-gpu-driver.conf \
-      usr/share/devario/greetd/config.toml; do
+      usr/lib/systemd/system/pearl-greeter.service.d/20-devario-gpu-driver.conf \
+      usr/share/devario/greetd/config.toml \
+      etc/xdg/aqueous/session.toml; do
       if ! grep -Fxq "$required_path" <<< "$artifact_contents"; then
         fail "$(basename -- "$artifact") is missing $required_path"
       fi
@@ -1636,9 +1514,9 @@ if command -v bsdtar >/dev/null 2>&1; then
       bsdtar -xOf "$artifact" usr/share/devario/greetd/config.toml
     )"
     if ! grep -Fqx \
-      'command = "/usr/bin/noctalia-greeter-session -- --session Aqueous"' \
+      'command = "/usr/lib/pearl/pearl-greeter-host"' \
       <<< "$packaged_greetd_config"; then
-      fail "$(basename -- "$artifact") does not select Aqueous in Noctalia Greeter"
+      fail "$(basename -- "$artifact") does not select Aqueous in Pearl Greeter"
     fi
   done
 

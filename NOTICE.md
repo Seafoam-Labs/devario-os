@@ -16,7 +16,7 @@ work files. The original repository remains an active historical source; this
 notice does not request or imply that it is archived or made read-only.
 
 Major third-party inputs include Arch Linux and Archiso, Aqueous, Calamares,
-CachyOS and Linux, Noctalia, Noctalia Greeter, Pacman/libalpm, Shelly, wlroots,
+CachyOS and Linux, Pearl, Pearl Greeter, Pacman/libalpm, Shelly, wlroots,
 and their transitive dependencies. This list is descriptive rather than a
 substitute for their copyright and license notices. Machine-readable details
 for checked-in source bundles are in `release/source-manifest.json`.
