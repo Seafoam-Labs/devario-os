@@ -85,14 +85,14 @@ def check_payload(devices, root=Path("/")):
     # and boot-update. No uname or assumptions about the running live kernel.
     kernel = output("bash", "-eu", "-c",
                     'source /usr/lib/devario/kernel.sh; '
-                    'devario_kernel_select /usr/lib/modules linux-cachyos-lts; '
+                    'devario_kernel_select /usr/lib/modules linux-devario; '
                     'printf "%s" "$DEVARIO_KERNEL_VERSION"')
     if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._+-]*", kernel):
         raise RuntimeError("Invalid target kernel version")
-    for name in ("linux-cachyos-lts", "linux-cachyos-lts-headers"):
+    for name in ("linux-devario", "linux-devario-headers"):
         if name not in packages:
             raise RuntimeError(f"Offline installation payload is missing {name}")
-    if packages["linux-cachyos-lts"] != packages["linux-cachyos-lts-headers"]:
+    if packages["linux-devario"] != packages["linux-devario-headers"]:
         raise RuntimeError("Target kernel and header package versions differ")
     build = root / "usr/lib/modules" / kernel / "build"
     if not (build / "Makefile").is_file() or (build / "include/config/kernel.release").read_text().strip() != kernel:

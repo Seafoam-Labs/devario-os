@@ -25,7 +25,7 @@ class IndependenceTests(unittest.TestCase):
     def test_repository_defaults(self):
         repositories = json.loads((PROJECT / "repositories/defaults.json").read_text())["repositories"]
         self.assertEqual([r["name"] for r in repositories], ["devario-core", "seafoam-labs"])
-        runtime = (PROJECT / "packages/devario-alpm-runtime/shelly.conf").read_text()
+        runtime = (PROJECT / "packages/devario-base/shelly.conf").read_text()
         for repo in repositories:
             self.assertIn("[" + repo["name"] + "]", runtime)
             self.assertIn(repo["server"], runtime)
@@ -40,7 +40,8 @@ class IndependenceTests(unittest.TestCase):
         self.assertEqual(compat.change(enabled, True), enabled)
         self.assertEqual(compat.change(enabled, False).rstrip(), original.rstrip())
         self.assertTrue(compat.protected("devario-filesystem"))
-        self.assertTrue(compat.protected("linux-cachyos-lts"))
+        self.assertTrue(compat.protected("linux-devario"))
+        self.assertTrue(compat.protected("linux-devario-headers"))
         self.assertFalse(compat.protected("example-application"))
         with self.assertRaises(ValueError):
             compat.change(original + "[core]\nServer = https://user.test/\n", True)

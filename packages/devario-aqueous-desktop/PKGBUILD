@@ -2,7 +2,7 @@
 
 pkgname=devario-aqueous-desktop
 pkgver=1
-pkgrel=5
+pkgrel=6
 pkgdesc="Complete Aqueous and Noctalia desktop environment for Devario"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -35,7 +35,7 @@ depends=(
   'xdg-utils'
   'noto-fonts'
   'ttf-dejavu'
-  'linux-cachyos-lts-headers'
+  'linux-devario-headers'
   'nvidia-open-dkms=615.71.09'
   'nvidia-utils=615.71.09'
   'vulkan-intel'

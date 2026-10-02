@@ -18,13 +18,10 @@ boundaries.
 To try Devario on physical hardware, follow
 [Create and Boot a Devario USB Drive](docs/Create-and-Boot-Devario-USB.md).
 
-The installed system does not ship the `pacman` or `pacman-key` executables. It uses four Devario packages instead:
+The installed system does not ship the `pacman` or `pacman-key` executables. It uses these Devario packages:
 
-- `shelly` provides the package-management CLI and UI.
-- `devario-alpm-runtime` provides `libalpm` and the runtime data that Shelly needs, without the Pacman CLI or its build
-  tools.
-- `devario-base` provides the base-system dependency set without depending on Arch's `base` package, which would pull
-  Pacman back into the image.
+- `shelly` from `devario-core` provides the package-management CLI, UI, and native RLPM backend.
+- `devario-base` provides the base-system dependency set, Shelly repository configuration, and storage migration service.
 - `devario-keyring` installs the public Devario repository keys consumed by Shelly's keyring commands.
 
 ## What is included
@@ -34,7 +31,7 @@ The installed system does not ship the `pacman` or `pacman-key` executables. It 
 - greetd with Noctalia Greeter for installed logins and an automatic Aqueous
   `liveuser` session on the live image
 - NetworkManager, PipeWire, Firefox, and common filesystem tools
-- Devario-built CachyOS LTS kernel targeting baseline x86-64 hardware
+- Seafoam Labs Devario kernel targeting x86-64-v3 hardware
 - NVIDIA open-driver support with PCI detection before the graphical greeter
 - Fastfetch on the first interactive shell in each terminal
 - Base Calamares 3.4.2 built from Codeberg
@@ -51,7 +48,7 @@ filesystem, and the remaining modules configure that copy for the target machine
 
 ISO construction verifies that every Devario-owned package is present exactly
 once in the local repository before installing the live root. In particular,
-both `linux-cachyos-lts` and `linux-cachyos-lts-headers` must have been built by
+both `linux-devario` and `linux-devario-headers` must have been built by
 `build-packages-nspawn.sh`; the kernel recipe alone is not an installable
 artifact. The Devario builder transaction also compares its requested package
 list with Shelly's installed inventory and refuses a partial root filesystem.
@@ -104,7 +101,7 @@ ISO construction, live use, installation, or installed-system operation:
 
 | Environment | Package-management components |
 | --- | --- |
-| Live and installed system | `shelly`, `devario-alpm-runtime`, `devario-base`, and `devario-keyring` |
+| Live and installed system | `shelly`, `devario-base`, and `devario-keyring` |
 | Package build host | Shelly synchronizes repositories and installs every declared build dependency. `makepkg` runs with `--nodeps`, automatic dependency probes disabled, and a strict Shelly inventory adapter; `repo-add` only writes repository metadata. |
 | ISO build host | Pinned `devario-iso-builder` with a declarative manifest; synchronization, installation, and inventory run through Shelly. |
 
@@ -131,18 +128,15 @@ Some historical names remain only at upstream Arch compatibility boundaries:
 Their presence does not mean `/usr/bin/pacman` or `/usr/bin/pacman-key` is present. Devario build scripts, runtime
 services, and installer configuration must never invoke either executable, `pacstrap`, or `pacman-conf`.
 
-`devario-alpm-runtime` also advertises a versioned virtual `pacman` provider for optional compatible packages such as `archlinux-keyring`. It conflicts with and replaces the real package, but it does not contain either Pacman
-executable. This compatibility metadata is checked separately from the image-content rule.
+Shelly is supplied by `devario-core`; the OS no longer builds a separate
+Shelly recipe or libalpm runtime. The published `shelly` package uses its native
+RLPM backend. `devario-base` requires Shelly 3.1.6-2 or newer and replaces the
+retired `devario-alpm-runtime` package, retaining Devario's configuration,
+package storage directories, download account, and migration service.
 
-The Devario Shelly recipe targets upstream 3.1.6 and applies the distribution patches described in
-[`packages/shelly/README.md`](packages/shelly/README.md). Upstream now supplies native keyring and bootstrap
-operations. Devario pins keyring execution to `/usr/bin/shelly-key`, reads package ownership directly from the
-ALPM database, defaults to `/etc/shelly.conf` and `/var/lib/shelly`, and supports `SHELLY_ALPM_CONFIG` for image
-roots. The package build and artifact validator enforce this boundary. Shelly's native non-isolated PKGBUILD
-builder is available; `shelly build --isolated` remains rejected pending assessment of upstream's new root
-provisioning against Devario policy. Deployment belongs to the coordinated netinstall migration.
-Existing installations are bridged during the runtime package upgrade and materialized under the new paths by
-`shelly-storage-migrate.service` at the following boot.
+Existing installations are bridged during the base package upgrade and
+materialized under the Shelly paths by `shelly-storage-migrate.service` at the
+following boot.
 Verified legacy data is retained under `/var/lib/devario/shelly-path-migration/legacy`;
 `/usr/lib/devario/shelly-storage-migrate --rollback` can recreate current compatibility state during the rollback
 window.
@@ -258,11 +252,12 @@ Initialize a local development signing key and export its public material into t
 ./scripts/init-repository-key.sh
 ```
 
-Build Calamares, its `ckbcomp` helper, Shelly, the ALPM runtime split, the
-Devario base and keyring packages, the pinned baseline `linux-cachyos-lts`
-kernel and headers, and the pinned Aqueous, Noctalia, Noctalia Greeter,
+Build Calamares, its `ckbcomp` helper, the Devario base and keyring packages,
+the pinned x86-64-v3 `linux-devario` kernel and headers, and the pinned
+Aqueous, Noctalia, Noctalia Greeter,
 session, and desktop packages. If a local fingerprint exists, the script signs
-every package and the repository database automatically:
+every package and the repository database automatically. Shelly is supplied
+by `devario-core`:
 
 ```sh
 ./scripts/build-packages.sh
@@ -277,14 +272,14 @@ official baseline container so host ISA settings cannot leak into release
 artifacts:
 
 ```sh
-sudo ./scripts/build-packages-nspawn.sh linux-cachyos-lts
+sudo ./scripts/build-packages-nspawn.sh linux-devario
 ```
 
-The kernel recipe pins the CachyOS release tarball and vendored configuration
-with BLAKE2 checksums and unconditionally selects `generic_v1`. Updating it is a
-maintainer operation documented in
-`packages/linux-cachyos-lts/README.md`; installed systems receive the resulting
-binary exclusively from the signed Devario repository.
+The kernel recipe pins Seafoam Labs' signed `devario-7.2.7-1` release archive
+and configuration with SHA-256 checksums. The kernel targets x86-64-v3 while
+host build tools target baseline x86-64. Updating it is a maintainer operation
+documented in `packages/linux-devario/README.md`; installed systems receive
+the resulting binary exclusively from the signed Devario repository.
 
 Validate package, profile, Calamares, service, and Shelly/Pacman-boundary invariants:
 
@@ -505,13 +500,13 @@ Before publishing an image, verify that:
 7. Noctalia Greeter lists `Aqueous`, authenticates a user, and starts the
    packaged UWSM session.
 8. `command -v shelly` succeeds, while `command -v pacman` and `command -v pacman-key` fail.
-9. `ldd /usr/bin/shelly` resolves `libalpm` from `devario-alpm-runtime`.
+9. Shelly comes from `devario-core`, uses its native RLPM backend, and runs without `devario-alpm-runtime`.
 10. Keyring initialization and a signed full system upgrade succeed.
 11. Package install, local-package install, removal, provider resolution, and ALPM hooks work.
 12. A kernel, dracut, DKMS, microcode, or Limine upgrade runs Devario's ordered
     dracut generation and boot update, refreshes
     `limine.conf` and the deployed Limine binaries, and leaves the system bootable.
-    Verify that the active release contains `cachyos-lts` in `uname -r` and that
+    Verify that the active release contains `devario` in `uname -r` and that
     both normal and fallback Limine entries use the matching artifact names.
     See [the boot contract and recovery instructions](docs/DRACUT-BOOT.md).
 13. On Turing-or-newer NVIDIA hardware, `/run/devario/gpu-driver` contains
@@ -525,7 +520,7 @@ Before publishing an image, verify that:
 
 - Development images deliberately trust their embedded repository. Public images must use release mode with a signed
   HTTPS repository.
-- Devario maintainers must track CachyOS LTS security releases, rebuild and
+- Devario maintainers must track Seafoam Labs kernel security releases, rebuild and
   sign the pinned kernel promptly, and publish corresponding source materials.
 - The current local development repository was built on a CachyOS x86-64-v4
   host. Aqueous itself is baseline, but the locally built C++ desktop packages
@@ -539,7 +534,7 @@ Before publishing an image, verify that:
 - Secure Boot is not configured.
 - Pre-Turing NVIDIA GPUs are unsupported because the image intentionally keeps
   the `nvidia-utils` Nouveau blacklist enabled.
-- `libalpm` ABI changes require a coordinated rebuild and release of `devario-alpm-runtime` and Shelly.
+- Shelly updates from `devario-core` must pass the package-management and boot acceptance checks before release.
 
 ## Repository layout
 
@@ -549,11 +544,10 @@ iso/shelly.runtime.conf      Installed-system Shelly configuration template
 docs/                            High-level product and architecture documentation
 packages/calamares/              Upstream Calamares package
 packages/ckbcomp/                Calamares keyboard-layout compiler helper
-packages/shelly/                 Shelly package adapted to the split ALPM runtime
-packages/devario-alpm-runtime/   libalpm runtime without Pacman executables
-packages/devario-base/           Base dependency set without Arch's base package
+packages/shelly/                 Documentation for the repository-supplied Shelly package
+packages/devario-base/           Base dependencies, Shelly configuration, and storage migration
 packages/devario-keyring/        Devario public package-signing keys
-packages/linux-cachyos-lts/      Pinned, baseline CachyOS LTS kernel recipe
+packages/linux-devario/      Pinned x86-64-v3 Devario kernel recipe
 packages/aqueous/                Aqueous compositor, UWSM session, and Noctalia integration
 packages/noctalia/               Pinned Noctalia shell package
 packages/noctalia-greeter/       Pinned greetd-native Noctalia Greeter package

@@ -15,7 +15,7 @@ PROTECTED = {"base", "filesystem", "pacman", "shelly", "seafoam-keyring", "limin
 
 
 def protected(name):
-    return name in PROTECTED or name.startswith(("devario-", "linux-cachyos-"))
+    return name in PROTECTED or name.startswith(("devario-", "linux-devario", "linux-cachyos-"))
 
 
 def change(text, activate):

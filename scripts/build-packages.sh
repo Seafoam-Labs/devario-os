@@ -19,13 +19,9 @@ expected_packager='ZoeyErinBauer <40698010+ZoeyErinBauer@users.noreply.github.co
 package_order=(
   devario-filesystem
   seafoam-keyring
-  devario-alpm-runtime
   devario-keyring
   devario-base
-  devario-dracut
   devario-boot
-  linux-devario-lts
-  shelly
   ckbcomp
   noctalia
   noctalia-greeter

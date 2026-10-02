@@ -2,12 +2,13 @@
 
 **Devario network installation, kernel, Shelly, and desktop implementation plan**
 
-Status: proposed; standalone kernel packaging has been prepared in
-`packages/linux-devario/`, and the Devario Shelly 3.1.6 recipe and rebased patches
-are prepared in `packages/shelly/`. Their deployment and the desktop upgrade
-belong to the coordinated network-install change. The installer and desktop
-migration remain unimplemented; earlier desktop prototypes are set aside.
-Repository inspection: 2026-09-27.
+Status: network installer and desktop migration proposed; the kernel recipe
+in `packages/linux-devario/` is now selected by the build, ISO, installer,
+and boot paths. Shelly 3.1.6-2 with its native RLPM backend is now
+supplied by `devario-core`; the local Shelly and ALPM runtime recipes are
+retired. The installer and desktop migration remain unimplemented; earlier
+desktop prototypes are set aside.
+Repository inspection: 2026-10-02.
 
 Make network installation provision Devario from signed packages in
 `https://repo.seafoam-labs.org/devario-core/$arch`, and use the kernel from
@@ -27,8 +28,8 @@ and select the desktop through `devario-desktop` in this same migration.
 - Calamares currently uses `unpackfs` to copy the pristine live root from
   `/run/devario/install-root`. There is no network package-installation step,
   and `packages/calamares/PKGBUILD` disables the upstream packages module.
-- The current kernel packages and boot identifiers are `linux-cachyos-lts`
-  and `linux-cachyos-lts-headers`. Multiple boot helpers and tests hardcode them.
+- The kernel packages and boot identifiers are `linux-devario` and
+  `linux-devario-headers`. Boot helpers, NVIDIA checks, and tests use this identity.
 - Authenticated GitHub access confirms the kernel repository is private and
   `7.2/devario` is a branch. Its inspected commit is
   `fb04fd0acac8dbd8d13723e1fb28c1906380f7fe`; its Makefile reports **7.2.7**.
@@ -91,15 +92,11 @@ matching headers.
 
 **2. Upgrade Shelly and adopt the Devario desktop metapackage**
 
-Recheck the latest stable Shelly release when implementation starts, then pin
-its version, full commit, and source checksum in `packages/shelly/PKGBUILD`.
-Use the inspected 3.1.6 release as the current baseline. Rebase the downstream
-patches against that source; upstream now provides native keyring operations
-and native bootstrap functionality, so older patches cannot simply be applied
-unchanged. Preserve `/etc/shelly.conf`, `/var/lib/shelly`, the Shelly keyring and
-cache paths, and `SHELLY_ALPM_CONFIG`. Cover both absolute and target-relative
-hook/database paths. Retain the existing isolated-builder restriction until
-the new upstream provisioning path has been assessed against Devario policy.
+Use Shelly from the signed `devario-core` snapshot, with 3.1.6-2 or newer as
+the native RLPM baseline. `devario-base` retains Devario's runtime policy and
+storage migration. Verify `/etc/shelly.conf`, `/var/lib/shelly`, keyring and
+cache paths, and `SHELLY_ALPM_CONFIG` against the repository package. Cover
+both absolute and target-relative hook/database paths in image acceptance.
 
 Add the pinned upstream `devario-desktop` recipe and its checksummed
 `session.toml` default. Its direct desktop dependencies are
@@ -119,7 +116,7 @@ defaults out of the conflicting `devario-aqueous-desktop` package into a
 separate support package. Keep the login greeter independent of the desktop
 shell; preserving the existing Noctalia login greeter does not require the
 Noctalia desktop shell. Coordinate this support package with the new kernel
-headers so it does not keep pulling in `linux-cachyos-lts-headers`.
+headers; the current desktop package already selects `linux-devario-headers`.
 
 Update `scripts/build-packages.sh`, `scripts/build-iso.sh`,
 `scripts/lib/edition.sh`, `repository-packages.x86_64`, and validation together.
@@ -266,9 +263,8 @@ Update `README.md`, `docs/ISO-BUILDER.md`, `docs/DRACUT-BOOT.md`, installation
 instructions, acceptance matrices, and provenance. Replace outdated claims that
 all installations only copy the live filesystem.
 
-Account for existing validation blockers discovered during preparation: the
-current CachyOS recipe/configuration no longer match the validator's old pins,
-and `packages/devario-dracut/dracut-install` still contains a Pacman invocation
+The validator now checks the Seafoam Labs kernel source and configuration pins.
+`packages/devario-dracut/dracut-install` still contains a Pacman invocation
 rejected by the executable boundary check. Resolve these in the coordinated
 kernel/boot migration. Install `jsonschema` in the validation environment so
 the release-contract tests actually execute.

@@ -109,13 +109,11 @@ required_files=(
   "$project_dir/packages/calamares/PKGBUILD"
   "$project_dir/packages/calamares/0001-devario-wayland-runtime.patch"
   "$project_dir/packages/ckbcomp/PKGBUILD"
-  "$project_dir/packages/shelly/PKGBUILD"
-  "$project_dir/packages/shelly/0001-remove-pacman-runtime-processes.patch"
-  "$project_dir/packages/shelly/0002-support-alternate-alpm-config.patch"
-  "$project_dir/packages/shelly/0003-use-shelly-runtime-paths.patch"
-  "$project_dir/packages/devario-alpm-runtime/PKGBUILD"
   "$project_dir/packages/devario-base/PKGBUILD"
-  "$project_dir/packages/devario-dracut/PKGBUILD"
+  "$project_dir/packages/devario-base/shelly.conf"
+  "$project_dir/packages/devario-base/shelly-storage-migrate"
+  "$project_dir/packages/devario-base/shelly-storage-migrate.service"
+  "$project_dir/packages/devario-base/devario-base.install"
   "$project_dir/packages/devario-boot/PKGBUILD"
   "$project_dir/packages/devario-boot/initramfs-update"
   "$project_dir/packages/devario-boot/boot-update"
@@ -253,8 +251,8 @@ done < <(
   printf '%s\n' "$project_dir/tests/fixtures/gpu-driver-setup/mock-modprobe"
   printf '%s\n' "$project_dir/tests/test-gpu-driver-setup.sh"
   printf '%s\n' "$project_dir/tests/test-prepare-target-kernel.sh"
-  printf '%s\n' "$project_dir/packages/devario-alpm-runtime/shelly-storage-migrate"
-  printf '%s\n' "$project_dir/packages/devario-alpm-runtime/devario-alpm-runtime.install"
+  printf '%s\n' "$project_dir/packages/devario-base/shelly-storage-migrate"
+  printf '%s\n' "$project_dir/packages/devario-base/devario-base.install"
 )
 
 while IFS= read -r python_file; do
@@ -370,9 +368,9 @@ package_is_listed() {
 
 for required_package in \
   aqueous aqueous-session aqueous-noctalia \
-  calamares ckbcomp devario-alpm-runtime devario-aqueous-desktop \
+  calamares ckbcomp devario-aqueous-desktop \
   devario-base devario-boot devario-dracut devario-keyring greetd limine noctalia noctalia-greeter shelly fastfetch \
-  linux-devario-lts linux-devario-lts-headers nvidia-open-dkms nvidia-utils \
+  linux-devario linux-devario-headers nvidia-open-dkms nvidia-utils \
   vulkan-intel vulkan-radeon vulkan-swrast xorg-xwayland; do
   if ! package_is_listed "$required_package"; then
     fail "packages.x86_64 does not include $required_package"
@@ -380,7 +378,7 @@ for required_package in \
 done
 
 for forbidden_package in \
-  mkinitcpio mkinitcpio-archiso pacman base linux grub os-prober lightdm lightdm-gtk-greeter xfce4 xfce4-goodies \
+  devario-alpm-runtime mkinitcpio mkinitcpio-archiso pacman base linux grub os-prober lightdm lightdm-gtk-greeter xfce4 xfce4-goodies \
   xorg-server xorg-xinit greetd-agreety greetd-tuigreet vulkan-nouveau; do
   if package_is_listed "$forbidden_package"; then
     fail "packages.x86_64 must not include $forbidden_package"
@@ -390,17 +388,13 @@ done
 declare -A expected_pkgnames=(
   [calamares]=calamares
   [ckbcomp]=ckbcomp
-  [shelly]=shelly
-  [devario-alpm-runtime]=devario-alpm-runtime
   [devario-aqueous-desktop]=devario-aqueous-desktop
   [devario-filesystem]=devario-filesystem
   [seafoam-keyring]=seafoam-keyring
   [shelly-arch-compat]=shelly-arch-compat
   [devario-base]=devario-base
   [devario-boot]=devario-boot
-  [devario-dracut]=devario-dracut
   [devario-keyring]=devario-keyring
-  [linux-devario-lts]=linux-devario-lts
   [noctalia]=noctalia
   [noctalia-greeter]=noctalia-greeter
   [aqueous]=aqueous
@@ -418,44 +412,13 @@ for package_dir_name in "${!expected_pkgnames[@]}"; do
         fail "aqueous/PKGBUILD does not declare split package $split_pkgname"
       fi
     done
-  elif [[ "$package_dir_name" == linux-devario-lts ]]; then
-    if ! grep -Fqx 'pkgbase="linux-$_pkgsuffix"' "$pkgbuild" \
-      || ! grep -Fqx 'pkgname=("$pkgbase")' "$pkgbuild"; then
-      fail "linux-devario-lts/PKGBUILD does not declare its kernel split package"
-    fi
   elif ! grep -Eq "^[[:space:]]*pkgname=['\"]?${expected_pkgname}['\"]?[[:space:]]*$" "$pkgbuild"; then
     fail "$package_dir_name/PKGBUILD does not declare pkgname=$expected_pkgname"
   fi
 done
 
-kernel_pkgbuild="$project_dir/packages/linux-devario-lts/PKGBUILD"
-kernel_config="$project_dir/packages/linux-devario-lts/config"
-expected_kernel_config_b2='81fafd3adcaf3b690d8d4791693e68c7ae921d103ebfd70e8d0ae15cd05ecde5e6672ae43c3a7875686d883c1f5b82d2c8b37b40aee8dcb0563913f9dd6469b6'
-actual_kernel_config_b2="$(b2sum "$kernel_config")"
-actual_kernel_config_b2="${actual_kernel_config_b2%% *}"
-if [[ "$actual_kernel_config_b2" != "$expected_kernel_config_b2" ]]; then
-  fail "linux-devario-lts/config failed its pinned BLAKE2 checksum"
-fi
-for required_kernel_recipe_text in \
-  '972d31fe2cbfda19208501a9518152ab90cfa2cc' \
-  '_processor_opt=generic_v1' \
-  '_major=6.18' \
-  '_minor=42' \
-  ': "${_build_nvidia_open:=no}"' \
-  'pkgrel=1.2' \
-  'pkgname+=("$pkgbase-headers")' \
-  'KBUILD_BUILD_HOST=devario' \
-  'e322057f183bf666741ec12d2d64f681d9ba7bc4e4326354656ca23be5ecfb5ab3ab2ef494ddb54605f4ff1d5bba5a08493760eea9a36860080eafdb369a0321' \
-  '"$modulesdir/devario-kernel"' \
-  "$expected_kernel_config_b2"; do
-  if ! grep -Fq "$required_kernel_recipe_text" "$kernel_pkgbuild"; then
-    fail "linux-devario-lts packaging is missing: $required_kernel_recipe_text"
-  fi
-done
-if grep -Eq "^[[:space:]]*['\"]?SKIP['\"]?([[:space:]]|$)" "$kernel_pkgbuild" \
-  || grep -Fq '_processor_opt:=}' "$kernel_pkgbuild"; then
-  fail "linux-devario-lts must use pinned sources and an unconditional baseline CPU target"
-fi
+# Kernel source/configuration checks belong to the external package repository.
+# This tree validates the selected kernel, boot integration, and supplied artifacts.
 
 for ckbcomp_dependency in perl xkeyboard-config; do
   if ! grep -Eq "['\"]${ckbcomp_dependency}([<>=][^'\"]*)?['\"]" \
@@ -606,7 +569,7 @@ fi
 desktop_meta="$project_dir/packages/devario-aqueous-desktop/PKGBUILD"
 for desktop_dependency in \
   aqueous aqueous-session aqueous-noctalia noctalia noctalia-greeter greetd \
-  linux-devario-lts-headers nvidia-open-dkms nvidia-utils; do
+  linux-devario-headers nvidia-open-dkms nvidia-utils; do
   if ! grep -Eq "['\"]${desktop_dependency}([<>=][^'\"]*)?['\"]" "$desktop_meta"; then
     fail "the Devario desktop metapackage must depend on $desktop_dependency"
   fi
@@ -648,76 +611,6 @@ if find "$profile_dir" "$project_dir/packages" -type f \
   fail "Devario must not override nvidia-utils' Nouveau blacklist"
 fi
 
-if ! grep -Eq "['\"]libalpm\\.so=16-64['\"]" \
-  "$project_dir/packages/shelly/PKGBUILD"; then
-  fail "Shelly must depend on the libalpm.so.16 ABI"
-fi
-
-if ! grep -Fxq 'pkgver=3.1.6' "$project_dir/packages/shelly/PKGBUILD"; then
-  fail "the Community Shelly package must track upstream 3.1.6"
-fi
-if ! grep -Fxq '_commit=d9d89773968a5a03beb5183c1101e0235e4f3524' \
-  "$project_dir/packages/shelly/PKGBUILD" \
-  || ! grep -Fq \
-    "'025329c8972e592b72fa7955bd6cea76ddd723278a9dfa148b83cae4f999c923'" \
-    "$project_dir/packages/shelly/PKGBUILD"; then
-  fail "Shelly 3.1.6 must be pinned to its verified release commit archive"
-fi
-
-if grep -Eq "['\"]pacman([<>=][^'\"]*)?['\"]" \
-  "$project_dir/packages/shelly/PKGBUILD"; then
-  fail "Shelly must not depend on or provide the pacman package"
-fi
-
-if ! grep -Fq "'0001-remove-pacman-runtime-processes.patch'" \
-  "$project_dir/packages/shelly/PKGBUILD" \
-  || ! grep -Fq '/usr/bin/shelly-key' \
-    "$project_dir/packages/shelly/0001-remove-pacman-runtime-processes.patch" \
-  || ! grep -Fq 'Shelly.Cli.Zig/src/commands/repository.zig' \
-    "$project_dir/packages/shelly/0001-remove-pacman-runtime-processes.patch" \
-  || ! grep -Fq 'sectionContains(files, "%FILES%", member_path)' \
-    "$project_dir/packages/shelly/0001-remove-pacman-runtime-processes.patch" \
-  || ! grep -Fq \
-    "'5f40ba156149bf1abf6b3b226cd3c25b07711a077cf593cd2e6e12fa1a42cc89'" \
-    "$project_dir/packages/shelly/PKGBUILD"; then
-  fail "Shelly must patch its remaining Pacman executable calls to native helpers"
-fi
-
-if ! grep -Fq "'0002-support-alternate-alpm-config.patch'" \
-  "$project_dir/packages/shelly/PKGBUILD" \
-  || ! grep -Fq 'SHELLY_ALPM_CONFIG' \
-    "$project_dir/packages/shelly/0002-support-alternate-alpm-config.patch" \
-  || ! grep -Fq \
-    "'55310d154dbcff483e21e0953c7b679ce1a699ec14b09ba58b374d2aecf7922e'" \
-    "$project_dir/packages/shelly/PKGBUILD"; then
-  fail "Shelly must provide checksummed alternate ALPM config support"
-fi
-if ! grep -Fq "'0003-use-shelly-runtime-paths.patch'" \
-  "$project_dir/packages/shelly/PKGBUILD" \
-  || ! grep -Fq '/etc/shelly.conf' \
-    "$project_dir/packages/shelly/0003-use-shelly-runtime-paths.patch" \
-  || ! grep -Fq '/var/lib/shelly' \
-    "$project_dir/packages/shelly/0003-use-shelly-runtime-paths.patch" \
-  || ! grep -Fq \
-    "'4f3ddd6dd229433a71263c7a0ed9f0f6690d676e0ec0e45f03bfee81bcc443d7'" \
-    "$project_dir/packages/shelly/PKGBUILD"; then
-  fail "Shelly must provide checksummed Shelly-owned runtime path defaults"
-fi
-if ! grep -Fq 'Shelly.Cli.Zig/src/commands/builder.zig' \
-  "$project_dir/packages/shelly/0003-use-shelly-runtime-paths.patch" \
-  || ! grep -Fq 'Shelly.PackageManager/src/aur/builder/package_file.zig' \
-    "$project_dir/packages/shelly/0003-use-shelly-runtime-paths.patch" \
-  || ! grep -Fq 'Isolated root provisioning is unavailable on Devario' \
-    "$project_dir/packages/shelly/0003-use-shelly-runtime-paths.patch"; then
-  fail "Shelly's native builder must use Devario paths and reject legacy isolated provisioning"
-fi
-if ! grep -Fq "backup=('etc/shellybuild.conf')" \
-  "$project_dir/packages/shelly/PKGBUILD" \
-  || grep -Eq "['\"]arch-install-scripts([<>=][^'\"]*)?['\"]" \
-    "$project_dir/packages/shelly/PKGBUILD"; then
-  fail "Shelly must package its builder policy without enabling legacy isolated provisioning"
-fi
-
 makepkg_adapter="$project_dir/scripts/makepkg-shelly-adapter.sh"
 makepkg_config="$project_dir/scripts/makepkg-shelly.conf"
 package_build_script="$project_dir/scripts/build-packages.sh"
@@ -757,7 +650,7 @@ for shelly_build_call in \
     fail "build-packages.sh is missing: $shelly_build_call"
   fi
 done
-for desktop_build_package in linux-devario-lts noctalia noctalia-greeter aqueous devario-aqueous-desktop; do
+for desktop_build_package in noctalia noctalia-greeter aqueous devario-aqueous-desktop; do
   if ! grep -Eq "^[[:space:]]+${desktop_build_package}[[:space:]]*$" \
     "$package_build_script"; then
     fail "build-packages.sh omits $desktop_build_package from its package order"
@@ -846,35 +739,14 @@ else
   note "makepkg is unavailable; PKGBUILD metadata linting was skipped."
 fi
 
-if ! grep -Eq "['\"]libalpm\.so([<>=][^'\"]*)?['\"]" \
-  "$project_dir/packages/devario-alpm-runtime/PKGBUILD"; then
-  fail "devario-alpm-runtime must provide the libalpm.so dependency"
+if ! grep -Fq "'shelly>=3.1.6-2'" "$project_dir/packages/devario-base/PKGBUILD"; then
+  fail "devario-base must require repository Shelly with the native RLPM backend"
 fi
-
-if ! grep -Eq '^[[:space:]]*provides=.*pacman=.*pkgver' \
-  "$project_dir/packages/devario-alpm-runtime/PKGBUILD"; then
-  fail "devario-alpm-runtime must provide a versioned Pacman compatibility edge"
-fi
-
-for replacement_field in conflicts replaces; do
-  if ! grep -Eq "^[[:space:]]*${replacement_field}=.*['\"]pacman['\"]" \
-    "$project_dir/packages/devario-alpm-runtime/PKGBUILD"; then
-    fail "devario-alpm-runtime must declare ${replacement_field}=pacman"
-  fi
-done
-
-if grep -Eq "^[[:space:]]*['\"]pacman([<>=][^'\"]*)?['\"][[:space:]]*$" \
+if grep -Eq "['\"](devario-alpm-runtime|libalpm(\.so)?)([<>=][^'\"]*)?['\"]" \
   <(sed -n '/^[[:space:]]*depends=(/,/^[[:space:]]*)/p' \
-    "$project_dir/packages/devario-alpm-runtime/PKGBUILD"); then
-  fail "devario-alpm-runtime must not depend on the real pacman package"
+    "$project_dir/packages/devario-base/PKGBUILD"); then
+  fail "devario-base must not depend on the retired ALPM runtime"
 fi
-
-for base_dependency in shelly devario-alpm-runtime; do
-  if ! grep -Eq "['\"]${base_dependency}([<>=][^'\"]*)?['\"]" \
-    "$project_dir/packages/devario-base/PKGBUILD"; then
-    fail "devario-base must depend on $base_dependency"
-  fi
-done
 
 if grep -Eq "['\"]pacman([<>=][^'\"]*)?['\"]" \
   "$project_dir/packages/devario-base/PKGBUILD"; then
@@ -893,7 +765,7 @@ done
 for alpm_config in \
   "$profile_dir/shelly.build.conf" \
   "$profile_dir/shelly.runtime.conf" \
-  "$project_dir/packages/devario-alpm-runtime/shelly.conf"; do
+  "$project_dir/packages/devario-base/shelly.conf"; do
   if grep -Eq '^\[cachyos([^]]*)?\]$' "$alpm_config"; then
     fail "${alpm_config#"$project_dir/"} must not require a CachyOS binary repository"
   fi
@@ -943,10 +815,10 @@ if ! grep -Fq 'core_keyring_source="${DEVARIO_CORE_KEYRING_DIR:-$project_dir/pac
 fi
 
 for required_kernel_preflight_text in \
-  'linux-devario-lts' \
-  'linux-devario-lts-headers' \
+  'linux-devario' \
+  'linux-devario-headers' \
   'Missing required package artifacts:' \
-  'build-packages-nspawn.sh linux-devario-lts' \
+  'external package build' \
   'run-iso-builder.py'; do
   if ! grep -Fq "$required_kernel_preflight_text" \
     "$project_dir/scripts/build-iso.sh"; then
@@ -1137,7 +1009,7 @@ prepare_target_kernel="$profile_dir/airootfs/usr/lib/devario/prepare-target-kern
 for required_kernel_install_text in \
   '/usr/lib/devario/prepare-target-kernel' \
   'rm -f /usr/lib/devario/prepare-target-kernel' \
-  'test -s /boot/vmlinuz-linux-devario-lts'; do
+  'test -s /boot/vmlinuz-linux-devario'; do
   if ! grep -Fq "$required_kernel_install_text" "$prepare_target"; then
     fail "Calamares target preparation is missing: $required_kernel_install_text"
   fi
@@ -1161,11 +1033,11 @@ for live_boot_config in \
   "$profile_dir/grub/loopback.cfg" \
   "$profile_dir/syslinux/devario_sys-linux.cfg" \
   "$profile_dir/syslinux/devario_pxe-linux.cfg"; do
-  if ! grep -Fq 'vmlinuz-linux-devario-lts' "$live_boot_config" \
-    || ! grep -Fq 'initramfs-linux-devario-lts.img' "$live_boot_config" \
+  if ! grep -Fq 'vmlinuz-linux-devario' "$live_boot_config" \
+    || ! grep -Fq 'initramfs-linux-devario.img' "$live_boot_config" \
     || ! grep -Fq 'root=live:' "$live_boot_config" \
     || ! grep -Fq 'rd.overlay=1' "$live_boot_config"; then
-    fail "${live_boot_config#"$project_dir/"} does not boot the CachyOS LTS live kernel"
+    fail "${live_boot_config#"$project_dir/"} does not boot the Devario live kernel"
   fi
 done
 if ! grep -Fqx 'efiSystemPartition: "/boot"' "$partition_config" \
@@ -1181,9 +1053,9 @@ if [[ ! -x "$limine_update" ]]; then
   fail "the installed Limine update helper must be executable"
 fi
 for limine_helper_text in \
-  'path: boot():/vmlinuz-linux-devario-lts' \
-  'module_path: boot():/initramfs-linux-devario-lts.img' \
-  'module_path: boot():/initramfs-linux-devario-lts-fallback.img' \
+  'path: boot():/vmlinuz-linux-devario' \
+  'module_path: boot():/initramfs-linux-devario.img' \
+  'module_path: boot():/initramfs-linux-devario-fallback.img' \
   'install -Dm0644 "$limine_share/BOOTX64.EFI"' \
   'limine bios-install "$disk_device"' \
   'installed_marker=/var/lib/devario/limine-installed' \
@@ -1395,7 +1267,7 @@ fi
 
 # Every remaining Pacman identifier must fit one of these explicit boundaries:
 # documentation; the image build configuration; ALPM compatibility paths; the
-# package that builds libalpm from upstream source; or build-ISO plumbing.
+# storage migration from legacy paths; or build-ISO plumbing.
 pacman_reference_is_allowed() {
   local relative_path="$1"
   local text="$2"
@@ -1417,7 +1289,7 @@ pacman_reference_is_allowed() {
       [[ "$text" == *'"format": "{pacman} (Shelly)"'* ]]
       return
       ;;
-    packages/devario-alpm-runtime/*)
+    packages/devario-base/shelly-storage-migrate|packages/devario-base/devario-base.install)
       return 0
       ;;
     packages/devario-keyring/*|packages/seafoam-keyring/*|packages/shelly-arch-compat/*)
@@ -1426,26 +1298,6 @@ pacman_reference_is_allowed() {
     packages/devario-base/PKGBUILD)
       [[ "$text" == *"pacman edge"* ]]
       return
-      ;;
-    packages/shelly/PKGBUILD)
-      [[ "$text" == *0001-remove-pacman-runtime-processes.patch* ]]
-      return
-      ;;
-    packages/shelly/.SRCINFO)
-      [[ "$text" == $'\tsource = 0001-remove-pacman-runtime-processes.patch' ]]
-      return
-      ;;
-    packages/shelly/0001-remove-pacman-runtime-processes.patch)
-      # A removal patch necessarily contains the deleted upstream calls.
-      return 0
-      ;;
-    packages/shelly/0002-support-alternate-alpm-config.patch)
-      [[ "$text" == *pacman.conf* ]]
-      return
-      ;;
-    packages/shelly/0003-use-shelly-runtime-paths.patch)
-      # A replacement patch necessarily contains the removed legacy paths.
-      return 0
       ;;
     iso/profile.json)
       [[ "$text" == *pacman_conf* ]]
@@ -1521,9 +1373,8 @@ done < <(
     "$project_dir/scripts" 2>/dev/null || true
 )
 
-if ! grep -Eq '^HoldPkg[[:space:]]*=.*\bshelly\b' "$profile_dir/shelly.build.conf" \
-  || ! grep -Eq '^HoldPkg[[:space:]]*=.*\bdevario-alpm-runtime\b' "$profile_dir/shelly.build.conf"; then
-  fail "the ALPM configuration must hold Shelly and devario-alpm-runtime"
+if ! grep -Eq '^HoldPkg[[:space:]]*=.*\bshelly\b' "$profile_dir/shelly.build.conf"; then
+  fail "the Shelly configuration must hold Shelly"
 fi
 
 if grep -Eq '^HoldPkg[[:space:]]=.*\bpacman\b' "$profile_dir/shelly.build.conf"; then
@@ -1584,8 +1435,8 @@ if command -v shelly >/dev/null 2>&1; then
     while IFS= read -r package_name; do
       [[ -n "$package_name" && "$package_name" != \#* ]] || continue
       case "$package_name" in
-        aqueous|aqueous-session|aqueous-noctalia|calamares|ckbcomp|shelly|\
-        devario-filesystem|seafoam-keyring|shelly-arch-compat|devario-alpm-runtime|devario-aqueous-desktop|devario-base|devario-boot|devario-dracut|devario-keyring|\
+        aqueous|aqueous-session|aqueous-noctalia|calamares|ckbcomp|\
+        devario-filesystem|seafoam-keyring|shelly-arch-compat|devario-aqueous-desktop|devario-base|devario-boot|devario-dracut|devario-keyring|\
         devario-managed-keyring|noctalia|noctalia-greeter)
           continue
           ;;
@@ -1623,7 +1474,7 @@ fi
 if command -v bsdtar >/dev/null 2>&1; then
   shopt -s nullglob
   devario_artifacts=("$project_dir"/repo/core/*.pkg.tar.zst)
-  runtime_artifacts=("$project_dir"/repo/core/devario-alpm-runtime-[0-9]*.pkg.tar.zst)
+  base_artifacts=("$project_dir"/repo/core/devario-base-[0-9]*.pkg.tar.zst)
   shelly_artifacts=("$project_dir"/repo/core/shelly-[0-9]*.pkg.tar.zst)
   ckbcomp_artifacts=("$project_dir"/repo/core/ckbcomp-[0-9]*.pkg.tar.zst)
   aqueous_artifacts=("$project_dir"/repo/core/aqueous-[0-9]*.pkg.tar.zst)
@@ -1641,9 +1492,9 @@ if command -v bsdtar >/dev/null 2>&1; then
   if (( ${#devario_artifacts[@]} )); then
     for expected_artifact_package in \
       aqueous aqueous-noctalia aqueous-session calamares ckbcomp \
-      devario-filesystem seafoam-keyring devario-alpm-runtime devario-aqueous-desktop devario-base devario-boot devario-dracut devario-keyring \
-      linux-devario-lts linux-devario-lts-headers \
-      noctalia noctalia-greeter shelly; do
+      devario-filesystem seafoam-keyring devario-aqueous-desktop devario-base devario-boot devario-dracut devario-keyring \
+      linux-devario linux-devario-headers \
+      noctalia noctalia-greeter; do
       expected_artifacts=(
         "$project_dir"/repo/core/"$expected_artifact_package"-[0-9]*.pkg.tar.zst
       )
@@ -1767,7 +1618,7 @@ if command -v bsdtar >/dev/null 2>&1; then
       fi
     done
     for required_nvidia_dependency in \
-      linux-devario-lts-headers nvidia-open-dkms nvidia-utils; do
+      linux-devario-headers nvidia-open-dkms nvidia-utils; do
       if ! grep -Eq \
         "^depend = ${required_nvidia_dependency}([<>=].*)?$" \
         <<< "$desktop_meta_pkginfo"; then
@@ -1841,114 +1692,47 @@ if command -v bsdtar >/dev/null 2>&1; then
     rm -rf -- "$ckbcomp_extract_dir"
   done
 
-  for artifact in "${runtime_artifacts[@]}"; do
+  for artifact in "${base_artifacts[@]}"; do
     artifact_contents="$(bsdtar -tf "$artifact")"
-    runtime_pkginfo="$(bsdtar -xOf "$artifact" .PKGINFO)"
-    if grep -Eq '^usr/bin/(makepkg|repo-add|repo-remove|pacman-conf|vercmp)$' \
-      <<< "$artifact_contents"; then
-      fail "$(basename -- "$artifact") contains a build-host-only package tool"
-    fi
-    if ! grep -Eq '^usr/lib/libalpm\.so\.16$' <<< "$artifact_contents"; then
-      fail "$(basename -- "$artifact") does not contain the libalpm.so.16 ABI"
-    fi
-    if ! grep -Fxq 'provides = libalpm.so=16-64' <<< "$runtime_pkginfo"; then
-      fail "$(basename -- "$artifact") does not provide the versioned libalpm.so.16 ABI"
-    fi
-    if ! grep -Eq '^provides = pacman=[^[:space:]]+$' <<< "$runtime_pkginfo"; then
-      fail "$(basename -- "$artifact") lacks the versioned Pacman compatibility provider"
-    fi
-    for required_runtime_path in \
-      etc/shelly.conf \
-      usr/lib/devario/shelly-storage-migrate \
+    base_pkginfo="$(bsdtar -xOf "$artifact" .PKGINFO)"
+    for required_path in \
+      etc/shelly.conf usr/lib/devario/shelly-storage-migrate \
       usr/lib/systemd/system/shelly-storage-migrate.service \
-      var/lib/shelly/ \
-      var/cache/shelly/pkg/ \
-      etc/shelly.d/gnupg/ \
-      etc/shelly.d/hooks/; do
-      if ! grep -Fxq "$required_runtime_path" <<< "$artifact_contents"; then
-        fail "$(basename -- "$artifact") lacks $required_runtime_path"
+      usr/lib/systemd/system/multi-user.target.wants/shelly-storage-migrate.service \
+      usr/lib/sysusers.d/alpm.conf \
+      var/lib/shelly/ var/cache/shelly/pkg/ etc/shelly.d/gnupg/ etc/shelly.d/hooks/; do
+      if ! grep -Fxq "$required_path" <<< "$artifact_contents"; then
+        fail "$(basename -- "$artifact") lacks $required_path"
       fi
     done
-    if grep -Eq '^(etc/pacman\.conf|etc/pacman\.d/(gnupg|hooks)/|var/lib/pacman/|var/cache/pacman/pkg/)$' \
-      <<< "$artifact_contents"; then
-      fail "$(basename -- "$artifact") contains a legacy mutable runtime path"
+    if ! grep -Fxq 'backup = etc/shelly.conf' <<< "$base_pkginfo"; then
+      fail "$(basename -- "$artifact") must preserve administrator Shelly configuration"
+    fi
+    if grep -Eq '^depend = (devario-alpm-runtime|libalpm(\.so)?)([<>=]|$)' <<< "$base_pkginfo"; then
+      fail "$(basename -- "$artifact") still requires the retired ALPM runtime"
     fi
   done
 
   for artifact in "${shelly_artifacts[@]}"; do
     artifact_contents="$(bsdtar -tf "$artifact")"
     shelly_pkginfo="$(bsdtar -xOf "$artifact" .PKGINFO)"
-    shelly_buildinfo="$(bsdtar -xOf "$artifact" .BUILDINFO)"
-    if ! grep -Eq '^usr/bin/shelly$' <<< "$artifact_contents"; then
-      fail "$(basename -- "$artifact") does not contain /usr/bin/shelly"
-    fi
-    if ! grep -Eq '^usr/bin/shelly-key$' <<< "$artifact_contents"; then
-      fail "$(basename -- "$artifact") does not contain Shelly's native keyring helper"
-    fi
-    if ! grep -Eq '^pkgver = 3\.1\.6-' <<< "$shelly_pkginfo"; then
-      fail "$(basename -- "$artifact") is not Shelly 3.1.6"
-    fi
-    if ! grep -Fxq 'depend = libalpm.so=16-64' <<< "$shelly_pkginfo"; then
-      fail "$(basename -- "$artifact") does not require the libalpm.so.16 ABI"
-    fi
-    if ! grep -Fxq 'depend = devario-alpm-runtime>=7.1.0.r9.g54d9411-2' <<< "$shelly_pkginfo"; then
-      fail "$(basename -- "$artifact") does not require the Shelly-path runtime migration"
-    fi
-    if ! grep -Fxq 'etc/shellybuild.conf' <<< "$artifact_contents" \
-      || ! grep -Fxq 'backup = etc/shellybuild.conf' <<< "$shelly_pkginfo"; then
-      fail "$(basename -- "$artifact") does not package Shelly's native-builder policy"
-    fi
-    if ! grep -Fxq 'options = !autodeps' <<< "$shelly_buildinfo" \
-      || ! grep -Eq '^installed = .+-.+-.+$' \
-        <<< "$shelly_buildinfo"; then
-      fail "$(basename -- "$artifact") was not built with the strict Shelly inventory path"
+    for required_path in usr/bin/shelly usr/bin/shelly-key etc/shellybuild.conf; do
+      if ! grep -Fxq "$required_path" <<< "$artifact_contents"; then
+        fail "$(basename -- "$artifact") lacks $required_path"
+      fi
+    done
+    if grep -Eq '^depend = (devario-alpm-runtime|libalpm(\.so)?|pacman)([<>=]|$)' <<< "$shelly_pkginfo"; then
+      fail "$(basename -- "$artifact") requires the obsolete external ALPM runtime"
     fi
     if command -v readelf >/dev/null 2>&1; then
       artifact_extract_dir="$(mktemp -d /tmp/devario-shelly-check.XXXXXX)"
-      if ! bsdtar -xf "$artifact" -C "$artifact_extract_dir" usr/bin/shelly; then
-        fail "could not extract Shelly for ELF validation"
-        rm -rf -- "$artifact_extract_dir"
-        continue
-      fi
-      if ! dynamic_entries="$(readelf -d "$artifact_extract_dir/usr/bin/shelly")"; then
+      if ! bsdtar -xf "$artifact" -C "$artifact_extract_dir" usr/bin/shelly \
+        || ! dynamic_entries="$(readelf -d "$artifact_extract_dir/usr/bin/shelly")"; then
         fail "could not inspect Shelly's ELF dependencies"
-        rm -rf -- "$artifact_extract_dir"
-        continue
-      fi
-      if ! grep -Fq 'Shared library: [libalpm.so.16]' <<< "$dynamic_entries"; then
-        fail "$(basename -- "$artifact") does not link Shelly to libalpm.so.16"
-      fi
-      if command -v strings >/dev/null 2>&1; then
-        shelly_strings="$(strings "$artifact_extract_dir/usr/bin/shelly" 2>/dev/null || true)"
-        if grep -Fxq 'pacman' <<< "$shelly_strings" \
-          || grep -Fq 'pacman-key' <<< "$shelly_strings" \
-          || grep -Fq 'pacstrap' <<< "$shelly_strings" \
-          || grep -Fxq -- '-Qoq' <<< "$shelly_strings"; then
-          fail "$(basename -- "$artifact") retains a Pacman executable invocation"
-        fi
-        if ! grep -Fq '/usr/bin/shelly-key' <<< "$shelly_strings" \
-          || ! grep -Fq '/usr/bin/gpg' <<< "$shelly_strings" \
-          || ! grep -Fq 'SHELLY_ALPM_CONFIG' <<< "$shelly_strings" \
-          || ! grep -Fq '/etc/shelly.conf' <<< "$shelly_strings" \
-          || ! grep -Fq '/var/lib/shelly' <<< "$shelly_strings" \
-          || ! grep -Fq '/var/cache/shelly/pkg' <<< "$shelly_strings" \
-          || ! grep -Fq '/etc/shelly.d/gnupg' <<< "$shelly_strings" \
-          || ! grep -Fq 'Isolated root provisioning is unavailable on Devario' \
-            <<< "$shelly_strings"; then
-          fail "$(basename -- "$artifact") does not use the patched native keyring helpers"
-        fi
-        if grep -Fq '/etc/pacman.conf' <<< "$shelly_strings" \
-          || grep -Fq '/var/lib/pacman' <<< "$shelly_strings" \
-          || grep -Fq '/var/cache/pacman/pkg' <<< "$shelly_strings" \
-          || grep -Fq '/etc/pacman.d/gnupg' <<< "$shelly_strings"; then
-          fail "$(basename -- "$artifact") retains a legacy runtime path"
-        fi
-      else
-        note "strings is unavailable; Shelly's process-target check was skipped."
+      elif grep -Eq 'Shared library: \[libalpm\.so' <<< "$dynamic_entries"; then
+        fail "$(basename -- "$artifact") still links to the external ALPM runtime"
       fi
       rm -rf -- "$artifact_extract_dir"
-    else
-      note "readelf is unavailable; Shelly's libalpm DT_NEEDED check was skipped."
     fi
   done
 

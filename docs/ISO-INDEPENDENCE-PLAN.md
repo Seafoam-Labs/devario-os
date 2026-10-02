@@ -115,11 +115,11 @@ packages as native builds.
 
 Then make these coordinated changes:
 
-- Remove mandatory `archlinux-keyring` from `devario-base` and
-  `pacman-mirrorlist` from `devario-alpm-runtime` once closure is satisfied.
-  Rename the shipped ALPM account description to a Shelly description.
+- Keep external keyrings and mirrorlists optional. Use Shelly from `devario-core`
+  with its native RLPM backend; `devario-base` owns Devario runtime policy and
+  the Shelly download account.
 - Change both ISO Shelly templates and the configuration shipped by
-  `devario-alpm-runtime` to enable `devario-core` and `seafoam-labs` by default,
+  `devario-base` to enable `devario-core` and `seafoam-labs` by default,
   with explicit precedence and protected-package ownership. Community trusts
   the verified signing keys for both repositories; Managed additionally trusts
   its separately declared repository key.

@@ -9,16 +9,16 @@ mkdir -p "$test_root/bin" "$test_root/boot" "$test_root/modules/1.2-devario" "$t
 fail() { echo "Dracut test failed: $*" >&2; exit 1; }
 expect_failure() { if "$@" >"$test_root/error" 2>&1; then fail "unexpected success: $*"; fi; }
 source "$boot_package/kernel.sh"
-printf 'version=1.2-devario\nimage=vmlinuz\nid=linux-cachyos-lts\n' > "$test_root/modules/1.2-devario/devario-kernel"
+printf 'version=1.2-devario\nimage=vmlinuz\nid=linux-devario\n' > "$test_root/modules/1.2-devario/devario-kernel"
 echo native-kernel > "$test_root/modules/1.2-devario/vmlinuz"
-devario_kernel_select "$test_root/modules" linux-cachyos-lts
+devario_kernel_select "$test_root/modules" linux-devario
 [[ "$DEVARIO_KERNEL_VERSION" == 1.2-devario ]] || fail 'native kernel selection'
 [[ ! -e "$test_root/modules/1.2-devario/pkgbase" ]] || fail 'native test depends on pkgbase'
 cp "$test_root/modules/1.2-devario/devario-kernel" "$test_root/metadata"
 printf 'image=../../escape\n' >> "$test_root/modules/1.2-devario/devario-kernel"
-expect_failure devario_kernel_select "$test_root/modules" linux-cachyos-lts
+expect_failure devario_kernel_select "$test_root/modules" linux-devario
 cp "$test_root/metadata" "$test_root/modules/1.2-devario/devario-kernel"
-expect_failure devario_kernel_select "$test_root/modules" linux-cachyos-lts missing-version
+expect_failure devario_kernel_select "$test_root/modules" linux-devario missing-version
 
 cat > "$test_root/bin/dracut" <<'EOF'
 #!/bin/bash
@@ -82,7 +82,7 @@ exec /usr/bin/install "$@"
 EOF
 cat > "$test_root/bin/mv" <<'EOF'
 #!/bin/bash
-if [[ "${FAIL_PUBLISH:-}" == yes && "${*: -1}" == "$TEST_ROOT/boot/initramfs-linux-cachyos-lts.img" ]]; then exit 1; fi
+if [[ "${FAIL_PUBLISH:-}" == yes && "${*: -1}" == "$TEST_ROOT/boot/initramfs-linux-devario.img" ]]; then exit 1; fi
 exec /usr/bin/mv "$@"
 EOF
 chmod +x "$test_root/bin/"*
@@ -93,20 +93,20 @@ generate() {
     --automation-config "$test_root/automation.conf" "$@"
 }
 generate --mode live
-[[ -s "$test_root/boot/initramfs-linux-cachyos-lts.img" ]] || fail 'live image absent'
-[[ ! -e "$test_root/boot/initramfs-linux-cachyos-lts-fallback.img" ]] || fail 'live fallback leaked'
+[[ -s "$test_root/boot/initramfs-linux-devario.img" ]] || fail 'live image absent'
+[[ ! -e "$test_root/boot/initramfs-linux-devario-fallback.img" ]] || fail 'live fallback leaked'
 grep -q -- '--no-hostonly-cmdline' "$test_root/dracut.calls" || fail 'host command line captured'
 grep -q -- '--kver 1.2-devario' "$test_root/dracut.calls" || fail 'wrong kernel version'
 grep -q -- '--no-hostonly' "$test_root/dracut.calls" || fail 'live image must be generic'
-echo old-kernel > "$test_root/boot/vmlinuz-linux-cachyos-lts"
-echo old-image > "$test_root/boot/initramfs-linux-cachyos-lts.img"
-echo old-fallback > "$test_root/boot/initramfs-linux-cachyos-lts-fallback.img"
+echo old-kernel > "$test_root/boot/vmlinuz-linux-devario"
+echo old-image > "$test_root/boot/initramfs-linux-devario.img"
+echo old-fallback > "$test_root/boot/initramfs-linux-devario-fallback.img"
 for failure in yes fallback; do
   export FAIL_DRACUT="$failure"
   expect_failure generate --mode installed
-  grep -qx old-kernel "$test_root/boot/vmlinuz-linux-cachyos-lts" || fail 'kernel changed after failed generation'
-  grep -qx old-image "$test_root/boot/initramfs-linux-cachyos-lts.img" || fail 'image changed after failed generation'
-  grep -qx old-fallback "$test_root/boot/initramfs-linux-cachyos-lts-fallback.img" || fail 'fallback changed after failed generation'
+  grep -qx old-kernel "$test_root/boot/vmlinuz-linux-devario" || fail 'kernel changed after failed generation'
+  grep -qx old-image "$test_root/boot/initramfs-linux-devario.img" || fail 'image changed after failed generation'
+  grep -qx old-fallback "$test_root/boot/initramfs-linux-devario-fallback.img" || fail 'fallback changed after failed generation'
 done
 unset FAIL_DRACUT
 export FAIL_INSPECTION=yes
@@ -118,19 +118,19 @@ unset BOOT_UNMOUNTED
 export FAIL_BACKUP=yes
 expect_failure generate --mode installed
 unset FAIL_BACKUP
-[[ ! -e "$test_root/boot/devario-recovery/linux-cachyos-lts" ]] || fail 'partial recovery pair published'
+[[ ! -e "$test_root/boot/devario-recovery/linux-devario" ]] || fail 'partial recovery pair published'
 export FAIL_PUBLISH=yes
 expect_failure generate --mode installed
 unset FAIL_PUBLISH
-grep -qx old-kernel "$test_root/boot/vmlinuz-linux-cachyos-lts" || fail 'publication failure did not restore the kernel'
-grep -qx old-image "$test_root/boot/initramfs-linux-cachyos-lts.img" || fail 'publication failure did not restore the image'
+grep -qx old-kernel "$test_root/boot/vmlinuz-linux-devario" || fail 'publication failure did not restore the kernel'
+grep -qx old-image "$test_root/boot/initramfs-linux-devario.img" || fail 'publication failure did not restore the image'
 generate --mode installed
-grep -qx old-kernel "$test_root/boot/devario-recovery/linux-cachyos-lts/vmlinuz-linux-cachyos-lts" || fail 'previous kernel not preserved'
-grep -qx old-image "$test_root/boot/devario-recovery/linux-cachyos-lts/initramfs-linux-cachyos-lts.img" || fail 'previous initramfs not preserved'
-grep -qx native-kernel "$test_root/boot/vmlinuz-linux-cachyos-lts" || fail 'new kernel not deployed'
-[[ -s "$test_root/boot/initramfs-linux-cachyos-lts-fallback.img" ]] || fail 'installed fallback absent'
+grep -qx old-kernel "$test_root/boot/devario-recovery/linux-devario/vmlinuz-linux-devario" || fail 'previous kernel not preserved'
+grep -qx old-image "$test_root/boot/devario-recovery/linux-devario/initramfs-linux-devario.img" || fail 'previous initramfs not preserved'
+grep -qx native-kernel "$test_root/boot/vmlinuz-linux-devario" || fail 'new kernel not deployed'
+[[ -s "$test_root/boot/initramfs-linux-devario-fallback.img" ]] || fail 'installed fallback absent'
 generate --mode installed
-grep -qx old-kernel "$test_root/boot/devario-recovery/linux-cachyos-lts/vmlinuz-linux-cachyos-lts" || fail 'unconfirmed update overwrote recovery kernel'
+grep -qx old-kernel "$test_root/boot/devario-recovery/linux-devario/vmlinuz-linux-devario" || fail 'unconfirmed update overwrote recovery kernel'
 
 # NVIDIA must be complete for the target kernel in both images. Any missing
 # module or firmware must leave the working pair untouched.
@@ -146,9 +146,9 @@ generate --mode installed
   || fail 'NVIDIA was not requested for early loading in both images'
 grep -q -- '--include .* /etc/modprobe.d/devario-nvidia.conf' "$test_root/dracut.calls" \
   || fail 'modesetting config was not explicitly included'
-echo working-kernel > "$test_root/boot/vmlinuz-linux-cachyos-lts"
-echo working-image > "$test_root/boot/initramfs-linux-cachyos-lts.img"
-echo working-fallback > "$test_root/boot/initramfs-linux-cachyos-lts-fallback.img"
+echo working-kernel > "$test_root/boot/vmlinuz-linux-devario"
+echo working-image > "$test_root/boot/initramfs-linux-devario.img"
+echo working-fallback > "$test_root/boot/initramfs-linux-devario-fallback.img"
 for module in nvidia nvidia_modeset nvidia_uvm nvidia_drm; do
   export MISSING_MODULE="$module"
   expect_failure generate --mode installed
@@ -166,9 +166,9 @@ mv "$test_root/nvidia_uvm.ko" "$test_root/modules/1.2-devario/updates/dkms/nvidi
 for missing in nvidia nvidia-modeset nvidia-uvm nvidia-drm firmware config fallback; do
   export OMIT_NVIDIA="$missing"
   expect_failure generate --mode installed
-  grep -qx working-kernel "$test_root/boot/vmlinuz-linux-cachyos-lts" || fail 'NVIDIA validation replaced kernel'
-  grep -qx working-image "$test_root/boot/initramfs-linux-cachyos-lts.img" || fail 'NVIDIA validation replaced image'
-  grep -qx working-fallback "$test_root/boot/initramfs-linux-cachyos-lts-fallback.img" || fail 'NVIDIA validation replaced fallback'
+  grep -qx working-kernel "$test_root/boot/vmlinuz-linux-devario" || fail 'NVIDIA validation replaced kernel'
+  grep -qx working-image "$test_root/boot/initramfs-linux-devario.img" || fail 'NVIDIA validation replaced image'
+  grep -qx working-fallback "$test_root/boot/initramfs-linux-devario-fallback.img" || fail 'NVIDIA validation replaced fallback'
 done
 unset OMIT_NVIDIA TEST_NVIDIA
 : > "$test_root/dracut.calls"

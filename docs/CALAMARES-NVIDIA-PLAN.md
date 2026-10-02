@@ -18,9 +18,8 @@ The existing offline path copies drivers from the image and builds missing
 target modules. Network transactions remain part of the separate network-install
 plan because that installation mode does not exist yet. Automated coverage is
 in `tests/test-configure-target-nvidia.py`, `tests/test-gpu-driver-setup.sh`, and
-`tests/test-dracut-boot.sh`. Full `scripts/validate.sh` currently stops at the
-pre-existing missing `packages/linux-cachyos-lts/{PKGBUILD,config,README.md}`;
-the selected standalone kernel migration must resolve that release prerequisite.
+`tests/test-dracut-boot.sh`. Kernel consumers now select `linux-devario` and its matching headers;
+the validator checks the existing Seafoam Labs kernel recipe.
 
 Make Calamares detect supported NVIDIA display hardware, ensure the installed
 system has compatible drivers and kernel modules, and set
@@ -101,8 +100,7 @@ accordingly; do not remove packages while the desktop still requires them.
 
 Derive target kernel versions from the existing `kernel.sh` selection contract
 and target module trees, never `uname -r`. Today the header package is
-`linux-cachyos-lts-headers`; use `linux-devario-headers` once the planned kernel
-migration lands. Check that the chosen DKMS release and its hooks work with
+`linux-devario-headers`. Check that the chosen DKMS release and its hooks work with
 Shelly and the available compiler rather than assuming pacman is present.
 
 **3. Configure the target after driver verification**

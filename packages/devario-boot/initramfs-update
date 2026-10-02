@@ -8,7 +8,7 @@ mode=installed
 modules_root=/usr/lib/modules
 boot_dir=/boot
 config_dir=/usr/share/devario/dracut
-kernel_id=linux-cachyos-lts
+kernel_id=linux-devario
 kernel_version=
 automation_config=/etc/devario-dracut.conf
 while (( $# )); do

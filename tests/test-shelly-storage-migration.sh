@@ -2,9 +2,23 @@
 set -euo pipefail
 
 project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-migrate="$project_dir/packages/devario-alpm-runtime/shelly-storage-migrate"
 test_root="$(mktemp -d /tmp/devario-shelly-migration-test.XXXXXX)"
 trap 'rm -rf -- "$test_root"' EXIT
+
+# Exercise the migration shipped by devario-base after retiring the runtime.
+(
+  source "$project_dir/packages/devario-base/PKGBUILD"
+  srcdir="$project_dir/packages/devario-base"
+  pkgdir="$test_root/package"
+  package
+)
+migrate="$test_root/package/usr/lib/devario/shelly-storage-migrate"
+[[ -x "$migrate" ]]
+[[ -f "$test_root/package/etc/shelly.conf" ]]
+[[ -f "$test_root/package/usr/lib/sysusers.d/alpm.conf" ]]
+[[ "$(readlink "$test_root/package/usr/lib/systemd/system/multi-user.target.wants/shelly-storage-migrate.service")" == ../shelly-storage-migrate.service ]]
+grep -Fxq 'ExecStart=/usr/lib/devario/shelly-storage-migrate --finalize' \
+  "$test_root/package/usr/lib/systemd/system/shelly-storage-migrate.service"
 
 mkdir -p \
   "$test_root/etc/pacman.d/gnupg" \

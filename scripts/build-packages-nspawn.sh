@@ -276,7 +276,7 @@ fi
 
 # Native bootstrap roots use Shelly storage directly. Configuration is selected
 # from Devario policy and the controlled snapshot contract.
-install -Dm644 "$project_dir/packages/devario-alpm-runtime/shelly.conf" \
+install -Dm644 "$project_dir/packages/devario-base/shelly.conf" \
   "$container_root/etc/shelly.conf"
 if (( release_build )); then
   python3 - "$container_root/etc/shelly.conf" "$repository_snapshot_url" <<'PYCONF'

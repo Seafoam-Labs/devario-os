@@ -387,7 +387,6 @@ devario_compose_profile() {
     [aqueous-session]=1
     [calamares]=1
     [ckbcomp]=1
-    [devario-alpm-runtime]=1
     [devario-aqueous-desktop]=1
     [devario-filesystem]=1
     [seafoam-keyring]=1
@@ -395,8 +394,8 @@ devario_compose_profile() {
     [devario-keyring]=1
     [greetd]=1
     [limine]=1
-    [linux-cachyos-lts]=1
-    [linux-cachyos-lts-headers]=1
+    [linux-devario]=1
+    [linux-devario-headers]=1
     [devario-boot]=1
     [devario-dracut]=1
     [nbd]=1

@@ -14,7 +14,6 @@ aqueous-noctalia
 aqueous-session
 calamares
 ckbcomp
-devario-alpm-runtime
 devario-aqueous-desktop
 devario-base
 devario-boot
@@ -22,8 +21,8 @@ devario-dracut
 devario-filesystem
 seafoam-keyring
 devario-keyring
-linux-cachyos-lts
-linux-cachyos-lts-headers
+linux-devario
+linux-devario-headers
 noctalia
 noctalia-greeter
 shelly

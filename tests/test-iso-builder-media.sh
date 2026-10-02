@@ -11,8 +11,8 @@ cp -a "$project_dir/iso/." "$test_root/profile/"
 bsdtar -xf "$project_dir/tools/devario-iso-builder/devario-iso-builder.tar.gz" -C "$test_root/builder"
 bsdtar -xf "$3" -C "$test_root/root" usr/lib/syslinux
 mkdir -p "$test_root/root/"{boot,sbin,etc,dev,proc,sys,run,tmp,usr/lib/systemd/boot/efi}
-cp "$1" "$test_root/root/boot/vmlinuz-linux-cachyos-lts"
-cp "$2" "$test_root/root/boot/initramfs-linux-cachyos-lts.img"
+cp "$1" "$test_root/root/boot/vmlinuz-linux-devario"
+cp "$2" "$test_root/root/boot/initramfs-linux-devario.img"
 cp /usr/lib/systemd/boot/efi/systemd-bootx64.efi "$test_root/root/usr/lib/systemd/boot/efi/"
 printf 'ID=devario\nNAME=Devario\n' > "$test_root/root/etc/os-release"
 touch "$test_root/root/etc/devario-smoke"
@@ -38,7 +38,7 @@ spec=importlib.util.spec_from_file_location('builder',r/'builder/devario-iso-bui
 for p in list((r/'profile/syslinux').glob('*.cfg'))+list((r/'profile/efiboot/loader/entries').glob('*.conf')):
  s=p.read_text().replace('rd.overlay=1','rd.overlay=1 console=ttyS0 rd.shell=0 panic=1');p.write_text(s)
 (r/'profile/efiboot/loader/loader.conf').write_text('timeout 1\ndefault 01-devario-linux.conf\n')
-m=dict(name='devario-media-test',version='1',label='DEVARIO_TEST',publisher='Devario Project',application='Devario media integration test',epoch=1789488000,kernelId='linux-cachyos-lts',signing={'certificate':str(r/'test.pem'),'key':str(r/'test.key')})
+m=dict(name='devario-media-test',version='1',label='DEVARIO_TEST',publisher='Devario Project',application='Devario media integration test',epoch=1789488000,kernelId='linux-devario',signing={'certificate':str(r/'test.pem'),'key':str(r/'test.key')})
 (r/'media').mkdir()
 temporary,target=b.assemble(r/'root',r/'profile',r/'media',r/'work',r/'out',m)
 temporary.rename(target)

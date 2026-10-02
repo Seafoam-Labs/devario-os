@@ -83,7 +83,7 @@ make_core() {
   printf '%s\n' \
     aqueous \
     firefox \
-    linux-cachyos-lts \
+    linux-devario \
     shelly \
     > "$core_dir/iso/packages.x86_64"
   printf '%s\n' 'base hostname' > "$core_dir/iso/airootfs/etc/hostname"

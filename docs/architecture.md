@@ -34,8 +34,8 @@ flowchart LR
 | Calamares | Copies the tested live root and configures the target installation. |
 | Limine | Boots installed systems through UEFI or legacy BIOS. |
 | `devario-dracut` and `devario-boot` | Supply the pinned initramfs generator and Devario-owned kernel, image, recovery, and boot-update policy. |
-| Shelly | Synchronizes repositories and performs package installation, removal, upgrade, signature verification, and inventory. |
-| `devario-alpm-runtime` | Supplies `libalpm` and required runtime data without the Pacman command-line programs. |
+| Shelly from `devario-core` | Supplies the native RLPM backend and performs repository synchronization, package installation, removal, upgrade, signature verification, and inventory. |
+| `devario-base` | Supplies base dependencies, Shelly configuration, runtime directories, and storage migration. |
 | Devario package repository | Delivers signed core packages and repository metadata. |
 
 ## Package-management boundary

@@ -7,7 +7,6 @@ btrfs-progs
 calamares
 ckbcomp
 cryptsetup
-devario-alpm-runtime
 devario-aqueous-desktop
 devario-base
 devario-boot
@@ -29,8 +28,8 @@ gvfs
 hwinfo
 intel-ucode
 limine
-linux-cachyos-lts
-linux-cachyos-lts-headers
+linux-devario
+linux-devario-headers
 linux-firmware
 lvm2
 man-db

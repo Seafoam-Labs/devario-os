@@ -14,7 +14,7 @@ The kernel recipe installs `/usr/lib/modules/<release>/devario-kernel` as data:
 ```text
 version=<release>
 image=vmlinuz
-id=linux-cachyos-lts
+id=linux-devario
 ```
 
 The version must match its containing directory and the image is relative to
@@ -64,7 +64,7 @@ publication attempt to restore the old files. This is not a filesystem-wide
 transaction across power loss or a rollback of the package manager's changes.
 
 The first replaced kernel/image pair is saved under
-`/boot/devario-recovery/linux-cachyos-lts/`, published with one directory rename;
+`/boot/devario-recovery/linux-devario/`, published with one directory rename;
 Limine exposes it as a recovery entry. Further transactions retain that pair. After confirming
 a successful reboot, an administrator can archive or remove that saved directory
 to allow the next transaction to preserve a newer pair. The previous image is

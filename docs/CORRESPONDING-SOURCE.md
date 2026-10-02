@@ -24,8 +24,7 @@ For locally built Arch packages, retain:
   `SOURCE_DATE_EPOCH`; and
 - applicable license and copyright notices.
 
-For the kernel, include the exact upstream source, CachyOS patch set embodied
-by the pinned release, Devario configuration, package recipe, and all local
+For the kernel, include the exact Seafoam Labs release source and signature, Devario configuration, package recipe, and all local
 changes. For offline Zig caches, retain the cache itself, every embedded
 license, and the immutable URL/revision recorded for every cached component.
 

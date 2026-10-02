@@ -20,7 +20,7 @@ nvidia = importlib.util.module_from_spec(spec)
 exec(compile(HELPER.read_text(), str(HELPER), "exec"), nvidia.__dict__)
 SUPPORT = PROFILE / "airootfs/usr/share/devario/nvidia-supported-gpus.json"
 VERSION = "615.71.09"
-KERNEL = "6.18.1-target"
+KERNEL = "7.2.7-1-devario"
 DEVICE = {"address": "0000:01:00.0", "ids": ["1e04", "10de", "0000"]}
 
 
@@ -106,7 +106,7 @@ class NvidiaTests(unittest.TestCase):
         for firmware in nvidia.FIRMWARE:
             self.write(f"usr/lib/firmware/nvidia/{VERSION}/{firmware}.zst", "firmware")
         self.packages = {name: "1-1" for name in ("dkms", "gcc", "make", "patch")}
-        self.packages.update({"linux-cachyos-lts": "6.18.1-1", "linux-cachyos-lts-headers": "6.18.1-1",
+        self.packages.update({"linux-devario": "7.2.7-1", "linux-devario-headers": "7.2.7-1",
                               "nvidia-utils": f"{VERSION}-2", "nvidia-open-dkms": f"{VERSION}-1"})
 
     def payload_output(self, *args):
@@ -124,10 +124,10 @@ class NvidiaTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "must be 615"):
                 nvidia.check_payload([DEVICE], self.root)
             self.packages["nvidia-utils"] = f"{VERSION}-1"
-            self.packages["linux-cachyos-lts-headers"] = "6.18.2-1"
+            self.packages["linux-devario-headers"] = "7.2.7-2"
             with self.assertRaisesRegex(RuntimeError, "versions differ"):
                 nvidia.check_payload([DEVICE], self.root)
-            self.packages["linux-cachyos-lts-headers"] = "6.18.1-1"
+            self.packages["linux-devario-headers"] = "7.2.7-1"
             del self.packages["dkms"]
             with self.assertRaisesRegex(RuntimeError, "missing dkms"):
                 nvidia.check_payload([DEVICE], self.root)

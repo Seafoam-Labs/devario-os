@@ -2,5 +2,5 @@
 set -euo pipefail
 source /usr/lib/devario/kernel.sh
 (( $# <= 2 )) || exit 64
-devario_kernel_select "${1:-/usr/lib/modules}" linux-cachyos-lts
-install -Dm644 "$DEVARIO_KERNEL_IMAGE" "${2:-/boot}/vmlinuz-linux-cachyos-lts"
+devario_kernel_select "${1:-/usr/lib/modules}" linux-devario
+install -Dm644 "$DEVARIO_KERNEL_IMAGE" "${2:-/boot}/vmlinuz-linux-devario"

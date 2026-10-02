@@ -201,7 +201,6 @@ required_devario_packages=(
   aqueous-session
   calamares
   ckbcomp
-  devario-alpm-runtime
   devario-aqueous-desktop
   devario-base
   devario-filesystem
@@ -209,8 +208,8 @@ required_devario_packages=(
   devario-boot
   devario-dracut
   devario-keyring
-  linux-devario-lts
-  linux-devario-lts-headers
+  linux-devario
+  linux-devario-headers
   noctalia
   noctalia-greeter
   shelly
@@ -267,8 +266,7 @@ if (( ${#missing_devario_packages[@]} || ${#duplicate_devario_packages[@]} )); t
     echo "Packages with multiple artifacts: ${duplicate_devario_packages[*]}" >&2
   fi
   echo "Build and sign the required packages before constructing the ISO." >&2
-  echo "For the custom kernel, run:" >&2
-  echo "  sudo ./scripts/build-packages-nspawn.sh linux-devario-lts" >&2
+  echo "Supply signed linux-devario, linux-devario-headers, and devario-dracut packages from the external package build." >&2
   exit 1
 fi
 

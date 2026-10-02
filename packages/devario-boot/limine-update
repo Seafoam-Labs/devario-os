@@ -38,10 +38,10 @@ for command_name in awk chmod findmnt grep install limine lsblk mktemp mv readli
     || fail "required command is unavailable: $command_name"
 done
 
-[[ -f "$boot_dir/vmlinuz-linux-cachyos-lts" ]] \
-  || fail "$boot_dir/vmlinuz-linux-cachyos-lts is missing"
-[[ -f "$boot_dir/initramfs-linux-cachyos-lts.img" ]] \
-  || fail "$boot_dir/initramfs-linux-cachyos-lts.img is missing"
+[[ -f "$boot_dir/vmlinuz-linux-devario" ]] \
+  || fail "$boot_dir/vmlinuz-linux-devario is missing"
+[[ -f "$boot_dir/initramfs-linux-devario.img" ]] \
+  || fail "$boot_dir/initramfs-linux-devario.img is missing"
 [[ -f "$limine_share/BOOTX64.EFI" ]] \
   || fail "the Limine x86-64 EFI executable is missing"
 [[ -f "$limine_share/limine-bios.sys" ]] \
@@ -87,27 +87,27 @@ trap cleanup EXIT
   echo 'remember_last_entry: yes'
   echo 'interface_branding: Devario'
   echo
-  echo '/Devario Linux (CachyOS LTS)'
+  echo '/Devario Linux'
   echo 'protocol: linux'
-  echo 'path: boot():/vmlinuz-linux-cachyos-lts'
-  echo 'module_path: boot():/initramfs-linux-cachyos-lts.img'
+  echo 'path: boot():/vmlinuz-linux-devario'
+  echo 'module_path: boot():/initramfs-linux-devario.img'
   echo "cmdline: $kernel_cmdline"
 
-  if [[ -f "$boot_dir/initramfs-linux-cachyos-lts-fallback.img" ]]; then
+  if [[ -f "$boot_dir/initramfs-linux-devario-fallback.img" ]]; then
     echo
-    echo '/Devario Linux (CachyOS LTS, fallback initramfs)'
+    echo '/Devario Linux (fallback initramfs)'
     echo 'protocol: linux'
-    echo 'path: boot():/vmlinuz-linux-cachyos-lts'
-    echo 'module_path: boot():/initramfs-linux-cachyos-lts-fallback.img'
+    echo 'path: boot():/vmlinuz-linux-devario'
+    echo 'module_path: boot():/initramfs-linux-devario-fallback.img'
     echo "cmdline: $kernel_cmdline"
   fi
-  if [[ -s "$boot_dir/devario-recovery/linux-cachyos-lts/vmlinuz-linux-cachyos-lts" \
-    && -s "$boot_dir/devario-recovery/linux-cachyos-lts/initramfs-linux-cachyos-lts.img" ]]; then
+  if [[ -s "$boot_dir/devario-recovery/linux-devario/vmlinuz-linux-devario" \
+    && -s "$boot_dir/devario-recovery/linux-devario/initramfs-linux-devario.img" ]]; then
     echo
     echo '/Devario Linux (previous kernel and initramfs)'
     echo 'protocol: linux'
-    echo 'path: boot():/devario-recovery/linux-cachyos-lts/vmlinuz-linux-cachyos-lts'
-    echo 'module_path: boot():/devario-recovery/linux-cachyos-lts/initramfs-linux-cachyos-lts.img'
+    echo 'path: boot():/devario-recovery/linux-devario/vmlinuz-linux-devario'
+    echo 'module_path: boot():/devario-recovery/linux-devario/initramfs-linux-devario.img'
     echo "cmdline: $kernel_cmdline"
   fi
 } > "$temporary_config"

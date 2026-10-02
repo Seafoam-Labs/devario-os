@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 pkgname=devario-boot
 pkgver=1
-pkgrel=3
+pkgrel=4
 pkgdesc="Devario kernel, dracut and Limine lifecycle"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -24,14 +24,14 @@ source=(
   'verify-live-image'
 )
 sha256sums=(
-  '7cb6a8be6618cbd6454b1d5975e0ffadae15fa0c72cfa19c52b51c65dc5020d3'
+  '677463e0c0296509a39db988dbc9633705584fd342c98472705097920d592e52'
   'b7f25a1a5c299be2f9ac650badda16e5579165c32e0686ab33ad789820caf50f'
-  'b7f7ae0743378f0f1b6f9df84c20735346afcabdfa327a4d13e62230b2eb72a2'
+  'b32cbdec21d068c6c23a0a0fd3fdca2982ed378d80b16ae2d998b62bbabff967'
   '3a8807cef4c6dc0d2ef29e9ee4ef246e46203ae01371511abd6d81d4283b6da9'
   '3efbb3ead28dba72f526627b65678ac41055160533c3e0ea89eeef8e152a353b'
   '815ec97e8ee77815cb25acc3844d264ca2398cf69efc236556a14c8b4f88178c'
   'f834101b6c033b4aa5c7dbf33a91fa1fb7bc419803dc187e56f3de62b7f282df'
-  '51f09558bd774d609ec46d833d408e0a64badf60913473d262d432bca5324e65'
+  'c406192ac417acc34f154b82557bced115b7e00affd3110b37a2ee4e22090f27'
   '8eb5bf879dd79a24aedfa868ba820f8c3593068e668e5188be2f495ddeb6db5b'
   '34f65cc8ac7259a574b0fb6b519b7864ed57fec4c4b830c19a0865ba06c8d673'
   'fef72a77838a03d0aadbf800d55e25f5f6b8c570abe112eab8427598a20d9f27'
