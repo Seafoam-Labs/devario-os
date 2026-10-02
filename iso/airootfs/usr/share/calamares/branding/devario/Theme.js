@@ -1,0 +1,27 @@
+// Generated; SPDX-License-Identifier: GPL-3.0-or-later
+.pragma library
+var theme = {
+  "schemaVersion": 1,
+  "fontFamily": "Inter",
+  "fontPixelSize": 14,
+  "spacing": 8,
+  "cardRadius": 20,
+  "fieldRadius": 18,
+  "variant": "dark",
+  "palette": {
+    "surface": "#141218",
+    "low": "#1d1b20",
+    "container": "#211f26",
+    "high": "#2b2930",
+    "text": "#e6e0e9",
+    "secondary": "#cac4d0",
+    "primary": "#d0bcff",
+    "onPrimary": "#381e72",
+    "primaryContainer": "#4f378b",
+    "onContainer": "#eaddff",
+    "outline": "#79747e",
+    "error": "#ffb4ab",
+    "errorContainer": "#601410"
+  },
+  "motionMs": 150
+};

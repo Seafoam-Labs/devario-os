@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+cmake_minimum_required(VERSION 3.21)
+project(DevarioPearlChecks LANGUAGES CXX)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_CXX_STANDARD 17)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Test QuickWidgets Qml Svg)
+add_executable(pearl-theme-check check.cpp ../../packages/calamares/PearlStyle.cpp)
+target_include_directories(pearl-theme-check PRIVATE ../../packages/calamares)
+target_link_libraries(pearl-theme-check PRIVATE Qt6::Widgets Qt6::Test Qt6::QuickWidgets Qt6::Qml Qt6::Svg)
+add_library(pearl-capture SHARED capture.cpp)
+target_link_libraries(pearl-capture PRIVATE Qt6::Widgets)

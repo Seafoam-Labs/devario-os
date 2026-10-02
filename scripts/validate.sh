@@ -260,6 +260,19 @@ while IFS= read -r python_file; do
   fi
 done < <(find "$project_dir/release" "$project_dir/scripts" -maxdepth 1 -type f -name '*.py' -print | sort)
 
+if ! python3 "$project_dir/scripts/render-calamares-theme.py" --check; then
+  fail "Calamares theme assets are stale"
+fi
+if ! python3 "$project_dir/tests/test-calamares-theme.py"; then
+  fail "Calamares appearance and branding consistency tests failed"
+fi
+if [[ -e "$profile_dir/airootfs/etc/calamares/branding/devario" ]]; then
+  fail "Calamares branding must have a single source under /usr/share"
+fi
+if ! python3 "$project_dir/scripts/render-calamares-theme.py" --check \
+  --output "$profile_dir/airootfs/usr/share/calamares/branding/devario"; then
+  fail "Composed profile changed the generated Calamares appearance"
+fi
 if ! python3 "$project_dir/tests/test-pearl-desktop.py"; then
   fail "Pearl desktop and live login integration tests failed"
 fi

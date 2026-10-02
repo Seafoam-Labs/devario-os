@@ -1,0 +1,229 @@
+--- a/src/calamares/CMakeLists.txt
++++ b/src/calamares/CMakeLists.txt
+@@ -7,6 +7,7 @@
+ set(calamaresSources
+     main.cpp
+     CalamaresApplication.cpp
++    pearl/PearlStyle.cpp
+     CalamaresWindow.cpp
+     DebugWindow.cpp
+     VariantModel.cpp
+--- a/src/calamares/CalamaresApplication.cpp
++++ b/src/calamares/CalamaresApplication.cpp
+@@ -8,6 +8,8 @@
+  *
+  */
+ #include "CalamaresApplication.h"
++#include "pearl/PearlStyle.h"
++#include <QFontInfo>
+ 
+ #include "CalamaresConfig.h"
+ #include "CalamaresVersionX.h"
+@@ -198,6 +200,17 @@
+     }
+ 
+     new Calamares::Branding( brandingFile.absoluteFilePath(), this, devicePixelRatio() );
++    if ( brandingComponentName == QStringLiteral( "devario" ) )
++    {
++        QString error;
++        if ( !Devario::applyPearlTheme( *this, brandingFile.absolutePath(), &error ) )
++        {
++            cError() << "Cannot load Devario appearance:" << error;
++            ::exit( EXIT_FAILURE );
++        }
++        Calamares::setDefaultFontSize( QFontInfo( font() ).pointSize() );
++        cDebug() << "Devario Pearl appearance loaded from" << brandingFile.absolutePath();
++    }
+ }
+ 
+ void
+--- a/src/calamares/CalamaresWindow.cpp
++++ b/src/calamares/CalamaresWindow.cpp
+@@ -215,6 +215,7 @@
+                      int )
+ {
+     QWidget* navigation = new QWidget( parent );
++    navigation->setObjectName( "navigationWidget" );
+     QBoxLayout* bottomLayout = new QHBoxLayout;
+     bottomLayout->addStretch();
+ 
+@@ -318,6 +319,12 @@
+ 
+     w->setSource(
+         QUrl( Calamares::searchQmlFile( Calamares::QmlSearch::Both, QStringLiteral( "calamares-sidebar" ) ) ) );
++    if ( qApp->property( "devarioPearlTheme" ).toBool() )
++    {
++        w->setObjectName( "pearlSidebar" );
++        w->setClearColor( qApp->palette().color( QPalette::Window ) );
++        desiredWidth = parent && parent->width() < 620 ? 88 : 208;
++    }
+     setDimension( w, o, desiredWidth );
+     return w;
+ }
+@@ -447,6 +454,13 @@
+     QSize availableSize = desktopSize( this );
+     QSize minimumSize( qBound( windowMinimumWidth, availableSize.width(), windowPreferredWidth ),
+                        qBound( windowMinimumHeight, availableSize.height(), windowPreferredHeight ) );
++    if ( qApp->property( "devarioPearlTheme" ).toBool() )
++    {
++        // At high scale factors the logical screen may be smaller than the
++        // upstream fixed minimum. The page scroll areas keep content reachable.
++        minimumSize = QSize( qMin( windowMinimumWidth, availableSize.width() ),
++                             qMin( windowMinimumHeight, availableSize.height() ) );
++    }
+     setMinimumSize( minimumSize );
+ 
+     cDebug() << "Available desktop" << availableSize << "minimum size" << minimumSize;
+@@ -535,7 +549,16 @@
+     Calamares::unmarginLayout( mainLayout );
+     Calamares::unmarginLayout( contentsLayout );
+     baseWidget->setLayout( mainLayout );
+-    setStyleSheet( Calamares::Branding::instance()->stylesheet() );
++    if ( qApp->property( "devarioPearlTheme" ).toBool() )
++    {
++        mainLayout->setContentsMargins( 12, 12, 12, 12 );
++        mainLayout->setSpacing( 12 );
++        contentsLayout->setSpacing( 8 );
++    }
++    else
++    {
++        setStyleSheet( Calamares::Branding::instance()->stylesheet() );
++    }
+ }
+ 
+ void
+--- a/src/libcalamaresui/ViewManager.cpp
++++ b/src/libcalamaresui/ViewManager.cpp
+@@ -33,6 +33,7 @@
+ #include <QDialogButtonBox>
+ #include <QFile>
+ #include <QMessageBox>
++#include <QScrollArea>
+ #include <QMetaObject>
+ 
+ #define UPDATE_BUTTON_PROPERTY( name, value ) \
+@@ -144,7 +145,20 @@
+             layout->setContentsMargins( margins.width(), margins.height(), margins.width(), margins.height() );
+         }
+ 
+-        m_stack->insertWidget( before, step->widget() );
++        if ( qApp->property( "devarioPearlTheme" ).toBool() )
++        {
++            // Keep large translations and high-DPI pages reachable without
++            // changing ViewStep ownership, validation or navigation order.
++            auto* scroll = new QScrollArea( m_stack );
++            scroll->setFrameShape( QFrame::NoFrame );
++            scroll->setWidgetResizable( true );
++            scroll->setWidget( step->widget() );
++            m_stack->insertWidget( before, scroll );
++        }
++        else
++        {
++            m_stack->insertWidget( before, step->widget() );
++        }
+         m_stack->setCurrentIndex( 0 );
+         step->widget()->setFocus();
+     }
+--- a/src/modules/partition/gui/BootInfoWidget.cpp
++++ b/src/modules/partition/gui/BootInfoWidget.cpp
+@@ -44,7 +44,7 @@
+     m_bootLabel->setAlignment( Qt::AlignCenter );
+ 
+     QPalette palette;
+-    palette.setBrush( WindowText, QColor( "#4D4D4D" ) );  //dark grey
++    palette.setBrush( WindowText, palette.brush( QPalette::PlaceholderText ) );
+ 
+     m_bootIcon->setAutoFillBackground( true );
+     m_bootLabel->setAutoFillBackground( true );
+--- a/src/modules/partition/gui/DeviceInfoWidget.cpp
++++ b/src/modules/partition/gui/DeviceInfoWidget.cpp
+@@ -46,7 +46,7 @@
+     m_ptLabel->setAlignment( Qt::AlignCenter );
+ 
+     QPalette palette;
+-    palette.setBrush( WindowText, QColor( "#4D4D4D" ) );  //dark grey
++    palette.setBrush( WindowText, palette.brush( QPalette::PlaceholderText ) );
+ 
+     m_ptIcon->setAutoFillBackground( true );
+     m_ptLabel->setAutoFillBackground( true );
+--- a/src/calamares/main.cpp
++++ b/src/calamares/main.cpp
+@@ -110,6 +110,10 @@
+     // Not needed in Qt6
+     QApplication::setAttribute( Qt::AA_EnableHighDpiScaling );
+ #endif
++    // The Devario installer owns its appearance, including when elevated.
++    // Do this before QApplication loads any session platform-theme plugin.
++    qputenv( "QT_QPA_PLATFORMTHEME", "generic" );
++    qunsetenv( "QT_STYLE_OVERRIDE" );
+     CalamaresApplication a( argc, argv );
+ 
+     KAboutData aboutData( "calamares",
+--- a/src/modules/welcome/checker/ResultDelegate.cpp
++++ b/src/modules/welcome/checker/ResultDelegate.cpp
+@@ -14,6 +14,7 @@
+ 
+ #include <QApplication>
+ #include <QPainter>
++#include <QAbstractItemView>
+ 
+ static constexpr int const item_margin = 8;
+ static inline int
+@@ -75,6 +76,15 @@
+         return option.rect.size();
+     }
+ 
++    if ( qApp->property( "devarioPearlTheme" ).toBool() )
++    {
++        const auto* view = qobject_cast< const QAbstractItemView* >( option.widget );
++        const int width = qMax( 80, view ? view->viewport()->width() : option.rect.width() );
++        const auto text = index.data( m_textRole ).toString();
++        const auto bounds = QFontMetrics( qApp->font() ).boundingRect(
++            QRect( 0, 0, qMax( 1, width - 52 ), 0 ), Qt::TextWordWrap, text );
++        return QSize( width, qMax( 24, bounds.height() ) + 24 );
++    }
+     QFont font = qApp->font();
+ 
+     font.setPointSize( item_fontsize() );
+@@ -96,7 +106,29 @@
+     initStyleOption( &opt, index );
+     opt.text.clear();
+ 
+-    paintRequirement( painter, opt, index, m_textRole );
++    if ( qApp->property( "devarioPearlTheme" ).toBool() )
++    {
++        const auto colors = qApp->property( "devarioPearlPalette" ).toMap();
++        const bool mandatory = index.data( Calamares::RequirementsModel::Mandatory ).toBool();
++        const QRect card = opt.rect.adjusted( 2, 2, -2, -2 );
++        painter->setRenderHint( QPainter::Antialiasing );
++        painter->setPen( Qt::NoPen );
++        painter->setBrush( QColor( colors.value( mandatory ? "errorContainer" : "primaryContainer" ).toString() ) );
++        painter->drawRoundedRect( card, 12, 12 );
++        QRect iconRect( card.left() + 10, card.top() + 10, 24, 24 );
++        QRect textRect = card.adjusted( 44, 10, -10, -10 );
++        iconRect = QStyle::visualRect( opt.direction, card, iconRect );
++        textRect = QStyle::visualRect( opt.direction, card, textRect );
++        painter->drawPixmap( iconRect, Calamares::defaultPixmap(
++            mandatory ? Calamares::StatusError : Calamares::StatusWarning, Calamares::Original, QSize( 24, 24 ) ) );
++        painter->setFont( qApp->font() );
++        painter->setPen( QColor( colors.value( mandatory ? "error" : "onContainer" ).toString() ) );
++        painter->drawText( textRect, Qt::AlignLeading | Qt::AlignVCenter | Qt::TextWordWrap, index.data( m_textRole ).toString() );
++    }
++    else
++    {
++        paintRequirement( painter, opt, index, m_textRole );
++    }
+ 
+     painter->restore();
+ }
+--- a/src/modules/welcome/checker/ResultsListWidget.cpp
++++ b/src/modules/welcome/checker/ResultsListWidget.cpp
+@@ -53,6 +53,8 @@
+ 
+     auto* listview = new QListView( this );
+     listview->setSelectionMode( QAbstractItemView::NoSelection );
++    listview->setResizeMode( QListView::Adjust );
++    listview->setWordWrap( true );
+     listview->setDragDropMode( QAbstractItemView::NoDragDrop );
+     listview->setAcceptDrops( false );
+     listview->setItemDelegate( new ResultDelegate( this, Calamares::RequirementsModel::NegatedText ) );

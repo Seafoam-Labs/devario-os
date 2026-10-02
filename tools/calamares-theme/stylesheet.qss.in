@@ -1,0 +1,54 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later
+ * Generated from tools/calamares-theme. Buttons and selection indicators are
+ * painted by PearlStyle so focus, motion and native accessibility are retained.
+ */
+QWidget { selection-background-color: @primaryContainer@; selection-color: @onContainer@; }
+QWidget#mainApp, QDialog, QMessageBox { background: @surface@; }
+QWidget#viewManager { background: @container@; border: 1px solid @high@; border-radius: @cardRadius@px; }
+QWidget#viewManagerStack, QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; border: none; }
+QWidget#navigationWidget { background: transparent; }
+QPushButton { color: @text@; }
+QPushButton#view-button-next:enabled, QPushButton:default:enabled, QPushButton:checked:enabled, QPushButton[pearlPrimary="true"]:enabled { color: @onPrimary@; }
+QPushButton:disabled { color: @secondary@; }
+QLabel { background: transparent; }
+QLabel#bootInfoLabel, QLabel#deviceInfoLabel { color: @secondary@; }
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QDateTimeEdit {
+    background: @low@; color: @text@; border: 1px solid @outline@;
+    border-radius: @fieldRadius@px; padding: 8px 12px; min-height: 20px;
+}
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QDateTimeEdit:focus { border: 1px solid @primary@; }
+QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled { color: @secondary@; border-color: @high@; }
+QLineEdit[pearlInvalid="true"] { border: 2px solid @error@; }
+QTextEdit, QPlainTextEdit, QTextBrowser {
+    background: @low@; color: @text@; border: 1px solid @outline@;
+    border-radius: 12px; padding: 8px;
+}
+QTextEdit:focus, QPlainTextEdit:focus { border-color: @primary@; }
+QComboBox::drop-down { border: none; width: 26px; }
+QComboBox::down-arrow { image: url("@assetPath@/chevron.svg"); width: 12px; height: 12px; }
+QComboBox QAbstractItemView { background: @high@; border: 1px solid @outline@; padding: 4px; }
+QAbstractItemView { background: @low@; alternate-background-color: @container@; border: 1px solid @high@; border-radius: 12px; }
+QAbstractItemView::item { min-height: 28px; padding: 2px 6px; }
+QAbstractItemView::item:selected { background: @primaryContainer@; color: @onContainer@; }
+QAbstractItemView::item:hover:!selected { background: @high@; }
+QHeaderView::section { background: @container@; color: @secondary@; border: none; border-bottom: 1px solid @outline@; padding: 8px; }
+QTableView QTableCornerButton::section { background: @container@; border: none; }
+QGroupBox { border: 1px solid @high@; border-radius: 16px; margin-top: 14px; padding: 14px 10px 10px; }
+QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; left: 14px; padding: 0 6px; color: @secondary@; }
+QProgressBar { background: @high@; border: none; border-radius: 6px; min-height: 12px; text-align: center; }
+QProgressBar::chunk { background: @primary@; border-radius: 6px; }
+QScrollBar:vertical { background: transparent; width: 12px; margin: 0; }
+QScrollBar:horizontal { background: transparent; height: 12px; margin: 0; }
+QScrollBar::handle { background: @outline@; border: 2px solid @container@; border-radius: 6px; min-width: 20px; min-height: 20px; }
+QScrollBar::handle:hover { background: @secondary@; }
+QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
+QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
+QToolTip { background: @high@; color: @text@; border: 1px solid @outline@; padding: 8px; }
+QMenu { background: @container@; color: @text@; border: 1px solid @outline@; padding: 6px; }
+QMenu::item { padding: 8px 24px; border-radius: 8px; }
+QMenu::item:selected { background: @primaryContainer@; color: @onContainer@; }
+QMenu::item:disabled { color: @secondary@; }
+QTabWidget::pane { border: 1px solid @high@; border-radius: 12px; }
+QTabBar::tab { background: @low@; padding: 8px 16px; }
+QTabBar::tab:selected { background: @primaryContainer@; color: @onContainer@; }
+QSplitter::handle { background: @high@; }

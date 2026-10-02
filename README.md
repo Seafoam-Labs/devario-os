@@ -34,7 +34,7 @@ The installed system does not ship the `pacman` or `pacman-key` executables. It 
 - Seafoam Labs Devario kernel targeting x86-64-v3 hardware
 - NVIDIA open-driver support with PCI detection before the graphical greeter
 - Fastfetch on the first interactive shell in each terminal
-- Base Calamares 3.4.2 built from Codeberg
+- Calamares 3.4.2 built from Codeberg with [Pearl appearance](packages/calamares/README.md), including dark/light palettes and reduced-motion support
 - Devario-packaged `ckbcomp` for Calamares keyboard previews on clean Arch builders
 - Offline installation by unpacking the tested live SquashFS
 - Limine installation for BIOS and UEFI targets, with a FAT `/boot` shared by

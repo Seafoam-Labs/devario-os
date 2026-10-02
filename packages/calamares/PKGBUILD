@@ -2,7 +2,7 @@
 
 pkgname=calamares
 pkgver=3.4.2
-pkgrel=4
+pkgrel=5
 pkgdesc="Distribution-independent installer framework"
 arch=('x86_64')
 url="https://codeberg.org/Calamares/calamares"
@@ -23,6 +23,8 @@ depends=(
   'qt6-base'
   'qt6-declarative'
   'qt6-svg'
+  'inter-font'
+  'noto-fonts'
   'yaml-cpp'
 )
 makedepends=(
@@ -35,13 +37,23 @@ makedepends=(
 source=(
   "${pkgname}-${pkgver}.tar.gz::${url}/releases/download/v${pkgver}/${pkgname}-${pkgver}.tar.gz"
   '0001-devario-wayland-runtime.patch'
+  '0002-devario-pearl-appearance.patch'
+  'PearlStyle.cpp'
+  'PearlStyle.h'
 )
 sha256sums=(
   '733bbbb00dc9f84874bd5c22960952f317ea2537565431179fa2152b2fbfdccc'
   '878a1a0ce1d2eed87cb3ea4468c761ddadd2f981e6b1eaf74c942e4243374a5b'
+  '1b2557a24d8e6a89bdfa6ff287604d4910b0c384ab0ba3aa0435862b8c3c3f01'
+  'e38c14b4865a6a7d93f190933ab5d26d4cfba54d4b9fdf674d4a29829d5a6778'
+  '1393c59f7611b3ee93aaa68d899b5fb5ad8b20d3a244bc61ae712f2615eb29f8'
 )
 
 prepare() {
+  install -Dm644 "$srcdir/PearlStyle.cpp" "$srcdir/${pkgname}-${pkgver}/src/calamares/pearl/PearlStyle.cpp"
+  install -Dm644 "$srcdir/PearlStyle.h" "$srcdir/${pkgname}-${pkgver}/src/calamares/pearl/PearlStyle.h"
+  patch -d "$srcdir/${pkgname}-${pkgver}" -Np1 \
+    < "$srcdir/0002-devario-pearl-appearance.patch"
   patch -d "$srcdir/${pkgname}-${pkgver}" -Np1 \
     < "$srcdir/0001-devario-wayland-runtime.patch"
 }

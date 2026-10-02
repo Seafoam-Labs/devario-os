@@ -43,3 +43,17 @@ jobs:
               exit 1
             fi
           done < <(grep -RhoE 'uses:[[:space:]]+[^[:space:]#]+' .github)
+
+  installer-appearance:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install Qt appearance test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes cmake ninja-build g++ python3-yaml qt6-base-dev qt6-declarative-dev libqt6svg6-dev qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-templates qml6-module-qtqml-workerscript fonts-inter fonts-noto-core
+      - name: Test palettes, native controls, QML, motion and scaling
+        run: ./tests/test-calamares-theme.sh
