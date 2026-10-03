@@ -1,7 +1,7 @@
 pkgbase = devario-base
 	pkgdesc = Minimal package set defining a base Devario installation
 	pkgver = 3
-	pkgrel = 11
+	pkgrel = 12
 	url = https://github.com/Seafoam-Labs/devario-os
 	arch = any
 	license = GPL-3.0-or-later
@@ -9,6 +9,7 @@ pkgbase = devario-base
 	depends = gcc-libs
 	depends = glibc
 	depends = bash
+	depends = fish
 	depends = coreutils
 	depends = file
 	depends = findutils
@@ -20,7 +21,7 @@ pkgbase = devario-base
 	depends = gettext
 	depends = pciutils
 	depends = psmisc
-	depends = shadow
+	depends = shadow>=4.20.0.arch1-3
 	depends = util-linux
 	depends = bzip2
 	depends = gzip

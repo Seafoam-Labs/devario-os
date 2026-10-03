@@ -30,6 +30,7 @@ The installed system does not ship the `pacman` or `pacman-key` executables. It 
 - Aqueous compositor with the Pearl shell and Devario desktop defaults
 - greetd with Pearl Greeter for installed logins and an automatic Aqueous
   `liveuser` session on the live image
+- Fish as the interactive login shell for the live user and new user accounts
 - NetworkManager, PipeWire, Firefox, and common filesystem tools
 - Seafoam Labs Devario kernel targeting x86-64-v3 hardware
 - NVIDIA open-driver support with PCI detection before the graphical greeter
@@ -104,6 +105,14 @@ They remain available for systemd to create `liveuser` in the writable live
 session at boot, but the account is not materialized in the SquashFS copied by
 Calamares. Target preparation also removes any legacy `liveuser` account as a
 defense against images built before this separation was introduced.
+
+Calamares creates installed users with `/usr/bin/fish`, and Devario's Shadow
+package supplies the same default for `useradd`. `devario-base` 3-12 requires
+Fish and `shadow>=4.20.0.arch1-3`; publish those packages before rebuilding the
+base package and ISO. The Fish skeleton configuration shows the existing
+Fastfetch welcome once per interactive terminal. Existing accounts retain
+their selected login shell, and root and system scripts continue to use Bash
+or their declared interpreter.
 
 Installations require 64-bit UEFI. Automatic partitioning creates a GPT disk
 with a 4096 MiB FAT EFI System Partition mounted at `/boot`; manual layouts
@@ -259,7 +268,52 @@ scriptlets.
 
 ## Build
 
-Stage the signed packages published by Remora before building local ISO inputs:
+To create a local Community ISO from start to finish, run
+[`build-iso.sh`](build-iso.sh) from this checkout as your normal user:
+
+```sh
+./build-iso.sh
+```
+
+The script installs/upgrades host tools through Shelly, prepares the pinned
+Python validation environment, validates the OS sources, downloads and verifies
+the signed core repository, builds the six local installer packages, audits the
+resulting package set, assembles the ISO with sudo, and verifies its SHA-256
+checksum. A configured Shelly installation, sudo access, and the build host
+described above are prerequisites. It uses its own checkout regardless of the
+current working directory; `--os-dir` or `DEVARIO_OS_DIR` selects another checkout.
+
+The wrapper explicitly selects Shelly's **RLPM** backend in a private copy of
+the caller's settings at `work/iso-runs/<run>/shelly-config/`. That selection
+also reaches elevated dependency transactions and ISO assembly. Your normal
+Shelly settings are preserved. A Shelly version that cannot select RLPM stops
+the build before any package transactions.
+
+Each run retains its ISO, checksum, and assembler reports under
+`work/iso-runs/<run>/out/`, with `build.log` beside that directory. Package and
+image work is retained there too, including on failure. Downloads reuse
+`work/repository-downloads`; reserve space for the full binary repository,
+package builds, and unpacked live filesystem. Retries use a fresh run directory,
+preserving previous snapshots and ISOs. An existing `--run-dir` is rejected.
+
+To reuse a staged core snapshot and six prebuilt installer packages:
+
+```sh
+./build-iso.sh --repo-dir /path/to/repo/core --installer-dir /path/to/artifacts
+```
+
+The snapshot is copied into the run before modification. `--repo-url` selects
+both the download URL and the installed system's runtime repository URL.
+`--skip-deps` checks installed tools without upgrading them, and `--dry-run`
+prints the workflow without changing anything. See `--help` for other options.
+Runtime packages such as the kernel and desktop must already be published as
+signed artifacts; the script builds the six OS-owned packages from `packages/`.
+Controlled release signing/publication and VM boot acceptance remain separate
+workflows. The root `build-iso.sh` orchestrates the entire local build;
+`scripts/build-iso.sh` is the assembly step used by it.
+
+For individual build steps, stage the signed packages published by Remora
+before building local ISO inputs:
 
 ```sh
 python3 scripts/stage-core-repository.py
@@ -541,10 +595,10 @@ Before publishing an image, verify that:
   HTTPS repository.
 - Devario maintainers must track Seafoam Labs kernel security releases, rebuild and
   sign the pinned kernel promptly, and publish corresponding source materials.
-- The current local development repository was built on a CachyOS x86-64-v4
-  host. The pre-existing Calamares artifact inherits the host's v4
-  startup-object requirement. Rebuild all release artifacts on official baseline Arch before
-  publishing a generally bootable x86-64 image.
+- Calamares targets x86-64-v3 and must be built with compatible startup objects
+  and dependencies. Its recipe rejects v4 startup objects, and ISO preflight
+  rejects Calamares archives declaring v4 ISA requirements. Host-native builds
+  on a CachyOS v4 toolchain are not compatible with the image's v3 target.
 - Shelly's optional AUR workflow still requires a makepkg-compatible build toolchain. That toolchain is intentionally
   absent from the default live and installed systems; the supported default runtime covers signed binary repositories
   and local package archives.

@@ -1,12 +1,13 @@
 pkgbase = calamares
 	pkgdesc = Distribution-independent installer framework
 	pkgver = 3.4.2
-	pkgrel = 6
+	pkgrel = 7
 	url = https://codeberg.org/Calamares/calamares
 	arch = x86_64
 	license = GPL-3.0-or-later
 	makedepends = cmake
 	makedepends = extra-cmake-modules
+	makedepends = gettext
 	makedepends = libglvnd
 	makedepends = ninja
 	makedepends = qt6-tools
@@ -34,10 +35,12 @@ pkgbase = calamares
 	source = 0002-devario-pearl-appearance.patch
 	source = PearlStyle.cpp
 	source = PearlStyle.h
+	source = verify-isa.py
 	sha256sums = 733bbbb00dc9f84874bd5c22960952f317ea2537565431179fa2152b2fbfdccc
 	sha256sums = 878a1a0ce1d2eed87cb3ea4468c761ddadd2f981e6b1eaf74c942e4243374a5b
 	sha256sums = 1b2557a24d8e6a89bdfa6ff287604d4910b0c384ab0ba3aa0435862b8c3c3f01
 	sha256sums = e38c14b4865a6a7d93f190933ab5d26d4cfba54d4b9fdf674d4a29829d5a6778
 	sha256sums = 1393c59f7611b3ee93aaa68d899b5fb5ad8b20d3a244bc61ae712f2615eb29f8
+	sha256sums = 8f0c6637be67e84d9e313bbbf842b252435da7e0034bc171f13a266252903bf7
 
 pkgname = calamares

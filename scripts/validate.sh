@@ -85,6 +85,7 @@ required_files=(
   "$profile_dir/airootfs/etc/calamares/settings.conf"
   "$profile_dir/airootfs/etc/calamares/modules/unpackfs.conf"
   "$profile_dir/airootfs/etc/calamares/modules/partition.conf"
+  "$profile_dir/airootfs/etc/calamares/modules/users.conf"
   "$profile_dir/airootfs/etc/calamares/modules/systemd_boot.conf"
   "$profile_dir/airootfs/etc/calamares/modules/boot_preflight.conf"
   "$profile_dir/airootfs/etc/calamares/modules/prepare_target.conf"
@@ -109,11 +110,15 @@ required_files=(
   "$project_dir/packages/devario-boot/95-devario-boot.hook"
   "$profile_dir/airootfs/usr/share/calamares/branding/devario/branding.desc"
   "$profile_dir/late-airootfs/etc/skel/.bashrc"
+  "$profile_dir/late-airootfs/etc/skel/.config/fish/config.fish"
   "$profile_dir/late-airootfs/usr/share/devario/fastfetch/config.jsonc"
   "$profile_dir/late-airootfs/usr/share/devario/fastfetch/devario-fish.txt"
   "$profile_dir/late-airootfs/usr/lib/sysusers.d/devario-live.conf"
   "$profile_dir/late-airootfs/usr/lib/tmpfiles.d/devario-live.conf"
   "$project_dir/packages/calamares/PKGBUILD"
+  "$project_dir/packages/calamares/verify-isa.py"
+  "$script_dir/verify-calamares-isa.sh"
+  "$project_dir/tests/test-calamares-isa.py"
   "$project_dir/packages/calamares/0001-devario-wayland-runtime.patch"
   "$project_dir/packages/ckbcomp/PKGBUILD"
   "$project_dir/packages/devario-base/PKGBUILD"
@@ -273,6 +278,9 @@ fi
 if ! python3 "$project_dir/tests/test-calamares-theme.py"; then
   fail "Calamares appearance and branding consistency tests failed"
 fi
+if ! python3 "$project_dir/tests/test-calamares-isa.py"; then
+  fail 'Calamares x86-64-v3 artifact gate tests failed'
+fi
 if [[ -e "$profile_dir/airootfs/etc/calamares/branding/devario" ]]; then
   fail "Calamares branding must have a single source under /usr/share"
 fi
@@ -404,7 +412,7 @@ package_is_listed() {
 for required_package in \
   aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous \
   calamares ckbcomp devario-desktop \
-  devario-base devario-boot devario-dracut devario-keyring greetd systemd pearl pearl-greeter shelly fastfetch \
+  devario-base devario-boot devario-dracut devario-keyring greetd systemd pearl pearl-greeter shelly fastfetch fish \
   linux-devario linux-devario-headers nvidia-open-dkms nvidia-utils \
   vulkan-intel vulkan-radeon vulkan-swrast xorg-xwayland; do
   if ! package_is_listed "$required_package"; then
@@ -859,7 +867,7 @@ installed_greetd_config="$project_dir/packages/devario-aqueous-desktop/greetd-co
 live_session_wrapper="$profile_dir/airootfs/usr/local/bin/devario-aqueous-live-session"
 live_installer_desktop="$profile_dir/airootfs/usr/share/applications/install-devario.desktop"
 live_installer_polkit="$profile_dir/airootfs/etc/polkit-1/rules.d/49-devario-live-installer.rules"
-live_bashrc="$profile_dir/late-airootfs/etc/skel/.bashrc"
+live_fish_config="$profile_dir/late-airootfs/etc/skel/.config/fish/config.fish"
 fastfetch_config="$profile_dir/late-airootfs/usr/share/devario/fastfetch/config.jsonc"
 live_sysusers="$profile_dir/late-airootfs/usr/lib/sysusers.d/devario-live.conf"
 live_tmpfiles="$profile_dir/late-airootfs/usr/lib/tmpfiles.d/devario-live.conf"
@@ -869,7 +877,7 @@ if [[ -e "$profile_dir/airootfs/usr/lib/sysusers.d/devario-live.conf" \
   fail "live-user declarations must not be visible to package installation hooks"
 fi
 if ! grep -Fqx \
-  'u liveuser 1000 "Devario Live User" /home/liveuser /usr/bin/bash' \
+  'u liveuser 1000 "Devario Live User" /home/liveuser /usr/bin/fish' \
   "$live_sysusers" \
   || ! grep -Fqx 'C /home/liveuser 0755 liveuser liveuser - /etc/skel' \
     "$live_tmpfiles"; then
@@ -878,19 +886,36 @@ fi
 if grep -Eq '^liveuser:' "$profile_dir/airootfs/etc/passwd"; then
   fail "the Devario ISO profile materializes liveuser in /etc/passwd"
 fi
-for required_fastfetch_bashrc_text in \
-  '[[ $- != *i* ]] && return' \
-  '-z ${DEVARIO_FASTFETCH_SHOWN:-}' \
-  'export DEVARIO_FASTFETCH_SHOWN=1' \
-  'command -v fastfetch >/dev/null 2>&1' \
+if ! grep -Fqx '  shell: /usr/bin/fish' "$profile_dir/airootfs/etc/calamares/modules/users.conf"; then
+  fail "Calamares must create user accounts with Fish as their login shell"
+fi
+for shell_dependency in fish 'shadow>=4.20.0.arch1-3'; do
+  if ! grep -Fqx "  '$shell_dependency'" "$project_dir/packages/devario-base/PKGBUILD"; then
+    fail "devario-base must require $shell_dependency for the default user shell"
+  fi
+done
+if command -v fish >/dev/null 2>&1; then
+  if ! fish --no-config --no-execute "$live_fish_config"; then
+    fail "Fish welcome configuration has invalid syntax"
+  fi
+else
+  note "Fish is unavailable; skipping Fish syntax validation."
+fi
+for required_fastfetch_fish_text in \
+  'status is-interactive; or return' \
+  'isatty stdout' \
+  'test "$TERM" != dumb' \
+  'test -z "$DEVARIO_FASTFETCH_SHOWN"' \
+  'set -gx DEVARIO_FASTFETCH_SHOWN 1' \
+  'command -q fastfetch' \
   'fastfetch \' \
   '-l /usr/share/devario/fastfetch/devario-fish.txt' \
   '--config /usr/share/devario/fastfetch/config.jsonc'; do
-  if ! grep -Fq -- "$required_fastfetch_bashrc_text" "$live_bashrc"; then
-    fail "the default interactive shell does not launch Fastfetch safely: $required_fastfetch_bashrc_text"
+  if ! grep -Fq -- "$required_fastfetch_fish_text" "$live_fish_config"; then
+    fail "the default interactive shell does not launch Fastfetch safely: $required_fastfetch_fish_text"
   fi
 done
-if grep -Fq -- '--packages-format' "$live_bashrc"; then
+if grep -Fq -- '--packages-format' "$live_fish_config"; then
   fail "the default interactive shell uses Fastfetch's removed module-option CLI"
 fi
 for required_fastfetch_config_text in \
@@ -1367,6 +1392,12 @@ if command -v bsdtar >/dev/null 2>&1; then
   for artifact in "$project_dir"/repo/core/qt6-declarative-[0-9]*.pkg.tar.zst; do
     if ! bash "$script_dir/verify-qt-quick-package.sh" "$artifact"; then
       fail 'Calamares requires the complete Qt Quick runtime payload'
+    fi
+  done
+
+  for artifact in "$project_dir"/repo/core/calamares-[0-9]*.pkg.tar.zst; do
+    if ! bash "$script_dir/verify-calamares-isa.sh" "$artifact"; then
+      fail 'Calamares exceeds the x86-64-v3 image target'
     fi
   done
 

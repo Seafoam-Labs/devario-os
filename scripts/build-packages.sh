@@ -369,8 +369,11 @@ for package_name in "${selected_package_order[@]}"; do
       exit 1
     fi
     built_artifacts+=("$artifact")
-    artifact_packager="$(bsdtar -xOf "$artifact" .PKGINFO | awk -F ' = ' '$1 == "packager" {print $2; exit}')"
-    buildinfo_packager="$(bsdtar -xOf "$artifact" .BUILDINFO | awk -F ' = ' '$1 == "packager" {print $2; exit}')"
+    # Drain both metadata streams. Exiting awk at the first match can leave
+    # bsdtar writing a large .BUILDINFO into a closed pipe; pipefail then rejects
+    # a successfully built package with a spurious "Broken pipe" error.
+    artifact_packager="$(bsdtar -xOf "$artifact" .PKGINFO | awk -F ' = ' '$1 == "packager" {print $2}')"
+    buildinfo_packager="$(bsdtar -xOf "$artifact" .BUILDINFO | awk -F ' = ' '$1 == "packager" {print $2}')"
     if [[ "$artifact_packager" != "$expected_packager" || "$buildinfo_packager" != "$expected_packager" ]]; then
       echo "Package attribution differs from the required ZoeyErinBauer identity: $artifact" >&2
       exit 1

@@ -74,6 +74,13 @@ palettes against the chosen Pearl release whenever the reference changes.
 
 ## Verification
 
+Calamares targets x86-64-v3. The recipe replaces host compiler flags and checks
+the toolchain's C runtime startup objects before compiling. Build in a Devario
+root with v3-compatible dependencies; a CachyOS v4 host toolchain is rejected.
+The package step and ISO preflight inspect every ELF payload for ISA notes above
+v3, including module libraries. These notes are a regression check, not a full
+instruction audit; the controlled compiler target remains necessary.
+
 `tests/test-calamares-theme.sh` builds a standalone Qt test executable and a
 test-only capture library. It needs CMake, Ninja, a C++17 compiler, Python/PyYAML,
 Qt 6 Widgets/Test/QuickWidgets/QML/SVG, and the Qt Quick Controls/Layout runtime

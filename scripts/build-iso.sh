@@ -301,6 +301,9 @@ done < "$staged_profile/packages.x86_64"
 qt_declarative_packages=("$staged_core_repo"/qt6-declarative-[0-9]*.pkg.tar.zst)
 (( ${#qt_declarative_packages[@]} == 1 )) || { echo 'Expected exactly one qt6-declarative archive.' >&2; exit 1; }
 bash "$script_dir/verify-qt-quick-package.sh" "${qt_declarative_packages[0]}"
+calamares_packages=("$staged_core_repo"/calamares-[0-9]*.pkg.tar.zst)
+(( ${#calamares_packages[@]} == 1 )) || { echo 'Expected exactly one Calamares archive.' >&2; exit 1; }
+bash "$script_dir/verify-calamares-isa.sh" "${calamares_packages[0]}"
 
 audit_args=(--database devario-core "$staged_core_repo/devario-core.db")
 if (( DEVARIO_EDITION_HAS_MANAGED )); then

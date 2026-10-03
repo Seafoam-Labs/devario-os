@@ -2,7 +2,7 @@
 
 pkgname=devario-base
 pkgver=3
-pkgrel=11
+pkgrel=12
 pkgdesc="Minimal package set defining a base Devario installation"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -15,6 +15,7 @@ depends=(
   'gcc-libs'
   'glibc'
   'bash'
+  'fish'
   'coreutils'
   'file'
   'findutils'
@@ -26,7 +27,7 @@ depends=(
   'gettext'
   'pciutils'
   'psmisc'
-  'shadow'
+  'shadow>=4.20.0.arch1-3'
   'util-linux'
   'bzip2'
   'gzip'
