@@ -119,7 +119,9 @@ staged_core_repo="$(mktemp -d /tmp/devario-core-repo.XXXXXX)"
 staged_managed_repo="$(mktemp -d /tmp/devario-managed-repo.XXXXXX)"
 staged_profile="$(mktemp -d /tmp/devario-profile.XXXXXX)"
 shelly_root="$(mktemp -d "$work_dir/.devario-shelly.XXXXXX")"
-build_gpgdir="$(mktemp -d "$work_dir/.devario-keyring.XXXXXX")"
+# gpg-agent creates Unix sockets beneath this directory. Timestamped run paths
+# can exceed the socket path limit, so keep its private temporary home short.
+build_gpgdir="$(mktemp -d /tmp/devario-keyring.XXXXXX)"
 cleanup() {
   rm -f -- "$generated_conf"
   rm -rf -- "$staged_core_repo" "$staged_managed_repo"
