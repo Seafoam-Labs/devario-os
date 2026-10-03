@@ -41,7 +41,9 @@ done
 for command_name in bsdtar cmp find gpg install python3 realpath stat systemd-nspawn; do
   command -v "$command_name" >/dev/null 2>&1 || { echo "Missing host command: $command_name" >&2; exit 1; }
 done
-python3 -c 'import jsonschema' >/dev/null 2>&1 || { echo 'Host python-jsonschema is required.' >&2; exit 1; }
+# shellcheck source=lib/python-env.sh
+source "$script_dir/lib/python-env.sh"
+devario_use_validation_python
 
 overlay_dir="$(realpath -e -- "$overlay_dir")"; input_root="$(realpath -e -- "$input_root")"
 output_dir="$(realpath -m -- "$output_dir")"
@@ -141,6 +143,12 @@ base_nspawn=(--quiet --register=no --console=pipe --resolv-conf=replace-host --d
   --bind-ro="$core_repo:/input/devario-core-repo" --bind-ro="$core_keyring:/input/devario-core-keyring"
   --bind-ro="$managed_keyring:/input/devario-managed-keyring")
 run_container() { systemd-nspawn "${base_nspawn[@]}" "$@"; }
+# Managed scripts also run Python directly; use the prepared guest environment.
+guest_validation_env="$(run_container /usr/bin/python3 -I -B \
+  /input/devario-os/scripts/prepare-validation-env.py --cache-dir /opt/devario/validation-python --check)"
+base_nspawn+=(--setenv="PATH=$guest_validation_env/bin:/usr/local/sbin:/usr/local/bin:/usr/bin" \
+  --setenv=PYTHONDONTWRITEBYTECODE=1 --setenv=PYTHONNOUSERSITE=1)
+
 container_work="$(run_container /usr/bin/mktemp -d /var/tmp/devario-external.XXXXXX)"
 [[ "$container_work" == /var/tmp/devario-external.* ]] || { echo 'Unsafe builder work path.' >&2; exit 1; }
 run_container /usr/bin/install -d -m 0755 "$container_work/overlay" "$container_work/package-work" "$container_work/repo" "$container_work/sources"
@@ -162,7 +170,7 @@ dependency_closure="$temporary_dir/dependency-closure.json"
 CONTAINER_ROOT="$container_root" python3 - > "$dependency_closure" <<'PY'
 import json,os,pathlib
 records=[]
-for desc in sorted((pathlib.Path(os.environ["CONTAINER_ROOT"])/"var/lib/pacman/local").glob("*/desc")):
+for desc in sorted((pathlib.Path(os.environ["CONTAINER_ROOT"])/"var/lib/shelly/local").glob("*/desc")):
  lines=desc.read_text().splitlines(); fields={}; i=0
  while i<len(lines):
   if lines[i].startswith("%") and lines[i].endswith("%") and i+1<len(lines): fields[lines[i][1:-1]]=lines[i+1]; i+=2

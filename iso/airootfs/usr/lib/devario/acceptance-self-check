@@ -27,10 +27,10 @@ mode="${mode#mode=}"; firmware="${firmware#firmware=}"; edition="${edition#editi
 failures=()
 fail() { failures+=("$*"); }
 root_path() { printf '%s%s\n' "${root%/}" "$1"; }
-os_release="$(root_path /etc/os-release)"; shelly_conf="$(root_path /etc/pacman.conf)"
+os_release="$(root_path /etc/os-release)"; shelly_conf="$(root_path /etc/shelly.conf)"
 keyring_ready="$(root_path /var/lib/devario/shelly-keyring.ready)"
 [[ -r "$os_release" ]] || fail 'missing /etc/os-release'
-[[ -r "$shelly_conf" ]] || fail 'missing /etc/pacman.conf'
+[[ -r "$shelly_conf" ]] || fail 'missing /etc/shelly.conf'
 [[ -f "$keyring_ready" && ! -L "$keyring_ready" ]] || fail 'Shelly keyring initialization did not complete'
 
 if [[ -r "$os_release" ]]; then

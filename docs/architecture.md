@@ -50,7 +50,7 @@ The build validates this boundary, checks requested versus installed package
 inventories, and rejects dormant process calls to Pacman-family executables.
 Shelly reads `/etc/shelly.conf`, stores its local and synchronization databases
 under `/var/lib/shelly`, caches packages under `/var/cache/shelly/pkg`, and
-uses `/etc/shelly.d` for its mutable keyring and local hooks. Public keyring sources retain the libalpm-compatible `/usr/share/pacman/keyrings`
+uses `/etc/shelly.d` for its mutable keyring and local hooks. Public keyring sources are installed under `/usr/share/shelly/keyrings`
 location. The Arch mirrorlist belongs only to the optional `shelly-arch-compat`
 package; it is not a default repository input.
 

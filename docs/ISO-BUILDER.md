@@ -34,6 +34,28 @@ and signature. Devario-owned packages, including its patched Shelly, must be
 built into the core closure; a similarly named external package is not proof of
 compatibility with isolated-root operations.
 
+Stage the published repository with its complete signed package closure:
+
+```sh
+python3 scripts/stage-core-repository.py
+```
+
+This downloads into `work/repository-downloads`, verifies the active signer and
+package hashes, then publishes a complete local snapshot at `repo/core`.
+Metadata bytes and signatures are preserved; the local canonical archive names
+remain `.tar.zst` even if the upstream metadata is gzip-compressed. Failed
+transfers retain verified cache files for retry. A later refresh must use a
+fresh destination, for example `--output repo/core-next`, so the existing
+verified snapshot is not overwritten.
+
+The command emits dependency and installed-path audit reports beside the staged
+repository. A nonzero result can mean the signed snapshot was staged correctly
+but is not yet ISO-ready: missing OS packages or packages with old hook paths
+still require publication. The ISO build repeats these preflight checks and
+requires the Shelly public-key-directory patch, preventing silent omission of
+package hooks. The current source recipe folder is not evidence that the
+published archive already contains its changes.
+
 Audit already downloaded, signature-verified databases before staging packages:
 
 Version comparisons require either `vercmp` or the ALPM shared library. Ubuntu
@@ -53,14 +75,65 @@ selected 492 packages and reported 73 unresolved requirements, including native
 Devario packages and essential system dependencies. The report is a snapshot of
 the inspected database bytes, not a permanent statement of service contents.
 
+## Python validation preparation
+
+The ISO workflow prepares a dedicated virtual environment automatically. It uses
+`python-jsonschema`'s upstream Python distribution and its runtime dependencies,
+plus PyYAML for source checks. These tools are not installed into the live image
+and do not require Remora packages or publication in `devario-core`.
+
+To prepare ahead of time or run a standalone validator:
+
+```sh
+python3 scripts/prepare-validation-env.py
+./scripts/with-validation-env.sh python3 release/validate-json.py SCHEMA DOCUMENT
+./scripts/validate.sh
+```
+
+Use CPython 3.11–3.14 on Linux x86_64 or aarch64, with `venv` and `ensurepip`
+available. Debian/Ubuntu hosts need `python3-venv`; Devario uses its Python
+package. The lock at `scripts/validation-requirements.lock` pins versions and
+wheel SHA-256 hashes. Installation requires binary wheels and cannot fall back
+to source compilation, so maturin, Rust, setuptools bootstrap packages, and
+system pip are not needed. Pip is bootstrapped from Python's bundled ensurepip.
+
+User environments default to `$XDG_CACHE_HOME/devario/validation-python`
+(or `~/.cache/devario/validation-python`); root uses
+`/var/cache/devario/validation-python`. `DEVARIO_VALIDATION_CACHE` overrides the
+host cache. Environments are keyed by the dependency lock, Python version, and ABI/platform.
+Build commands activate them for child Python processes and disable user-site
+imports and bytecode writes.
+
+Preparation normally downloads wheels from PyPI over HTTPS and verifies their
+locked hashes. For offline preparation, copy a previously prepared `wheels/`
+directory for the target Python version and architecture, then set:
+
+```sh
+export DEVARIO_VALIDATION_OFFLINE=1
+export DEVARIO_VALIDATION_WHEELHOUSE=/absolute/path/to/wheels
+python3 scripts/prepare-validation-env.py
+```
+
+Supply these variables to sudo explicitly when invoking a root build; sudo may
+remove the invoking user's environment. Host and container Python ABIs can
+differ, so an offline cache must include compatible wheels for both.
+
+The nspawn preparation step creates its own environment under
+`/opt/devario/validation-python` using the container's interpreter. It runs
+before recording the controlled builder's root-tree hash, which therefore
+covers the installed Python tools and their lock identity. A controlled build
+only checks and reuses that environment; it cannot download or install tools
+after attestation. The host virtual environment is never bind-mounted as the
+container interpreter.
+
 ## Bootstrap and release inputs
 
 The `devario-iso-builder` checkout is the image assembler, not a bootstrap
 root filesystem. A provisioned native host can run `sudo ./scripts/build-iso.sh`
 with the signed core repository staged locally, without a bootstrap archive.
-The host needs `python-jsonschema`, the documented image tools, and a regular
-`/etc/pacman.conf` file for the private configuration mount. The assembler uses
-the current `shelly-cli` split package and RLPM's configuration paths directly.
+The host needs Python 3.11–3.14 with `venv`/`ensurepip` and the documented image
+tools. The assembler uses the patched `shelly-cli` split package with explicit
+`--config` and `HookDirMode = Replace`; no host configuration mount is required.
 
 The vendored archive includes the local assembler integration changes and their
 `LOCAL-CHANGES.patch`. Its lock records the upstream base revision, local patch
@@ -70,7 +143,7 @@ upstream. The matching changes are also in the sibling assembler checkout.
 The default nspawn path requires a signed Devario bootstrap through
 `DEVARIO_BOOTSTRAP_URL`; no Arch bootstrap URL is assumed. The archive has one
 top-level root directory, identifies as Devario in `/etc/os-release`, and carries
-its installed-package database under `/var/lib/pacman`. It must contain the
+its installed-package database under `/var/lib/shelly`. It must contain the
 userspace and package-build tools required by the selected recipes. Its detached
 signature is verified using `DEVARIO_BOOTSTRAP_KEYRING`, defaulting to the checked
 in core public-key bundle. A complete bootstrap artifact has not been produced

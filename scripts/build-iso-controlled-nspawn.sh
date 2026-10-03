@@ -16,7 +16,9 @@ done
 [[ -n "$edition_dir" && -n "$release_version" ]] || { echo 'Controlled ISO builder requires --edition and --release-version.' >&2; exit 2; }
 devario_validate_release_version "$release_version"
 (( EUID == 0 )) || { echo 'Controlled ISO builder must run through sudo.' >&2; exit 1; }
-python3 -c 'import jsonschema' >/dev/null 2>&1 || { echo 'Host python-jsonschema is required.' >&2; exit 1; }
+# shellcheck source=lib/python-env.sh
+source "$script_dir/lib/python-env.sh"
+devario_use_validation_python
 edition_dir="$(realpath -e -- "$edition_dir")"
 container_root="${DEVARIO_NSPAWN_ROOT:-/var/lib/machines/devario-iso-builder}"
 bootstrap_url="${DEVARIO_BOOTSTRAP_URL:-}"; repository_snapshot_url="${DEVARIO_REPOSITORY_SNAPSHOT_URL:-}"
@@ -70,7 +72,7 @@ run_root /usr/bin/shelly sync standard --no-confirm
 run_root /usr/bin/shelly install standard --no-confirm python libisoburn dosfstools mtools squashfs-tools openssl util-linux coreutils limine squashfs-tools libarchive
 snapshot_id="${repository_snapshot_url##*/snapshots/}"; snapshot_id="${snapshot_id%/}"; snapshot_id="${snapshot_id//\//-}"
 snapshot_dir="$bootstrap_cache/repository-snapshot-$snapshot_id"
-for name in devario-core; do cmp -s "$snapshot_dir/$name.db" "$container_root/var/lib/pacman/sync/$name.db" || { echo "ISO builder $name DB drifted." >&2; exit 1; }; done
+for name in devario-core; do cmp -s "$snapshot_dir/$name.db" "$container_root/var/lib/shelly/sync/$name.db" || { echo "ISO builder $name DB drifted." >&2; exit 1; }; done
 
 temp="$(mktemp -d /tmp/devario-iso-nspawn.XXXXXX)"; container_work=''
 cleanup(){ if [[ -n "$container_work" && "$container_work" == /var/tmp/devario-iso.* ]]; then run_root /usr/bin/rm -rf -- "$container_work" >/dev/null 2>&1 || true; fi; rm -rf -- "$temp"; }; trap cleanup EXIT
@@ -88,7 +90,7 @@ fi
 dependency="$temp/dependency.json"; CONTAINER_ROOT="$container_root" python3 - > "$dependency" <<'PY'
 import json,os,pathlib
 r=[]
-for p in sorted((pathlib.Path(os.environ["CONTAINER_ROOT"])/"var/lib/pacman/local").glob("*/desc")):
+for p in sorted((pathlib.Path(os.environ["CONTAINER_ROOT"])/"var/lib/shelly/local").glob("*/desc")):
  l=p.read_text().splitlines();f={};i=0
  while i<len(l):
   if l[i].startswith("%") and l[i].endswith("%") and i+1<len(l):f[l[i][1:-1]]=l[i+1];i+=2

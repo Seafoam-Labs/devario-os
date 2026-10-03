@@ -147,6 +147,10 @@ if (( EUID == 0 )); then
   exit 1
 fi
 
+# shellcheck source=lib/python-env.sh
+source "$script_dir/lib/python-env.sh"
+devario_use_validation_python
+
 for command_name in awk bsdtar find makepkg python3 repo-add shelly sort; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
     echo "Missing required command: $command_name" >&2

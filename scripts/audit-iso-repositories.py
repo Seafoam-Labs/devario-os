@@ -62,6 +62,7 @@ def satisfies(requirement, name, version):
 def resolve(requested, packages):
     selected = {}
     missing = {}
+    requested_names = {re.split(r"[<>=]", name, maxsplit=1)[0] for name in requested}
     pending = [(name, "ISO package list") for name in requested]
     while pending:
         requirement, parent = pending.pop()
@@ -78,9 +79,11 @@ def resolve(requested, packages):
         if not candidates:
             missing.setdefault(requirement, set()).add(parent)
             continue
-        # Caller supplies repository precedence. Prefer an already selected
-        # provider to keep recursive dependencies consistent.
-        package = next((p for p in candidates if p["name"] in selected), candidates[0])
+        # Prefer explicit ISO targets over another virtual provider, even when
+        # their entries have not yet been visited (e.g. devario-dracut/initramfs).
+        package = next((p for p in candidates if p["name"] in selected), None)
+        if package is None:
+            package = next((p for p in candidates if p["name"] in requested_names), candidates[0])
         if package["name"] in selected:
             continue
         selected[package["name"]] = package

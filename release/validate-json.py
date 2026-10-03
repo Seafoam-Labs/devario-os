@@ -10,7 +10,7 @@ import sys
 try:
     import jsonschema
 except ImportError as error:  # pragma: no cover - exercised by shell diagnostics
-    raise SystemExit("python3-jsonschema is required") from error
+    raise SystemExit("Run this validator through scripts/with-validation-env.sh to prepare its Python dependencies") from error
 
 
 def reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:

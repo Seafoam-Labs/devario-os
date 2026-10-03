@@ -53,7 +53,7 @@ if not isinstance(packages, list):
 # from the same local ALPM database Shelly queried so makepkg can preserve its
 # established .BUILDINFO schema without invoking another package manager.
 architectures = {}
-for description in glob.glob("/var/lib/pacman/local/*/desc"):
+for description in glob.glob("/var/lib/shelly/local/*/desc"):
     fields = read_sections(description)
     name = (fields.get("NAME") or [None])[0]
     version = (fields.get("VERSION") or [None])[0]

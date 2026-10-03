@@ -174,9 +174,9 @@ then
   exit 1
 fi
 
-shelly_config="$root_dir/etc/pacman.conf"
+shelly_config="$root_dir/etc/shelly.conf"
 if [[ ! -f "$shelly_config" || -L "$shelly_config" ]]; then
-  echo 'The image does not contain a safe /etc/pacman.conf.' >&2
+  echo 'The image does not contain a safe /etc/shelly.conf.' >&2
   exit 1
 fi
 SHELLY_CONFIG="$shelly_config" EDITION="$edition" EXPECTED_CORE_URL="$expected_core_url" EXPECTED_MANAGED_URL="$expected_managed_url" python3 -c 'import os, re
@@ -217,7 +217,7 @@ if os.environ["EDITION"] == "community" and "devario-managed" in sections:
 canonical_inventory="$(mktemp /tmp/devario-package-inventory.XXXXXX)"
 IMAGE_ROOT="$root_dir" python3 - > "$canonical_inventory" <<'PY'
 import json,os,pathlib
-root=pathlib.Path(os.environ["IMAGE_ROOT"])/"var/lib/pacman/local"
+root=pathlib.Path(os.environ["IMAGE_ROOT"])/"var/lib/shelly/local"
 records=[]
 for desc in sorted(root.glob("*/desc")):
  lines=desc.read_text(encoding="utf-8").splitlines(); fields={}; i=0
@@ -355,9 +355,9 @@ def check(name,prefix,active,public,trusted,revoked,active_file,keyring,url):
  expected_closure=closure(pathlib.Path(keyring),prefix)
  matches=[item for item in lock["keyrings"] if item["name"]==prefix]
  if matches != [expected_closure]: raise SystemExit(f"input lock does not bind exact {name} keyring closure")
- installed=root/f"usr/share/pacman/keyrings/{prefix}.gpg"
- installed_trusted=root/f"usr/share/pacman/keyrings/{prefix}-trusted"
- installed_revoked=root/f"usr/share/pacman/keyrings/{prefix}-revoked"
+ installed=root/f"usr/share/shelly/keyrings/{prefix}.gpg"
+ installed_trusted=root/f"usr/share/shelly/keyrings/{prefix}-trusted"
+ installed_revoked=root/f"usr/share/shelly/keyrings/{prefix}-revoked"
  installed_active=root/f"usr/share/devario/keyrings/{prefix}-active-signer"
  for supplied,embedded,label in ((pathlib.Path(public),installed,"public keys"),(pathlib.Path(trusted),installed_trusted,"trusted keys"),(pathlib.Path(revoked),installed_revoked,"revoked keys"),(pathlib.Path(active_file),installed_active,"active signer")):
   if supplied.read_bytes()!=embedded.read_bytes(): raise SystemExit(f"installed {name} {label} differ")

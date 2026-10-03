@@ -222,7 +222,7 @@ cmdline="$("$boot_package/kernel-command-line" "$test_root/fstab" "$test_root/cr
 )
 [[ -x "$test_root/package/usr/lib/devario/initramfs-update" ]] || fail 'package omits generator'
 for hook in 60-dracut-remove 90-dracut-install 60-mkinitcpio-remove 90-mkinitcpio-install 95-devario-limine; do
-  [[ "$(readlink "$test_root/package/etc/pacman.d/hooks/$hook.hook")" == /dev/null ]] || fail "competing hook: $hook"
+  [[ "$(readlink "$test_root/package/etc/shelly.d/hooks/$hook.hook")" == /dev/null ]] || fail "competing hook: $hook"
 done
 
 # The independent assembler has its own package, mount and template contracts.

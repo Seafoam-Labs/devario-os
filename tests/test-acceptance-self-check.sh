@@ -10,7 +10,7 @@ mkdir -p "$root/etc" "$root/var/lib/devario"; printf 'machine-id\n' > "$root/etc
 write_os_release() { printf 'ID=devario\nVARIANT_ID=%s\n' "$1" > "$root/etc/os-release"; }
 write_core_shelly() {
   local server="${1:-https://packages.devario.example/core/\$arch}"
-  printf '%s\n' '[options]' 'SigLevel = Never' '[devario-core]' 'SigLevel = Required' "Server = $server" > "$root/etc/pacman.conf"
+  printf '%s\n' '[options]' 'SigLevel = Never' '[devario-core]' 'SigLevel = Required' "Server = $server" > "$root/etc/shelly.conf"
 }
 write_os_release community; write_core_shelly
 output="$($check --root "$root" --mode installed --firmware bios --edition community)"
@@ -22,9 +22,9 @@ rm -f "$root/var/lib/devario/shelly-keyring.ready"
 if "$check" --root "$root" --mode installed --firmware bios --edition community >/dev/null 2>&1; then echo 'Self-check passed without the keyring-ready marker.' >&2; exit 1; fi
 : > "$root/var/lib/devario/shelly-keyring.ready"
 
-printf '%s\n' '[options]' 'SigLevel = Required' '[devario-core]' 'Server = https://packages.devario.example/core/' > "$root/etc/pacman.conf"
+printf '%s\n' '[options]' 'SigLevel = Required' '[devario-core]' 'Server = https://packages.devario.example/core/' > "$root/etc/shelly.conf"
 if "$check" --root "$root" --mode installed --firmware bios --edition community >/dev/null 2>&1; then echo 'Global SigLevel incorrectly satisfied the repository requirement.' >&2; exit 1; fi
-write_core_shelly; sed -i 's#https://packages#https://user:password@packages#' "$root/etc/pacman.conf"
+write_core_shelly; sed -i 's#https://packages#https://user:password@packages#' "$root/etc/shelly.conf"
 if "$check" --root "$root" --mode installed --firmware bios --edition community >/dev/null 2>&1; then echo 'Credential-bearing repository URL was accepted.' >&2; exit 1; fi
 for unsafe_suffix in '?token=value' '#fragment' '\\escaped'; do
   write_core_shelly "https://packages.devario.example/core/\$arch$unsafe_suffix"
@@ -33,11 +33,11 @@ for unsafe_suffix in '?token=value' '#fragment' '\\escaped'; do
     exit 1
   fi
 done
-write_core_shelly; printf '%s\n' 'Server = https://second.devario.example/core/' >> "$root/etc/pacman.conf"
+write_core_shelly; printf '%s\n' 'Server = https://second.devario.example/core/' >> "$root/etc/shelly.conf"
 if "$check" --root "$root" --mode installed --firmware bios --edition community >/dev/null 2>&1; then echo 'Duplicate repository Server was accepted.' >&2; exit 1; fi
 
 write_os_release managed; write_core_shelly
 if "$check" --root "$root" --mode installed --firmware bios --edition managed >/dev/null 2>&1; then echo 'Managed image passed without managed repository trust.' >&2; exit 1; fi
-printf '%s\n' '[devario-managed]' 'SigLevel = Required' 'Server = https://packages.devario.example/managed/$arch' >> "$root/etc/pacman.conf"
+printf '%s\n' '[devario-managed]' 'SigLevel = Required' 'Server = https://packages.devario.example/managed/$arch' >> "$root/etc/shelly.conf"
 "$check" --root "$root" --mode installed --firmware bios --edition managed >/dev/null
 echo 'Acceptance self-check tests passed.'

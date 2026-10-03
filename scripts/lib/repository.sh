@@ -293,9 +293,9 @@ devario_verify_keyring_package() {
     "$DEVARIO_KEYRING_REVOKED" "$DEVARIO_KEYRING_ACTIVE"
   )
   installed_files=(
-    "usr/share/pacman/keyrings/$prefix.gpg"
-    "usr/share/pacman/keyrings/$prefix-trusted"
-    "usr/share/pacman/keyrings/$prefix-revoked"
+    "usr/share/shelly/keyrings/$prefix.gpg"
+    "usr/share/shelly/keyrings/$prefix-trusted"
+    "usr/share/shelly/keyrings/$prefix-revoked"
     "usr/share/devario/keyrings/$prefix-active-signer"
   )
   devario_is_plain_file "$package" || {

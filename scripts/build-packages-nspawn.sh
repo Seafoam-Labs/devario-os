@@ -132,10 +132,9 @@ for command_name in awk bsdtar curl find getent gpg gpgv grep install sort stat 
     exit 1
   fi
 done
-python3 -c 'import jsonschema' >/dev/null 2>&1 || {
-  echo 'The host python-jsonschema module is required for controlled input/evidence validation.' >&2
-  exit 1
-}
+# shellcheck source=lib/python-env.sh
+source "$script_dir/lib/python-env.sh"
+devario_use_validation_python
 
 if [[ ! -r "$bootstrap_keyring" ]]; then
   echo "The Devario bootstrap keyring is unavailable: $bootstrap_keyring" >&2
@@ -277,24 +276,24 @@ fi
 # Native bootstrap roots use Shelly storage directly. Configuration is selected
 # from Devario policy and the controlled snapshot contract.
 install -Dm644 "$project_dir/packages/devario-base/shelly.conf" \
-  "$container_root/etc/pacman.conf"
+  "$container_root/etc/shelly.conf"
 if (( release_build )); then
-  python3 - "$container_root/etc/pacman.conf" "$repository_snapshot_url" <<'PYCONF'
+  python3 - "$container_root/etc/shelly.conf" "$repository_snapshot_url" <<'PYCONF'
 import pathlib,sys
 p=pathlib.Path(sys.argv[1]); text=p.read_text()
 text=text.replace('https://repo.seafoam-labs.org/devario-core/$arch',sys.argv[2]+'devario-core/$arch')
 p.write_text(text)
 PYCONF
 fi
-install -Dm644 "$bootstrap_keyring" "$container_root/usr/share/pacman/keyrings/devario-core.gpg"
-install -Dm644 "$project_dir/packages/devario-keyring/devario-trusted" "$container_root/usr/share/pacman/keyrings/devario-core-trusted"
-install -Dm644 "$project_dir/packages/devario-keyring/devario-revoked" "$container_root/usr/share/pacman/keyrings/devario-core-revoked"
+install -Dm644 "$bootstrap_keyring" "$container_root/usr/share/shelly/keyrings/devario-core.gpg"
+install -Dm644 "$project_dir/packages/devario-keyring/devario-trusted" "$container_root/usr/share/shelly/keyrings/devario-core-trusted"
+install -Dm644 "$project_dir/packages/devario-keyring/devario-revoked" "$container_root/usr/share/shelly/keyrings/devario-core-revoked"
 install -d -m 0755 \
-  "$container_root/etc/pacman.d" \
-  "$container_root/var/cache/pacman"
-install -d -m 0755 "$container_root/var/lib/pacman" \
-  "$container_root/var/cache/pacman/pkg" "$container_root/etc/pacman.d/gnupg" \
-  "$container_root/etc/pacman.d/hooks"
+  "$container_root/etc/shelly.d" \
+  "$container_root/var/cache/shelly"
+install -d -m 0755 "$container_root/var/lib/shelly" \
+  "$container_root/var/cache/shelly/pkg" "$container_root/etc/shelly.d/gnupg" \
+  "$container_root/etc/shelly.d/hooks"
 if ! grep -Eq '^ID=("devario"|devario)$' "$container_root/etc/os-release"; then
   echo 'The bootstrap must identify as Devario; an Arch bootstrap is not a native build input.' >&2
   exit 1
@@ -305,6 +304,11 @@ fi
 echo "Installing the Shelly bootstrap into the container..."
 bsdtar --numeric-owner -xpf "$shelly_package" -C "$container_root"
 run_container_root /usr/bin/shelly --version
+key_help="$(run_container_root /usr/bin/shelly-key --help)"
+if [[ "$key_help" != *'/usr/share/shelly/keyrings'* ]]; then
+  echo 'The Shelly bootstrap predates the Devario public-key directory patch. Rebuild the Devario-profile shelly-cli package.' >&2
+  exit 1
+fi
 
 echo "Initializing the Devario package trust store through Shelly..."
 run_container_root /usr/bin/shelly keyring init
@@ -313,7 +317,7 @@ run_container_root /usr/bin/shelly sync standard --no-confirm
 if (( release_build )); then
   for repository_name in devario-core; do
     if ! cmp -s "$repository_snapshot_dir/$repository_name.db" \
-      "$container_root/var/lib/pacman/sync/$repository_name.db"; then
+      "$container_root/var/lib/shelly/sync/$repository_name.db"; then
       echo "Shelly resolved against unexpected $repository_name database bytes." >&2
       exit 1
     fi
@@ -321,7 +325,35 @@ if (( release_build )); then
 fi
 run_container_root /usr/bin/shelly upgrade standard --no-confirm
 run_container_root /usr/bin/shelly install standard --no-confirm \
-  base-devel git sudo python-jsonschema
+  base-devel git sudo python
+
+# Prepare Python tooling inside the container, before any root-tree attestation.
+# The host virtualenv is not portable across Python ABIs or filesystem roots.
+validation_wheelhouse="${DEVARIO_VALIDATION_WHEELHOUSE:-${VIRTUAL_ENV%/envs/*}/wheels}"
+if [[ ! -d "$validation_wheelhouse" ]]; then
+  if [[ "${DEVARIO_VALIDATION_OFFLINE:-0}" == 1 ]]; then
+    echo "Offline container preparation requires a wheel cache: $validation_wheelhouse" >&2
+    exit 1
+  fi
+  install -d -m 0755 "$validation_wheelhouse"
+fi
+validation_wheelhouse="$(realpath -e -- "$validation_wheelhouse")"
+validation_prepare_options=()
+if [[ "${DEVARIO_VALIDATION_OFFLINE:-0}" == 1 ]]; then
+  validation_prepare_options+=(--offline)
+fi
+run_container_root --bind-ro="$script_dir:/run/devario-python-source" \
+  --bind-ro="$validation_wheelhouse:/run/devario-python-wheels" \
+  /usr/bin/bash -c '
+    set -euo pipefail
+    install -d -m 0755 /opt/devario/validation-python/wheels
+    for wheel in /run/devario-python-wheels/*.whl; do
+      [[ -f "$wheel" ]] || continue
+      cp -- "$wheel" /opt/devario/validation-python/wheels/
+    done
+    exec /usr/bin/python3 -I -B /run/devario-python-source/prepare-validation-env.py \
+      --cache-dir /opt/devario/validation-python "$@"
+  ' prepare-validation "${validation_prepare_options[@]}"
 
 # This fragment is loaded after the container's official makepkg policy by
 # makepkg-shelly.conf. Explicit settings keep host or administrator fragments
@@ -482,7 +514,7 @@ if (( release_build )); then
   container_release_work=''
   for repository_name in devario-core; do
     cmp -s "$repository_snapshot_dir/$repository_name.db" \
-      "$container_root/var/lib/pacman/sync/$repository_name.db" || {
+      "$container_root/var/lib/shelly/sync/$repository_name.db" || {
       echo "Prepared builder drifted from locked $repository_name database." >&2
       exit 1
     }
@@ -491,7 +523,7 @@ if (( release_build )); then
   dependency_closure="$release_temp/dependency-closure.json"
   CONTAINER_ROOT="$container_root" python3 - > "$dependency_closure" <<'PY'
 import json, os, pathlib
-root=pathlib.Path(os.environ["CONTAINER_ROOT"])/"var/lib/pacman/local"
+root=pathlib.Path(os.environ["CONTAINER_ROOT"])/"var/lib/shelly/local"
 records=[]
 for desc in sorted(root.glob("*/desc")):
  lines=desc.read_text(encoding="utf-8").splitlines(); fields={}; i=0

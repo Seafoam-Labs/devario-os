@@ -38,6 +38,10 @@ while (( $# )); do
   esac
 done
 
+# shellcheck source=lib/python-env.sh
+source "$script_dir/lib/python-env.sh"
+devario_use_validation_python
+
 if [[ "$edition_dir" != /* ]]; then
   edition_dir="$project_dir/$edition_dir"
 fi
@@ -273,6 +277,13 @@ if ! python3 "$project_dir/scripts/render-calamares-theme.py" --check \
   --output "$profile_dir/airootfs/usr/share/calamares/branding/devario"; then
   fail "Composed profile changed the generated Calamares appearance"
 fi
+if ! DEVARIO_VALIDATION_TEST_WHEELHOUSE="${DEVARIO_VALIDATION_WHEELHOUSE:-${VIRTUAL_ENV%/envs/*}/wheels}" \
+  python3 "$project_dir/tests/test-validation-env.py"; then
+  fail "Python validation environment tests failed"
+fi
+if ! python3 "$project_dir/tests/test-stage-core-repository.py"; then
+  fail "Repository staging and provider selection tests failed"
+fi
 if ! python3 "$project_dir/tests/test-pearl-desktop.py"; then
   fail "Pearl desktop and live login integration tests failed"
 fi
@@ -329,7 +340,7 @@ for boundary_test in \
 done
 
 if ! python3 -c 'import jsonschema' >/dev/null 2>&1; then
-  fail 'python3-jsonschema is required for Draft 2020-12 release validation'
+  fail 'the prepared Python environment lacks jsonschema for Draft 2020-12 release validation'
 else
   while IFS= read -r schema_file; do
     if ! python3 -c \
@@ -1163,95 +1174,17 @@ if [[ -n "$package_function_calls" ]]; then
   fail "found a forbidden package-manager process in a PKGBUILD function"
 fi
 
-# Native RLPM uses the existing configuration/database paths. Process calls
-# to Pacman remain forbidden; filenames do not select a backend.
-# Other Pacman identifiers must fit one of these explicit boundaries:
-# documentation; the image build configuration; ALPM compatibility paths; the
-# storage migration from legacy paths; or build-ISO plumbing.
+# Legacy references are limited to explicit compatibility and migration sources.
 pacman_reference_is_allowed() {
-  local relative_path="$1"
-  local text="$2"
-
-  # These are RLPM's real file locations, not compatibility aliases.
-  if [[ "$text" == *etc/pacman.conf* || "$text" == *etc/pacman.d* \
-    || "$text" == *var/lib/pacman* || "$text" == *var/cache/pacman* \
-    || "$text" == *var/log/pacman.log* ]]; then
-    return 0
-  fi
+  local relative_path="$1" text="$2"
   case "$relative_path" in
-    README.md|packages/*/README.md)
-      return 0
-      ;;
-    iso/shelly.build.conf|iso/shelly.runtime.conf|iso/airootfs/etc/pacman.conf)
-      return 0
-      ;;
-    iso/airootfs/etc/pacman.d/*)
-      return 0
-      ;;
-    iso/airootfs/usr/lib/devario/acceptance-self-check)
-      return 0
-      ;;
+    README.md|packages/*/README.md|packages/shelly-arch-compat/*|packages/seafoam-keyring/*|packages/devario-base/shelly-storage-migrate|packages/devario-base/devario-base.install)
+      return 0 ;;
     iso/late-airootfs/usr/share/devario/fastfetch/config.jsonc)
-      [[ "$text" == *'"format": "{pacman} (Shelly)"'* ]]
-      return
-      ;;
-    packages/devario-base/shelly-storage-migrate|packages/devario-base/devario-base.install)
-      return 0
-      ;;
-    packages/devario-keyring/*|packages/seafoam-keyring/*|packages/shelly-arch-compat/*)
-      return 0
-      ;;
-    packages/devario-base/PKGBUILD|packages/devario-base/shelly.conf)
-      return 0
-      return
-      ;;
-    iso/profile.json)
-      [[ "$text" == *pacman_conf* ]]
-      return
-      ;;
-    scripts/build-iso.sh)
-      [[ "$text" == *etc/pacman.conf* || "$text" == *usr/share/pacman/keyrings/* \
-        || "$text" == *usr/share/pacman/keyrings/archlinux.gpg* \
-        || "$text" == *'--populate-from /usr/share/pacman/keyrings'* ]]
-      return
-      ;;
+      [[ "$text" == *'"format": "{pacman} (Shelly)"'* ]]; return ;;
     scripts/build-packages.sh)
-      [[ "$text" == *'PACMAN="$makepkg_adapter"'* ]]
-      return
-      ;;
-    scripts/build-packages-nspawn.sh)
-      [[ "$text" == *usr/share/pacman/keyrings/* || "$text" == *'/usr/share/pacman/keyrings/archlinux.gpg'* \
-        || "$text" == *'var/lib/pacman'* \
-        || "$text" == *'var/cache/pacman/pkg'* \
-        || "$text" == *'../pacman/pkg'* \
-        || "$text" == *'pacman.d/gnupg'* \
-        || "$text" == *'pacman.d/hooks'* \
-        || "$text" == *mirrorlist* ]]
-      return
-      ;;
-    scripts/build-external-packages-nspawn.sh|scripts/build-iso-controlled-nspawn.sh)
-      [[ "$text" == *'usr/share/pacman/keyrings/'* \
-        || "$text" == *'var/lib/pacman/'* ]]
-      return
-      ;;
-    scripts/lib/repository.sh)
-      [[ "$text" == *'usr/share/pacman/keyrings/'* ]]
-      return
-      ;;
-    scripts/verify-controlled-builder.sh|scripts/verify-image-boundary.sh)
-      [[ "$text" == *'usr/share/pacman/keyrings/'* \
-        || "$text" == *'var/lib/pacman/'* \
-        || "$text" == *'/var/lib/pacman'* \
-        || "$text" == *'/var/cache/pacman/pkg'* \
-        || "$text" == *'/etc/pacman.d/gnupg'* \
-        || "$text" == *'/etc/pacman.d/hooks'* \
-        || "$text" == *pacman.conf* \
-        || "$text" == *pacman_config* \
-        || "$text" == *PACMAN_CONFIG* ]]
-      return
-      ;;
+      [[ "$text" == *'PACMAN="$makepkg_adapter"'* ]]; return ;;
   esac
-
   return 1
 }
 
@@ -1336,7 +1269,7 @@ raise SystemExit(0 if found else 1)
   fi
 }
 
-if command -v shelly >/dev/null 2>&1 && grep -Eq "^\[devario-core\]" /etc/pacman.conf 2>/dev/null; then
+if command -v shelly >/dev/null 2>&1 && grep -Eq "^\[devario-core\]" /etc/shelly.conf 2>/dev/null; then
   if [[ -z "$python_command" ]] && ! command -v jq >/dev/null 2>&1; then
     note "Shelly is installed, but no JSON parser is available; skipping exact repository validation."
   else
@@ -1563,14 +1496,14 @@ if command -v bsdtar >/dev/null 2>&1; then
     artifact_contents="$(bsdtar -tf "$artifact")"
     base_pkginfo="$(bsdtar -xOf "$artifact" .PKGINFO)"
     for required_path in \
-      etc/pacman.conf \
+      etc/shelly.conf \
       usr/lib/sysusers.d/alpm.conf \
-      var/lib/pacman/ var/cache/pacman/pkg/ etc/pacman.d/gnupg/ etc/pacman.d/hooks/; do
+      var/lib/shelly/ var/cache/shelly/pkg/ etc/shelly.d/gnupg/ etc/shelly.d/hooks/; do
       if ! grep -Fxq "$required_path" <<< "$artifact_contents"; then
         fail "$(basename -- "$artifact") lacks $required_path"
       fi
     done
-    if ! grep -Fxq 'backup = etc/pacman.conf' <<< "$base_pkginfo"; then
+    if ! grep -Fxq 'backup = etc/shelly.conf' <<< "$base_pkginfo"; then
       fail "$(basename -- "$artifact") must preserve administrator Shelly configuration"
     fi
     if grep -Eq '^depend = (devario-alpm-runtime|libalpm(\.so)?)([<>=]|$)' <<< "$base_pkginfo"; then

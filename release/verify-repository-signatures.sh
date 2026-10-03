@@ -44,9 +44,9 @@ while IFS= read -r -d '' package; do
   temporary="$(mktemp -d /tmp/devario-keyring-package.XXXXXX)"
   trap 'rm -rf -- "${temporary:-}"' EXIT
   if [[ "$repository_name" == devario-core ]]; then
-    mappings=('devario.gpg:usr/share/pacman/keyrings/devario-core.gpg' 'devario-trusted:usr/share/pacman/keyrings/devario-core-trusted' 'devario-revoked:usr/share/pacman/keyrings/devario-core-revoked' 'active-signer:usr/share/devario/keyrings/devario-core-active-signer')
+    mappings=('devario.gpg:usr/share/shelly/keyrings/devario-core.gpg' 'devario-trusted:usr/share/shelly/keyrings/devario-core-trusted' 'devario-revoked:usr/share/shelly/keyrings/devario-core-revoked' 'active-signer:usr/share/devario/keyrings/devario-core-active-signer')
   else
-    mappings=('devario-managed.gpg:usr/share/pacman/keyrings/devario-managed.gpg' 'devario-managed-trusted:usr/share/pacman/keyrings/devario-managed-trusted' 'devario-managed-revoked:usr/share/pacman/keyrings/devario-managed-revoked' 'active-signer:usr/share/devario/keyrings/devario-managed-active-signer')
+    mappings=('devario-managed.gpg:usr/share/shelly/keyrings/devario-managed.gpg' 'devario-managed-trusted:usr/share/shelly/keyrings/devario-managed-trusted' 'devario-managed-revoked:usr/share/shelly/keyrings/devario-managed-revoked' 'active-signer:usr/share/devario/keyrings/devario-managed-active-signer')
   fi
   for mapping in "${mappings[@]}"; do
     name="${mapping%%:*}"; installed="${mapping#*:}"

@@ -78,6 +78,10 @@ for build_command in awk bash bsdtar chmod cp find git gpg grep install ln mv pa
   fi
 done
 
+# shellcheck source=lib/python-env.sh
+source "$script_dir/lib/python-env.sh"
+devario_use_validation_python
+
 python3 "$script_dir/run-iso-builder.py" --check
 
 if [[ ! -f "$profile_dir/shelly.runtime.conf" ]]; then
@@ -293,6 +297,19 @@ while IFS= read -r package_name || [[ -n "$package_name" ]]; do
   fi
 done < "$staged_profile/packages.x86_64"
 
+audit_args=(--database devario-core "$staged_core_repo/devario-core.db")
+if (( DEVARIO_EDITION_HAS_MANAGED )); then
+  audit_args+=(--database devario-managed "$staged_managed_repo/devario-managed.db")
+fi
+python3 "$script_dir/audit-iso-repositories.py" "${audit_args[@]}" \
+  --packages "$staged_profile/packages.x86_64" --output "$work_dir/repository-audit.json"
+python3 "$script_dir/audit-iso-package-paths.py" --files "$staged_core_repo/devario-core.files" \
+  --dependency-audit "$work_dir/repository-audit.json" --output "$work_dir/core-path-audit.json"
+if (( DEVARIO_EDITION_HAS_MANAGED )); then
+  python3 "$script_dir/audit-iso-package-paths.py" --files "$staged_managed_repo/devario-managed.files" \
+    --dependency-audit "$work_dir/repository-audit.json" --output "$work_dir/managed-path-audit.json"
+fi
+
 shelly_packages=("$staged_core_repo"/shelly-cli-[0-9]*.pkg.tar.zst)
 if (( ${#shelly_packages[@]} != 1 )); then
   echo "The Devario repository must contain exactly one Shelly CLI package." >&2
@@ -326,8 +343,8 @@ else
   managed_runtime_server="$managed_runtime_url"
 fi
 
-# The CLI split package owns both executables. RLPM configuration is mounted
-# privately by the assembler; no environment-variable marker is required.
+# The CLI split package owns both executables. The assembler passes its isolated
+# transaction configuration explicitly with --config.
 bsdtar -xf "${shelly_packages[0]}" -C "$shelly_root" \
   usr/bin/shelly usr/bin/shelly-key
 devario_shelly="$shelly_root/usr/bin/shelly"
@@ -337,6 +354,11 @@ if [[ ! -x "$devario_shelly" || ! -x "$devario_shelly_key" ]]; then
   exit 1
 fi
 "$devario_shelly" list standard --help >/dev/null
+key_help="$("$devario_shelly_key" --help)"
+if [[ "$key_help" != *'/usr/share/shelly/keyrings'* ]]; then
+  echo 'The staged shelly-cli package predates the Devario public-key directory patch. Rebuild Shelly with -Dpath-profile=devario.' >&2
+  exit 1
+fi
 devario_validate_keyring_bundle "$core_keyring_source" devario-core "$key_policy"
 if (( DEVARIO_EDITION_HAS_MANAGED )); then
   devario_validate_keyring_bundle "$managed_keyring_source" devario-managed "$key_policy"
@@ -379,7 +401,7 @@ sed \
   -e "s|@DEVARIO_CORE_RUNTIME_REPO@|$core_runtime_server_escaped|g" \
   -e "s|@DEVARIO_MANAGED_RUNTIME_REPOSITORY@|$managed_runtime_repository|g" \
   "$staged_profile/shelly.runtime.conf" \
-  > "$staged_profile/airootfs/etc/pacman.conf"
+  > "$staged_profile/airootfs/etc/shelly.conf"
 
 sed \
   -e "s|@DEVARIO_CORE_REPO@|$(escape_sed "$staged_core_repo")|g" \

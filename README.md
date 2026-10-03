@@ -136,8 +136,8 @@ construction tools. Every package-manager hook exposed to makepkg points to
 operations. The build script forbids dependency, removal, and install modes
 that could bypass that adapter.
 
-Shelly's native RLPM backend uses `/etc/pacman.conf`, `/etc/pacman.d/gnupg`,
-`/etc/pacman.d/hooks`, `/var/lib/pacman`, and `/var/cache/pacman/pkg` directly.
+Shelly's native RLPM backend uses `/etc/shelly.conf`, `/etc/shelly.d/gnupg`,
+`/etc/shelly.d/hooks`, `/var/lib/shelly`, and `/var/cache/shelly/pkg` directly.
 These are file locations, not configuration aliases or a Pacman executable
 requirement. Community enables only `devario-core`.
 
@@ -207,6 +207,12 @@ into an otherwise stale system.
 
 Build on an up-to-date Arch Linux or Arch-derived x86-64 system. Once Shelly is available on the build host, install the
 required ISO assembly and packaging tools through Shelly:
+
+Python validation dependencies are prepared automatically in an isolated virtual
+environment from hash-pinned wheels. Python must provide `venv` and `ensurepip`;
+no `python-jsonschema` repository package is required. See
+[Python validation preparation](docs/ISO-BUILDER.md#python-validation-preparation)
+for offline caches and standalone validator commands.
 
 ```sh
 shelly install standard --upgrade python libisoburn dosfstools mtools squashfs-tools openssl util-linux base-devel git limine

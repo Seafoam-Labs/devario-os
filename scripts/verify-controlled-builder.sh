@@ -29,6 +29,10 @@ devario_gpgv_active_signature "$manifest_signature" "$manifest"
   exit 1
 }
 
+# shellcheck source=lib/python-env.sh
+source "$script_dir/lib/python-env.sh"
+devario_use_validation_python
+
 actual_root_tree="$($script_dir/tree-closure-digest.py --root / \
   --exclude dev --exclude proc --exclude sys --exclude run --exclude tmp \
   --exclude var/tmp --exclude input --exclude output --exclude signing \
@@ -93,10 +97,10 @@ def sha(path):
   for block in iter(lambda:stream.read(1024*1024),b""): value.update(block)
  return value.hexdigest()
 for database in lock["repositorySnapshot"]["databases"]:
- path=pathlib.Path("/var/lib/pacman/sync")/(database["repository"]+".db")
+ path=pathlib.Path("/var/lib/shelly/sync")/(database["repository"]+".db")
  if sha(path) != database["sha256"]: raise SystemExit(f"live {database['repository']} database differs from input lock")
 records=[]
-for desc in sorted(pathlib.Path("/var/lib/pacman/local").glob("*/desc")):
+for desc in sorted(pathlib.Path("/var/lib/shelly/local").glob("*/desc")):
  lines=desc.read_text(encoding="utf-8").splitlines(); fields={}; index=0
  while index < len(lines):
   if lines[index].startswith("%") and lines[index].endswith("%") and index+1 < len(lines):

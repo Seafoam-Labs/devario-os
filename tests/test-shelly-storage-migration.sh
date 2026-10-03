@@ -12,8 +12,8 @@ trap 'rm -rf -- "$test_root"' EXIT
   pkgdir="$test_root/package"
   package
 )
-[[ -f "$test_root/package/etc/pacman.conf" && ! -L "$test_root/package/etc/pacman.conf" ]]
-[[ -d "$test_root/package/var/lib/pacman" && ! -L "$test_root/package/var/lib/pacman" ]]
+[[ -f "$test_root/package/etc/shelly.conf" && ! -L "$test_root/package/etc/shelly.conf" ]]
+[[ -d "$test_root/package/var/lib/shelly" && ! -L "$test_root/package/var/lib/shelly" ]]
 [[ ! -e "$test_root/package/usr/lib/systemd/system/multi-user.target.wants/shelly-storage-migrate.service" ]]
 # Retained historical migration utility is tested independently, not activated.
 migrate="$project_dir/packages/devario-base/shelly-storage-migrate"
