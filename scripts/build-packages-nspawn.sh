@@ -157,16 +157,16 @@ bootstrap_shelly_repo="${DEVARIO_SHELLY_BOOTSTRAP_REPO:-$project_dir/repo/core}"
 bootstrap_keyring_dir="${DEVARIO_BOOTSTRAP_KEYRING_DIR:-$project_dir/packages/devario-keyring}"
 mapfile -t shelly_packages < <(
   find "$bootstrap_shelly_repo" -maxdepth 1 -type f \
-    -name 'shelly-[0-9]*.pkg.tar.zst' -print | sort -V
+    -name 'shelly-cli-[0-9]*.pkg.tar.zst' -print | sort -V
 )
 if (( ${#shelly_packages[@]} == 0 )); then
   echo "No Shelly bootstrap package exists in $bootstrap_shelly_repo." >&2
-  echo "Place a trusted shelly-*.pkg.tar.zst there before creating the builder." >&2
+  echo "Place a trusted shelly-cli-*.pkg.tar.zst there before creating the builder." >&2
   exit 1
 fi
 shelly_package="${shelly_packages[-1]}"
 if ! bsdtar -xOf "$shelly_package" .PKGINFO \
-  | grep -Fqx 'pkgname = shelly'; then
+  | grep -Fqx 'pkgname = shelly-cli'; then
   echo "The selected bootstrap archive is not a Shelly package: $shelly_package" >&2
   exit 1
 fi
@@ -259,7 +259,7 @@ if (( release_build )); then
   verification_dir="$(mktemp -d /tmp/devario-repository-snapshot-gpg.XXXXXX)"
   verification_keyring="$verification_dir/bootstrap.gpg"
   cp -- "$bootstrap_keyring" "$verification_keyring"
-  for repository_name in devario-core seafoam-labs; do
+  for repository_name in devario-core; do
     for suffix in db db.sig; do
       destination="$repository_snapshot_dir/$repository_name.$suffix"
       curl --fail --location --show-error \
@@ -277,31 +277,24 @@ fi
 # Native bootstrap roots use Shelly storage directly. Configuration is selected
 # from Devario policy and the controlled snapshot contract.
 install -Dm644 "$project_dir/packages/devario-base/shelly.conf" \
-  "$container_root/etc/shelly.conf"
+  "$container_root/etc/pacman.conf"
 if (( release_build )); then
-  python3 - "$container_root/etc/shelly.conf" "$repository_snapshot_url" <<'PYCONF'
+  python3 - "$container_root/etc/pacman.conf" "$repository_snapshot_url" <<'PYCONF'
 import pathlib,sys
 p=pathlib.Path(sys.argv[1]); text=p.read_text()
 text=text.replace('https://repo.seafoam-labs.org/devario-core/$arch',sys.argv[2]+'devario-core/$arch')
-text=text.replace('https://repo.seafoam-labs.org/$arch',sys.argv[2]+'seafoam-labs/$arch')
 p.write_text(text)
 PYCONF
 fi
 install -Dm644 "$bootstrap_keyring" "$container_root/usr/share/pacman/keyrings/devario-core.gpg"
 install -Dm644 "$project_dir/packages/devario-keyring/devario-trusted" "$container_root/usr/share/pacman/keyrings/devario-core-trusted"
 install -Dm644 "$project_dir/packages/devario-keyring/devario-revoked" "$container_root/usr/share/pacman/keyrings/devario-core-revoked"
-for suffix in gpg trusted revoked; do
-  source="$project_dir/packages/seafoam-keyring/seafoam-labs-$suffix"
-  destination="$container_root/usr/share/pacman/keyrings/seafoam-labs-$suffix"
-  if [[ "$suffix" == gpg ]]; then source="$project_dir/packages/seafoam-keyring/seafoam-labs.gpg"; destination="$container_root/usr/share/pacman/keyrings/seafoam-labs.gpg"; fi
-  install -Dm644 "$source" "$destination"
-done
 install -d -m 0755 \
-  "$container_root/etc/shelly.d" \
-  "$container_root/var/cache/shelly"
-install -d -m 0755 "$container_root/var/lib/shelly" \
-  "$container_root/var/cache/shelly/pkg" "$container_root/etc/shelly.d/gnupg" \
-  "$container_root/etc/shelly.d/hooks"
+  "$container_root/etc/pacman.d" \
+  "$container_root/var/cache/pacman"
+install -d -m 0755 "$container_root/var/lib/pacman" \
+  "$container_root/var/cache/pacman/pkg" "$container_root/etc/pacman.d/gnupg" \
+  "$container_root/etc/pacman.d/hooks"
 if ! grep -Eq '^ID=("devario"|devario)$' "$container_root/etc/os-release"; then
   echo 'The bootstrap must identify as Devario; an Arch bootstrap is not a native build input.' >&2
   exit 1
@@ -313,14 +306,14 @@ echo "Installing the Shelly bootstrap into the container..."
 bsdtar --numeric-owner -xpf "$shelly_package" -C "$container_root"
 run_container_root /usr/bin/shelly --version
 
-echo "Initializing the Devario and Seafoam package trust stores through Shelly..."
+echo "Initializing the Devario package trust store through Shelly..."
 run_container_root /usr/bin/shelly keyring init
-run_container_root /usr/bin/shelly keyring populate devario-core seafoam-labs
+run_container_root /usr/bin/shelly keyring populate devario-core
 run_container_root /usr/bin/shelly sync standard --no-confirm
 if (( release_build )); then
-  for repository_name in devario-core seafoam-labs; do
+  for repository_name in devario-core; do
     if ! cmp -s "$repository_snapshot_dir/$repository_name.db" \
-      "$container_root/var/lib/shelly/sync/$repository_name.db"; then
+      "$container_root/var/lib/pacman/sync/$repository_name.db"; then
       echo "Shelly resolved against unexpected $repository_name database bytes." >&2
       exit 1
     fi
@@ -487,9 +480,9 @@ if (( release_build )); then
 
   run_prepare_root /usr/bin/rm -rf -- "$container_release_work"
   container_release_work=''
-  for repository_name in devario-core seafoam-labs; do
+  for repository_name in devario-core; do
     cmp -s "$repository_snapshot_dir/$repository_name.db" \
-      "$container_root/var/lib/shelly/sync/$repository_name.db" || {
+      "$container_root/var/lib/pacman/sync/$repository_name.db" || {
       echo "Prepared builder drifted from locked $repository_name database." >&2
       exit 1
     }
@@ -498,7 +491,7 @@ if (( release_build )); then
   dependency_closure="$release_temp/dependency-closure.json"
   CONTAINER_ROOT="$container_root" python3 - > "$dependency_closure" <<'PY'
 import json, os, pathlib
-root=pathlib.Path(os.environ["CONTAINER_ROOT"])/"var/lib/shelly/local"
+root=pathlib.Path(os.environ["CONTAINER_ROOT"])/"var/lib/pacman/local"
 records=[]
 for desc in sorted(root.glob("*/desc")):
  lines=desc.read_text(encoding="utf-8").splitlines(); fields={}; i=0

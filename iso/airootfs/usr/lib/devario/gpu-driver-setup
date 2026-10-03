@@ -1,0 +1,133 @@
+#!/usr/bin/bash
+
+set -u
+
+pci_devices_root="${DEVARIO_PCI_DEVICES_ROOT:-/sys/bus/pci/devices}"
+state_file="${DEVARIO_GPU_STATE_FILE:-/run/devario/gpu-driver}"
+modprobe_command="${DEVARIO_MODPROBE:-/usr/bin/modprobe}"
+udevadm_command="${DEVARIO_UDEVADM:-/usr/bin/udevadm}"
+
+nvidia_devices=()
+
+log() {
+    printf 'devario-gpu-driver: %s\n' "$*"
+}
+
+write_state() {
+    /usr/bin/install -d -m 0755 "$(/usr/bin/dirname -- "$state_file")"
+    printf '%s\n' "$1" > "$state_file"
+}
+
+find_nvidia_display_devices() {
+    local class device vendor
+
+    nvidia_devices=()
+    if [[ ! -d "$pci_devices_root" || ! -r "$pci_devices_root" || ! -x "$pci_devices_root" ]]; then
+        log "Cannot read PCI devices at $pci_devices_root" >&2
+        return 2
+    fi
+    for device in "$pci_devices_root"/*; do
+        [[ -d "$device" ]] || continue
+        [[ -r "$device/vendor" && -r "$device/class" ]] || return 2
+
+        read -r vendor < "$device/vendor" || return 2
+        read -r class < "$device/class" || return 2
+        vendor="${vendor,,}"
+        class="${class,,}"
+        [[ "$vendor" =~ ^0x[0-9a-f]{4}$ && "$class" =~ ^0x[0-9a-f]{6}$ ]] || return 2
+
+        # 0x10de is NVIDIA; PCI base class 0x03 is a display controller.
+        # Matching the class excludes the GPU's separate HDMI audio function.
+        if [[ "$vendor" == 0x10de && "$class" == 0x03* ]]; then
+            nvidia_devices+=("$device")
+        fi
+    done
+}
+
+device_driver() {
+    local driver_link
+
+    driver_link="$(/usr/bin/readlink -- "$1/driver" 2>/dev/null || true)"
+    [[ -n "$driver_link" ]] || return 1
+    printf '%s\n' "${driver_link##*/}"
+}
+
+driver_state() {
+    local device driver nvidia_count=0
+
+    for device in "${nvidia_devices[@]}"; do
+        driver="$(device_driver "$device" || true)"
+        if [[ "$driver" == nvidia ]]; then
+            ((nvidia_count += 1))
+        fi
+    done
+
+    if (( nvidia_count == ${#nvidia_devices[@]} )); then
+        printf '%s\n' nvidia
+    elif (( nvidia_count > 0 )); then
+        printf '%s\n' partial
+    else
+        printf '%s\n' unavailable
+    fi
+}
+
+detect_only() {
+    local device
+
+    find_nvidia_display_devices || return 2
+    (( ${#nvidia_devices[@]} > 0 )) || return 1
+    for device in "${nvidia_devices[@]}"; do
+        printf '%s\n' "${device##*/}"
+    done
+}
+
+setup_driver() {
+    local state
+
+    if ! find_nvidia_display_devices; then
+        write_state unavailable
+        log "PCI detection failed."
+        return 0
+    fi
+    if (( ${#nvidia_devices[@]} == 0 )); then
+        write_state none
+        return 0
+    fi
+
+    # nvidia-utils intentionally supplies the Nouveau blacklist. Loading the
+    # DRM module here makes driver readiness deterministic before greetd starts.
+    if ! "$modprobe_command" nvidia_drm modeset=1; then
+        write_state unavailable
+        log "NVIDIA hardware detected, but the open kernel module could not be loaded."
+        return 0
+    fi
+
+    "$udevadm_command" settle --timeout=10 >/dev/null 2>&1 || true
+    state="$(driver_state)"
+    write_state "$state"
+
+    case "$state" in
+        nvidia)
+            log "NVIDIA open driver is active."
+            ;;
+        partial)
+            log "NVIDIA open driver claimed only some detected display controllers."
+            ;;
+        unavailable)
+            log "NVIDIA hardware detected, but no display controller is bound to the open driver."
+            ;;
+    esac
+}
+
+case "${1:---setup}" in
+    --detect)
+        detect_only
+        ;;
+    --setup)
+        setup_driver
+        ;;
+    *)
+        printf 'Usage: %s [--detect|--setup]\n' "${0##*/}" >&2
+        exit 2
+        ;;
+esac

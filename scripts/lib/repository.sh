@@ -22,7 +22,7 @@ devario_is_plain_file() {
 
 devario_validate_repository_name() {
   case "$1" in
-    devario-core|seafoam-labs|devario-managed) return 0 ;;
+    devario-core|devario-managed) return 0 ;;
     *) devario_repository_error "unsupported repository identity: $1" ;;
   esac
 }
@@ -83,8 +83,8 @@ devario_load_package_sources() {
       continue
     fi
     if LC_ALL=C grep -q '[^ -~]' <<< "$line" \
-      || [[ ! "$line" =~ ^([A-Za-z0-9@._+][A-Za-z0-9@._+-]*)=(arch|core|seafoam|managed)$ ]]; then
-      devario_repository_error "package-sources.conf line $line_number must be package_name=arch|core|seafoam|managed"
+      || [[ ! "$line" =~ ^([A-Za-z0-9@._+][A-Za-z0-9@._+-]*)=(arch|core|managed)$ ]]; then
+      devario_repository_error "package-sources.conf line $line_number must be package_name=arch|core|managed"
       return 1
     fi
     package="${BASH_REMATCH[1]}"

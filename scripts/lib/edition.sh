@@ -389,9 +389,8 @@ devario_compose_profile() {
     [xdg-desktop-portal-aqueous]=1
     [calamares]=1
     [ckbcomp]=1
-    [devario-aqueous-desktop]=1
+    [devario-desktop]=1
     [devario-filesystem]=1
-    [seafoam-keyring]=1
     [devario-base]=1
     [devario-keyring]=1
     [greetd]=1
@@ -404,8 +403,9 @@ devario_compose_profile() {
     [nfs-utils]=1
     [networkmanager]=1
     [pearl]=1
-    [pearl-greeter-git]=1
+    [pearl-greeter]=1
     [shelly]=1
+    [shelly-cli]=1
     [squashfs-tools]=1
     [sudo]=1
     [syslinux]=1

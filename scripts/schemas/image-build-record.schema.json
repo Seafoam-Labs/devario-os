@@ -11,8 +11,7 @@
     "sourceDateEpoch",
     "inputLockSha256",
     "coreRepository",
-    "isoBuilder",
-    "seafoamRepository"
+    "isoBuilder"
   ],
   "properties": {
     "schemaVersion": {
@@ -51,9 +50,6 @@
       "$ref": "#/$defs/repository"
     },
     "managedRepository": {
-      "$ref": "#/$defs/repository"
-    },
-    "seafoamRepository": {
       "$ref": "#/$defs/repository"
     },
     "isoBuilder": {

@@ -12,4 +12,4 @@ When = PostTransaction
 Depends = sh
 Depends = coreutils
 Depends = grep
-Exec = /bin/sh -c "rm -- $(grep -Frl 'remove from airootfs' /etc/shelly.d/hooks/)"
+Exec = /bin/sh -c "rm -- $(grep -Frl 'remove from airootfs' /etc/pacman.d/hooks/)"

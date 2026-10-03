@@ -15,17 +15,16 @@ aqueous-shell-pearl
 aqueous-session
 calamares
 ckbcomp
-devario-aqueous-desktop
+devario-desktop
 devario-base
 devario-boot
 devario-dracut
 devario-filesystem
-seafoam-keyring
 devario-keyring
 linux-devario
 linux-devario-headers
 pearl
-pearl-greeter-git
+pearl-greeter
 shelly
 
 # Upstream packages formerly sourced from Arch core; retain source provenance.

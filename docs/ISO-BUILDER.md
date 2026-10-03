@@ -19,22 +19,13 @@ Every build requires a fresh work directory.
 
 ## Repository inputs
 
-Default runtime repository order is:
-
-| Repository | Server | Public-key package |
-| --- | --- | --- |
-| `devario-core` | `https://repo.seafoam-labs.org/devario-core/$arch` | `devario-keyring` |
-| `seafoam-labs` | `https://repo.seafoam-labs.org/$arch` | `seafoam-keyring` |
-
-Both repositories currently advertise fingerprint
-`BB62CD2725FD8E25558F900A84F94F672976872C`. Their downloaded database signatures
-were verified against that public key during implementation. The service
-provides detached signatures even when database/API records lack embedded
-package signatures. Each repository remains a separately recorded build input;
-Managed adds its own repository and distinct trust root.
+Community uses only `devario-core`, served at
+`https://repo.seafoam-labs.org/devario-core/$arch` and trusted through
+`devario-keyring`. A Managed edition can add its explicitly supplied managed
+repository. The separate `seafoam-labs` repository is no longer an ISO input.
 
 Supply complete local repository closures using `DEVARIO_CORE_REPO_DIR`
-(default `repo/core`) and `DEVARIO_SEAFOAM_REPO_DIR` (default `repo/seafoam`). The
+(default `repo/core`). The
 existing closure verifier requires canonical database/files archives, relative
 compatibility links, and exactly the packages described by those databases.
 Production inputs require detached signatures from the declared active signer.
@@ -52,7 +43,6 @@ Version comparisons require either `vercmp` or the ALPM shared library. Ubuntu
 ```sh
 python3 scripts/audit-iso-repositories.py \
   --database devario-core /path/to/devario-core.db \
-  --database seafoam-labs /path/to/seafoam-labs.db \
   --packages iso/packages.x86_64 --output out/repository-audit.json
 ```
 
@@ -65,10 +55,22 @@ the inspected database bytes, not a permanent statement of service contents.
 
 ## Bootstrap and release inputs
 
+The `devario-iso-builder` checkout is the image assembler, not a bootstrap
+root filesystem. A provisioned native host can run `sudo ./scripts/build-iso.sh`
+with the signed core repository staged locally, without a bootstrap archive.
+The host needs `python-jsonschema`, the documented image tools, and a regular
+`/etc/pacman.conf` file for the private configuration mount. The assembler uses
+the current `shelly-cli` split package and RLPM's configuration paths directly.
+
+The vendored archive includes the local assembler integration changes and their
+`LOCAL-CHANGES.patch`. Its lock records the upstream base revision, local patch
+hash, and complete archive hash; it does not claim those changes were published
+upstream. The matching changes are also in the sibling assembler checkout.
+
 The default nspawn path requires a signed Devario bootstrap through
 `DEVARIO_BOOTSTRAP_URL`; no Arch bootstrap URL is assumed. The archive has one
 top-level root directory, identifies as Devario in `/etc/os-release`, and carries
-its installed-package database under `/var/lib/shelly`. It must contain the
+its installed-package database under `/var/lib/pacman`. It must contain the
 userspace and package-build tools required by the selected recipes. Its detached
 signature is verified using `DEVARIO_BOOTSTRAP_KEYRING`, defaulting to the checked
 in core public-key bundle. A complete bootstrap artifact has not been produced
@@ -77,7 +79,7 @@ as part of the current verification.
 Controlled builds additionally require an immutable
 `DEVARIO_REPOSITORY_SNAPSHOT_URL` of the form
 `https://HOST/snapshots/IDENTIFIER/`, with repositories at
-`devario-core/x86_64/` and `seafoam-labs/x86_64/`. Downloaded database bytes and
+`devario-core/x86_64/`. Downloaded database bytes and
 signatures are locked and checked against Shelly's actual synchronized databases.
 Publish this snapshot layout explicitly; the live repository URLs are not an
 immutable snapshot service by themselves.
@@ -110,7 +112,11 @@ explicit without silently selecting external replacements.
 
 ## Verification status
 
-Source validation and the release-contract regression suite pass. The new
+Source validation and the release-contract regression suite pass. The current
+published RLPM CLI also passed synchronization, installation, and inventory
+against a disposable repository and target, with host hooks masked and host
+configuration bytes unchanged. The ISO selects the published `devario-desktop`
+and stable `pearl-greeter`; OS login/GPU defaults are supplied by its profile. The new
 filesystem/keyring/compatibility packages and changed base/boot packages build.
 The actual assembler has produced a minimal hybrid ISO that boots through BIOS
 and UEFI using the host's previously generated dracut probe. That is a media

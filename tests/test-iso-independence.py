@@ -24,12 +24,12 @@ audit = module(PROJECT / "scripts/audit-iso-repositories.py", "audit")
 class IndependenceTests(unittest.TestCase):
     def test_repository_defaults(self):
         repositories = json.loads((PROJECT / "repositories/defaults.json").read_text())["repositories"]
-        self.assertEqual([r["name"] for r in repositories], ["devario-core", "seafoam-labs"])
+        self.assertEqual([r["name"] for r in repositories], ["devario-core"])
         runtime = (PROJECT / "packages/devario-base/shelly.conf").read_text()
         for repo in repositories:
             self.assertIn("[" + repo["name"] + "]", runtime)
             self.assertIn(repo["server"], runtime)
-        self.assertLess(runtime.index("[devario-core]"), runtime.index("[seafoam-labs]"))
+        self.assertNotIn("[seafoam-labs]", runtime)
         self.assertNotIn("[core]", runtime)
         self.assertNotIn("[extra]", runtime)
 

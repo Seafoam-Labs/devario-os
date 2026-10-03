@@ -20,8 +20,8 @@ To try Devario on physical hardware, follow
 
 The installed system does not ship the `pacman` or `pacman-key` executables. It uses these Devario packages:
 
-- `shelly` from `devario-core` provides the package-management CLI, UI, and native RLPM backend.
-- `devario-base` provides the base-system dependency set, Shelly repository configuration, and storage migration service.
+- `shelly` and `shelly-cli` from `devario-core` provide the UI, CLI, and native RLPM backend.
+- `devario-base` provides the base-system dependency set, Shelly repository configuration, and native RLPM storage directories.
 - `devario-keyring` installs the public Devario repository keys consumed by Shelly's keyring commands.
 
 ## What is included
@@ -41,7 +41,7 @@ The installed system does not ship the `pacman` or `pacman-key` executables. It 
   both firmware paths
 - ext4 as the default filesystem, with Btrfs, XFS, and F2FS available
 - Shelly-backed repository search, installation, removal, upgrades, and keyring initialization
-- Persistent first-boot initialization of the Arch Linux and Devario signing keyrings
+- Persistent first-boot initialization of the Devario signing keyring
 
 `devario-base` also installs **Devario Report** in the application menu and the
 `devario-report.sh` command. It collects hardware details, scheduler information,
@@ -136,33 +136,20 @@ construction tools. Every package-manager hook exposed to makepkg points to
 operations. The build script forbids dependency, removal, and install modes
 that could bypass that adapter.
 
-Shelly owns its runtime configuration and mutable package state:
+Shelly's native RLPM backend uses `/etc/pacman.conf`, `/etc/pacman.d/gnupg`,
+`/etc/pacman.d/hooks`, `/var/lib/pacman`, and `/var/cache/pacman/pkg` directly.
+These are file locations, not configuration aliases or a Pacman executable
+requirement. Community enables only `devario-core`.
 
-- `/etc/shelly.conf`
-- `/etc/shelly.d/hooks` and `/etc/shelly.d/gnupg`
-- `/var/lib/shelly` and `/var/cache/shelly/pkg`
+`devario-base` supplies this configuration and storage layout. New images do
+not enable the old storage-relocation service. The historical migration utility
+is retained in source for previous installations, but is not installed by the
+current base recipe.
 
-Some historical names remain only at upstream Arch compatibility boundaries:
-
-- `/etc/pacman.d/mirrorlist` in the optional `shelly-arch-compat` package
-- `/usr/share/pacman/keyrings`, where Arch and Devario distribute public trust roots
-- Arch package archives, repository databases, signatures, and ALPM hooks
-
-Their presence does not mean `/usr/bin/pacman` or `/usr/bin/pacman-key` is present. Devario build scripts, runtime
-services, and installer configuration must never invoke either executable, `pacstrap`, or `pacman-conf`.
-
-Shelly is supplied by `devario-core`; the OS no longer builds a separate
-Shelly recipe or libalpm runtime. The published `shelly` package uses its native
-RLPM backend. `devario-base` requires Shelly 3.1.6-2 or newer and replaces the
-retired `devario-alpm-runtime` package, retaining Devario's configuration,
-package storage directories, download account, and migration service.
-
-Existing installations are bridged during the base package upgrade and
-materialized under the Shelly paths by `shelly-storage-migrate.service` at the
-following boot.
-Verified legacy data is retained under `/var/lib/devario/shelly-path-migration/legacy`;
-`/usr/lib/devario/shelly-storage-migrate --rollback` can recreate current compatibility state during the rollback
-window.
+The desktop comes from `devario-core/devario-desktop`, with stable Aqueous and
+`pearl-greeter`. The ISO profile retains Devario's session, greeter, and GPU
+configuration; the legacy local `devario-aqueous-desktop` recipe is no longer
+in the default build order.
 
 ## Using Shelly
 

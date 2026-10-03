@@ -386,8 +386,8 @@ package_is_listed() {
 
 for required_package in \
   aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous \
-  calamares ckbcomp devario-aqueous-desktop \
-  devario-base devario-boot devario-dracut devario-keyring greetd limine pearl pearl-greeter-git shelly fastfetch \
+  calamares ckbcomp devario-desktop \
+  devario-base devario-boot devario-dracut devario-keyring greetd limine pearl pearl-greeter shelly fastfetch \
   linux-devario linux-devario-headers nvidia-open-dkms nvidia-utils \
   vulkan-intel vulkan-radeon vulkan-swrast xorg-xwayland; do
   if ! package_is_listed "$required_package"; then
@@ -558,12 +558,6 @@ for shelly_build_call in \
   'shelly install standard --no-confirm'; do
   if ! grep -Fq "$shelly_build_call" "$package_build_script"; then
     fail "build-packages.sh is missing: $shelly_build_call"
-  fi
-done
-for desktop_build_package in devario-aqueous-desktop; do
-  if ! grep -Eq "^[[:space:]]+${desktop_build_package}[[:space:]]*$" \
-    "$package_build_script"; then
-    fail "build-packages.sh omits $desktop_build_package from its package order"
   fi
 done
 for selective_build_text in \
@@ -1094,9 +1088,8 @@ if ! grep -Fq \
 fi
 
 for required_line in \
-  'Requires=shelly-storage-migrate.service' \
   'ExecStart=/usr/bin/shelly keyring init' \
-  'ExecStart=/usr/bin/shelly keyring populate devario-core seafoam-labs' \
+  'ExecStart=/usr/bin/shelly keyring populate devario-core' \
   'ExecStart=/usr/bin/install -Dm644 /dev/null /var/lib/devario/shelly-keyring.ready'; do
   if ! grep -Fxq "$required_line" "$keyring_unit"; then
     fail "shelly-keyring-init.service is missing: $required_line"
@@ -1170,21 +1163,29 @@ if [[ -n "$package_function_calls" ]]; then
   fail "found a forbidden package-manager process in a PKGBUILD function"
 fi
 
-# Every remaining Pacman identifier must fit one of these explicit boundaries:
+# Native RLPM uses the existing configuration/database paths. Process calls
+# to Pacman remain forbidden; filenames do not select a backend.
+# Other Pacman identifiers must fit one of these explicit boundaries:
 # documentation; the image build configuration; ALPM compatibility paths; the
 # storage migration from legacy paths; or build-ISO plumbing.
 pacman_reference_is_allowed() {
   local relative_path="$1"
   local text="$2"
 
+  # These are RLPM's real file locations, not compatibility aliases.
+  if [[ "$text" == *etc/pacman.conf* || "$text" == *etc/pacman.d* \
+    || "$text" == *var/lib/pacman* || "$text" == *var/cache/pacman* \
+    || "$text" == *var/log/pacman.log* ]]; then
+    return 0
+  fi
   case "$relative_path" in
     README.md|packages/*/README.md)
       return 0
       ;;
-    iso/shelly.build.conf|iso/shelly.runtime.conf|iso/airootfs/etc/shelly.conf)
+    iso/shelly.build.conf|iso/shelly.runtime.conf|iso/airootfs/etc/pacman.conf)
       return 0
       ;;
-    iso/airootfs/etc/shelly.d/*)
+    iso/airootfs/etc/pacman.d/*)
       return 0
       ;;
     iso/airootfs/usr/lib/devario/acceptance-self-check)
@@ -1200,8 +1201,8 @@ pacman_reference_is_allowed() {
     packages/devario-keyring/*|packages/seafoam-keyring/*|packages/shelly-arch-compat/*)
       return 0
       ;;
-    packages/devario-base/PKGBUILD)
-      [[ "$text" == *"pacman edge"* ]]
+    packages/devario-base/PKGBUILD|packages/devario-base/shelly.conf)
+      return 0
       return
       ;;
     iso/profile.json)
@@ -1209,7 +1210,7 @@ pacman_reference_is_allowed() {
       return
       ;;
     scripts/build-iso.sh)
-      [[ "$text" == *usr/share/pacman/keyrings/* \
+      [[ "$text" == *etc/pacman.conf* || "$text" == *usr/share/pacman/keyrings/* \
         || "$text" == *usr/share/pacman/keyrings/archlinux.gpg* \
         || "$text" == *'--populate-from /usr/share/pacman/keyrings'* ]]
       return
@@ -1306,7 +1307,10 @@ import json
 import sys
 
 expected, entry_kind = sys.argv[1:]
-payload = json.load(sys.stdin)
+try:
+    payload = json.load(sys.stdin)
+except json.JSONDecodeError:
+    raise SystemExit(1)
 items = payload if isinstance(payload, list) else [payload]
 if entry_kind == "package":
     found = any(isinstance(item, dict) and item.get("Name") == expected for item in items)
@@ -1332,7 +1336,7 @@ raise SystemExit(0 if found else 1)
   fi
 }
 
-if command -v shelly >/dev/null 2>&1; then
+if command -v shelly >/dev/null 2>&1 && grep -Eq "^\[devario-core\]" /etc/pacman.conf 2>/dev/null; then
   if [[ -z "$python_command" ]] && ! command -v jq >/dev/null 2>&1; then
     note "Shelly is installed, but no JSON parser is available; skipping exact repository validation."
   else
@@ -1371,7 +1375,7 @@ if command -v shelly >/dev/null 2>&1; then
     fi
   fi
 else
-  note "Shelly is unavailable; structural checks passed, but repository lookup was skipped."
+  note "Host Shelly/devario-core configuration is unavailable; audit the staged signed database separately."
 fi
 
 # Inspect generated artifacts when they exist. Structural validation remains
@@ -1380,14 +1384,14 @@ if command -v bsdtar >/dev/null 2>&1; then
   shopt -s nullglob
   devario_artifacts=("$project_dir"/repo/core/*.pkg.tar.zst)
   base_artifacts=("$project_dir"/repo/core/devario-base-[0-9]*.pkg.tar.zst)
-  shelly_artifacts=("$project_dir"/repo/core/shelly-[0-9]*.pkg.tar.zst)
+  shelly_artifacts=("$project_dir"/repo/core/shelly-cli-[0-9]*.pkg.tar.zst)
   ckbcomp_artifacts=("$project_dir"/repo/core/ckbcomp-[0-9]*.pkg.tar.zst)
   aqueous_artifacts=("$project_dir"/repo/core/aqueous-core-[0-9]*.pkg.tar.zst)
   aqueous_session_artifacts=("$project_dir"/repo/core/aqueous-session-*.pkg.tar.zst)
   aqueous_pearl_artifacts=("$project_dir"/repo/core/aqueous-integration-pearl-*.pkg.tar.zst)
   pearl_artifacts=("$project_dir"/repo/core/pearl-[0-9]*.pkg.tar.zst)
-  pearl_greeter_artifacts=("$project_dir"/repo/seafoam/pearl-greeter-git-*.pkg.tar.zst)
-  desktop_meta_artifacts=("$project_dir"/repo/core/devario-aqueous-desktop-[0-9]*.pkg.tar.zst)
+  pearl_greeter_artifacts=("$project_dir"/repo/core/pearl-greeter-*.pkg.tar.zst)
+  desktop_meta_artifacts=("$project_dir"/repo/core/devario-desktop-[0-9]*.pkg.tar.zst)
 
   stale_repository_files=("$project_dir"/repo/core/*.old "$project_dir"/repo/core/*.old.sig)
   if (( ${#stale_repository_files[@]} )); then
@@ -1397,7 +1401,7 @@ if command -v bsdtar >/dev/null 2>&1; then
   if (( ${#devario_artifacts[@]} )); then
     for expected_artifact_package in \
       calamares ckbcomp \
-      devario-filesystem seafoam-keyring devario-aqueous-desktop devario-base devario-boot devario-dracut devario-keyring \
+      devario-filesystem devario-desktop devario-base devario-boot devario-dracut devario-keyring \
       linux-devario linux-devario-headers; do
       expected_artifacts=(
         "$project_dir"/repo/core/"$expected_artifact_package"-[0-9]*.pkg.tar.zst
@@ -1496,41 +1500,13 @@ if command -v bsdtar >/dev/null 2>&1; then
   done
 
   for artifact in "${desktop_meta_artifacts[@]}"; do
-    artifact_contents="$(bsdtar -tf "$artifact")"
     desktop_meta_pkginfo="$(bsdtar -xOf "$artifact" .PKGINFO)"
-    for required_path in \
-      usr/lib/devario/gpu-driver-setup \
-      usr/lib/systemd/system/devario-gpu-driver.service \
-      usr/lib/systemd/system/pearl-greeter.service.d/20-devario-gpu-driver.conf \
-      usr/share/devario/greetd/config.toml \
-      etc/xdg/aqueous/session.toml; do
-      if ! grep -Fxq "$required_path" <<< "$artifact_contents"; then
-        fail "$(basename -- "$artifact") is missing $required_path"
+    for desktop_dependency in aqueous-core aqueous-session aqueous-integration-pearl \
+      aqueous-shell-pearl xdg-desktop-portal-aqueous pearl pearl-greeter; do
+      if ! grep -Eq "^depend = ${desktop_dependency}([<>=].*)?$" <<< "$desktop_meta_pkginfo"; then
+        fail "$(basename -- "$artifact") lacks repository desktop dependency $desktop_dependency"
       fi
     done
-    for required_nvidia_dependency in \
-      linux-devario-headers nvidia-open-dkms nvidia-utils; do
-      if ! grep -Eq \
-        "^depend = ${required_nvidia_dependency}([<>=].*)?$" \
-        <<< "$desktop_meta_pkginfo"; then
-        fail "$(basename -- "$artifact") does not depend on $required_nvidia_dependency"
-      fi
-    done
-    if grep -Eq '^depend = vulkan-nouveau([<>=].*)?$' \
-      <<< "$desktop_meta_pkginfo"; then
-      fail "$(basename -- "$artifact") still depends on vulkan-nouveau"
-    fi
-    if grep -Fxq 'etc/greetd/config.toml' <<< "$artifact_contents"; then
-      fail "$(basename -- "$artifact") conflicts with greetd's owned configuration"
-    fi
-    packaged_greetd_config="$(
-      bsdtar -xOf "$artifact" usr/share/devario/greetd/config.toml
-    )"
-    if ! grep -Fqx \
-      'command = "/usr/lib/pearl/pearl-greeter-host"' \
-      <<< "$packaged_greetd_config"; then
-      fail "$(basename -- "$artifact") does not select Aqueous in Pearl Greeter"
-    fi
   done
 
   if (( ${#devario_artifacts[@]} )) \
@@ -1587,16 +1563,14 @@ if command -v bsdtar >/dev/null 2>&1; then
     artifact_contents="$(bsdtar -tf "$artifact")"
     base_pkginfo="$(bsdtar -xOf "$artifact" .PKGINFO)"
     for required_path in \
-      etc/shelly.conf usr/lib/devario/shelly-storage-migrate \
-      usr/lib/systemd/system/shelly-storage-migrate.service \
-      usr/lib/systemd/system/multi-user.target.wants/shelly-storage-migrate.service \
+      etc/pacman.conf \
       usr/lib/sysusers.d/alpm.conf \
-      var/lib/shelly/ var/cache/shelly/pkg/ etc/shelly.d/gnupg/ etc/shelly.d/hooks/; do
+      var/lib/pacman/ var/cache/pacman/pkg/ etc/pacman.d/gnupg/ etc/pacman.d/hooks/; do
       if ! grep -Fxq "$required_path" <<< "$artifact_contents"; then
         fail "$(basename -- "$artifact") lacks $required_path"
       fi
     done
-    if ! grep -Fxq 'backup = etc/shelly.conf' <<< "$base_pkginfo"; then
+    if ! grep -Fxq 'backup = etc/pacman.conf' <<< "$base_pkginfo"; then
       fail "$(basename -- "$artifact") must preserve administrator Shelly configuration"
     fi
     if grep -Eq '^depend = (devario-alpm-runtime|libalpm(\.so)?)([<>=]|$)' <<< "$base_pkginfo"; then

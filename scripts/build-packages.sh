@@ -18,12 +18,10 @@ prepare_dependencies_only="${DEVARIO_BUILDER_PREPARE:-0}"
 expected_packager='ZoeyErinBauer <40698010+ZoeyErinBauer@users.noreply.github.com>'
 package_order=(
   devario-filesystem
-  seafoam-keyring
   devario-keyring
   devario-base
   devario-boot
   ckbcomp
-  devario-aqueous-desktop
   calamares
 )
 

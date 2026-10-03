@@ -162,7 +162,7 @@ dependency_closure="$temporary_dir/dependency-closure.json"
 CONTAINER_ROOT="$container_root" python3 - > "$dependency_closure" <<'PY'
 import json,os,pathlib
 records=[]
-for desc in sorted((pathlib.Path(os.environ["CONTAINER_ROOT"])/"var/lib/shelly/local").glob("*/desc")):
+for desc in sorted((pathlib.Path(os.environ["CONTAINER_ROOT"])/"var/lib/pacman/local").glob("*/desc")):
  lines=desc.read_text().splitlines(); fields={}; i=0
  while i<len(lines):
   if lines[i].startswith("%") and lines[i].endswith("%") and i+1<len(lines): fields[lines[i][1:-1]]=lines[i+1]; i+=2
@@ -176,7 +176,7 @@ PY
 snapshot_id="${repository_snapshot_url##*/snapshots/}"; snapshot_id="${snapshot_id%/}"; snapshot_id="${snapshot_id//\//-}"
 repository_snapshot_dir="$bootstrap_cache/repository-snapshot-$snapshot_id"
 bootstrap_archive="$bootstrap_cache/devario-bootstrap-x86_64.tar.zst"; bootstrap_signature="$bootstrap_archive.sig"
-mapfile -t shelly_packages < <(find "$core_repo" -maxdepth 1 -type f -name 'shelly-[0-9]*.pkg.tar.zst' -print | sort -V)
+mapfile -t shelly_packages < <(find "$core_repo" -maxdepth 1 -type f -name 'shelly-cli-[0-9]*.pkg.tar.zst' -print | sort -V)
 (( ${#shelly_packages[@]} == 1 )) || { echo 'Core input must contain exactly one Shelly bootstrap.' >&2; exit 1; }
 shelly_package="${shelly_packages[0]}"; shelly_signature="$shelly_package.sig"
 container_manifest="$container_root/etc/devario/controlled-builder.json"; install -d -m 0755 "$(dirname -- "$container_manifest")"

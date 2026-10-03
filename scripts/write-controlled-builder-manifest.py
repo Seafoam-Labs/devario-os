@@ -62,7 +62,7 @@ def main() -> int:
                         "sha256": digest(args.repository_snapshot_dir / f"{repository}.db"),
                         "signatureSha256": digest(args.repository_snapshot_dir / f"{repository}.db.sig"),
                     }
-                    for repository in ("devario-core", "seafoam-labs")
+                    for repository in ("devario-core",)
                 ],
             },
             "bootstrap": {

@@ -6,9 +6,6 @@ project_dir="$(cd -- "$script_dir/.." && pwd)"
 profile_dir="$project_dir/iso"
 edition_dir="$project_dir/editions/community"
 core_repo_dir="${DEVARIO_CORE_REPO_DIR:-$project_dir/repo/core}"
-seafoam_repo_dir="${DEVARIO_SEAFOAM_REPO_DIR:-$project_dir/repo/seafoam}"
-seafoam_keyring_source="${DEVARIO_SEAFOAM_KEYRING_DIR:-$project_dir/packages/seafoam-keyring}"
-seafoam_runtime_url="${DEVARIO_SEAFOAM_REPO_URL:-https://repo.seafoam-labs.org/x86_64}"
 managed_repo_dir="${DEVARIO_MANAGED_REPO_DIR:-}"
 output_dir="${DEVARIO_OUTPUT_DIR:-$project_dir/out}"
 work_dir="${DEVARIO_WORK_DIR:-$project_dir/work}"
@@ -115,14 +112,13 @@ mkdir -p "$output_dir" "$work_dir"
 
 generated_conf="$(mktemp /tmp/devario-alpm.XXXXXX.conf)"
 staged_core_repo="$(mktemp -d /tmp/devario-core-repo.XXXXXX)"
-staged_seafoam_repo="$(mktemp -d /tmp/devario-seafoam-repo.XXXXXX)"
 staged_managed_repo="$(mktemp -d /tmp/devario-managed-repo.XXXXXX)"
 staged_profile="$(mktemp -d /tmp/devario-profile.XXXXXX)"
 shelly_root="$(mktemp -d "$work_dir/.devario-shelly.XXXXXX")"
 build_gpgdir="$(mktemp -d "$work_dir/.devario-keyring.XXXXXX")"
 cleanup() {
   rm -f -- "$generated_conf"
-  rm -rf -- "$staged_core_repo" "$staged_seafoam_repo" "$staged_managed_repo"
+  rm -rf -- "$staged_core_repo" "$staged_managed_repo"
   rm -rf -- "$staged_profile"
   rm -rf -- "$shelly_root"
   rm -rf -- "$build_gpgdir"
@@ -132,9 +128,6 @@ trap cleanup EXIT
 # Stage the local repository under a short, root-readable path consumed by the
 # isolated Shelly target transaction.
 cp -a -- "$core_repo_dir/." "$staged_core_repo/"
-cp -a -- "$seafoam_repo_dir/." "$staged_seafoam_repo/"
-chmod 755 "$staged_seafoam_repo"
-find "$staged_seafoam_repo" -type f -exec chmod 444 {} +
 chmod 755 "$staged_core_repo"
 find "$staged_core_repo" -type f -exec chmod 444 {} +
 
@@ -172,16 +165,12 @@ if (( release_build )); then key_policy=production; fi
 devario_verify_repository "$staged_core_repo" devario-core "$core_keyring_source" "$key_policy"
 core_active="$DEVARIO_ACTIVE_SIGNER"; core_public="$DEVARIO_KEYRING_PUBLIC"
 core_fingerprints=("${DEVARIO_PUBLIC_FINGERPRINTS[@]}")
-devario_verify_repository "$staged_seafoam_repo" seafoam-labs "$seafoam_keyring_source" "$key_policy"
-seafoam_active="$DEVARIO_ACTIVE_SIGNER"; seafoam_public="$DEVARIO_KEYRING_PUBLIC"
-seafoam_fingerprints=("${DEVARIO_PUBLIC_FINGERPRINTS[@]}")
 if (( DEVARIO_EDITION_HAS_MANAGED )); then
   devario_verify_repository "$staged_managed_repo" devario-managed "$managed_keyring_source" "$key_policy"
   managed_active="$DEVARIO_ACTIVE_SIGNER"; managed_public="$DEVARIO_KEYRING_PUBLIC"
   managed_fingerprints=("${DEVARIO_PUBLIC_FINGERPRINTS[@]}")
   [[ "$core_active" != "$managed_active" ]] || { echo 'Core and managed active signers must be distinct.' >&2; exit 1; }
   devario_require_disjoint_fingerprint_sets core_fingerprints managed_fingerprints
-  devario_require_disjoint_fingerprint_sets seafoam_fingerprints managed_fingerprints
 fi
 
 shopt -s nullglob
@@ -203,10 +192,9 @@ required_devario_packages=(
   xdg-desktop-portal-aqueous
   calamares
   ckbcomp
-  devario-aqueous-desktop
+  devario-desktop
   devario-base
   devario-filesystem
-  seafoam-keyring
   devario-boot
   devario-dracut
   devario-keyring
@@ -214,6 +202,7 @@ required_devario_packages=(
   linux-devario-headers
   pearl
   shelly
+  shelly-cli
 )
 declare -A required_core_package_set=()
 for package_name in "${required_devario_packages[@]}"; do
@@ -230,12 +219,6 @@ for package_path in "${repo_packages[@]}"; do
     exit 1
   fi
   (( repository_package_counts["$package_name"] += 1 )) || true
-done
-declare -A seafoam_package_counts=()
-for package_path in "$staged_seafoam_repo"/*.pkg.tar.zst; do
-  package_name="$(bsdtar -xOf "$package_path" .PKGINFO | awk -F ' = ' '$1 == "pkgname" {print $2; exit}')"
-  [[ -n "$package_name" ]] || exit 1
-  (( seafoam_package_counts["$package_name"] += 1 )) || true
 done
 declare -A managed_package_counts=()
 if (( DEVARIO_EDITION_HAS_MANAGED )); then
@@ -277,7 +260,6 @@ fi
 for package_name in "${!DEVARIO_PACKAGE_ORIGINS[@]}"; do
   core_count="${repository_package_counts[$package_name]:-0}"
   managed_count="${managed_package_counts[$package_name]:-0}"
-  seafoam_count="${seafoam_package_counts[$package_name]:-0}"
   case "${DEVARIO_PACKAGE_ORIGINS[$package_name]}" in
     arch)
       echo "Arch-origin edition packages require an explicit compatibility build: $package_name" >&2; exit 1
@@ -285,39 +267,35 @@ for package_name in "${!DEVARIO_PACKAGE_ORIGINS[@]}"; do
     core)
       (( core_count == 1 && managed_count == 0 )) || { echo "Core package origin is missing/ambiguous: $package_name" >&2; exit 1; }
       ;;
-    seafoam)
-      (( core_count == 0 && seafoam_count == 1 && managed_count == 0 )) || { echo "Seafoam package origin is missing/ambiguous: $package_name" >&2; exit 1; }
-      ;;
     managed)
-      (( core_count == 0 && seafoam_count == 0 && managed_count == 1 )) || { echo "Managed package origin is missing/ambiguous: $package_name" >&2; exit 1; }
+      (( core_count == 0 && managed_count == 1 )) || { echo "Managed package origin is missing/ambiguous: $package_name" >&2; exit 1; }
       ;;
   esac
 done
 
 # The fixed base profile has an implicit, code-owned origin contract: the
 # required Devario package set comes only from core and every other base name
-# resolves from core first, then the locked Seafoam repository. This prevents either custom
+# resolves from core. This prevents the managed
 # repository from shadowing an otherwise unlisted base package.
 while IFS= read -r package_name || [[ -n "$package_name" ]]; do
   [[ "$package_name" =~ ^[[:space:]]*(#.*)?$ ]] && continue
   [[ -z "${DEVARIO_PACKAGE_ORIGINS[$package_name]:-}" ]] || continue
   core_count="${repository_package_counts[$package_name]:-0}"
   managed_count="${managed_package_counts[$package_name]:-0}"
-  seafoam_count="${seafoam_package_counts[$package_name]:-0}"
   if [[ -n "${required_core_package_set[$package_name]:-}" ]]; then
     (( core_count == 1 && managed_count == 0 )) || {
       echo "Fixed core package origin is missing or shadowed: $package_name" >&2
       exit 1
     }
-  elif (( managed_count != 0 || (core_count == 0 && seafoam_count != 1) )); then
+  elif (( managed_count != 0 || core_count != 1 )); then
     echo "Base package is missing or shadowed by Managed: $package_name" >&2
     exit 1
   fi
 done < "$staged_profile/packages.x86_64"
 
-shelly_packages=("$staged_core_repo"/shelly-[0-9]*.pkg.tar.zst)
+shelly_packages=("$staged_core_repo"/shelly-cli-[0-9]*.pkg.tar.zst)
 if (( ${#shelly_packages[@]} != 1 )); then
-  echo "The Devario repository must contain exactly one Shelly package." >&2
+  echo "The Devario repository must contain exactly one Shelly CLI package." >&2
   exit 1
 fi
 
@@ -332,9 +310,6 @@ if (( release_build )); then
   keyring_packages=("$staged_core_repo"/devario-keyring-[0-9]*.pkg.tar.zst)
   (( ${#keyring_packages[@]} == 1 )) || { echo 'Core release requires exactly one keyring package.' >&2; exit 1; }
   devario_verify_keyring_package "${keyring_packages[0]}" "$core_keyring_source" devario-core
-  seafoam_keyring_packages=("$staged_core_repo"/seafoam-keyring-[0-9]*.pkg.tar.zst)
-  (( ${#seafoam_keyring_packages[@]} == 1 )) || { echo 'Release requires exactly one Seafoam keyring package.' >&2; exit 1; }
-  devario_verify_keyring_package "${seafoam_keyring_packages[0]}" "$seafoam_keyring_source" seafoam-labs
   if (( DEVARIO_EDITION_HAS_MANAGED )); then
     managed_keyring_packages=("$staged_managed_repo"/devario-managed-keyring-[0-9]*.pkg.tar.zst)
     (( ${#managed_keyring_packages[@]} == 1 )) || { echo 'Managed release requires exactly one managed keyring package.' >&2; exit 1; }
@@ -351,22 +326,17 @@ else
   managed_runtime_server="$managed_runtime_url"
 fi
 
-# Use the Shelly binaries from the repository being installed into the image.
-# The alternate-config marker proves this binary understands the isolated
-# target RootDir and DBPath used by Devario's Devario ISO patch.
+# The CLI split package owns both executables. RLPM configuration is mounted
+# privately by the assembler; no environment-variable marker is required.
 bsdtar -xf "${shelly_packages[0]}" -C "$shelly_root" \
   usr/bin/shelly usr/bin/shelly-key
 devario_shelly="$shelly_root/usr/bin/shelly"
 devario_shelly_key="$shelly_root/usr/bin/shelly-key"
-if [[ ! -x "$devario_shelly" ]] \
-  || ! grep -aFq 'SHELLY_ALPM_CONFIG' "$devario_shelly"; then
-  echo "The repository Shelly binary lacks isolated ALPM config support." >&2
+if [[ ! -x "$devario_shelly" || ! -x "$devario_shelly_key" ]]; then
+  echo "The repository Shelly CLI package must contain shelly and shelly-key." >&2
   exit 1
 fi
-if [[ ! -x "$devario_shelly_key" ]]; then
-  echo "The repository Shelly package does not contain shelly-key." >&2
-  exit 1
-fi
+"$devario_shelly" list standard --help >/dev/null
 devario_validate_keyring_bundle "$core_keyring_source" devario-core "$key_policy"
 if (( DEVARIO_EDITION_HAS_MANAGED )); then
   devario_validate_keyring_bundle "$managed_keyring_source" devario-managed "$key_policy"
@@ -378,8 +348,6 @@ fi
 install -m 0644 /dev/null "$build_gpgdir/pubring.gpg"
 install -m 0600 /dev/null "$build_gpgdir/secring.gpg"
 "$devario_shelly_key" --init "$build_gpgdir"
-"$devario_shelly_key" --gpgdir "$build_gpgdir" \
-  --populate-from "$seafoam_keyring_source" --populate seafoam-labs
 "$devario_shelly_key" --gpgdir "$build_gpgdir" \
   --populate-from "$core_keyring_source" --populate devario
 if (( DEVARIO_EDITION_HAS_MANAGED )); then
@@ -398,7 +366,6 @@ escape_sed() {
   value="${value//\\/\\\\}"; value="${value//|/\\|}"; value="${value//&/\\&}"
   printf '%s\n' "$value"
 }
-devario_validate_https_url "$seafoam_runtime_url"
 core_runtime_server_escaped="$(escape_sed "$core_runtime_server")"
 managed_runtime_repository=''
 managed_build_repository=''
@@ -410,14 +377,12 @@ fi
 sed \
   -e "s|@DEVARIO_CORE_RUNTIME_SIGLEVEL@|$core_runtime_siglevel|g" \
   -e "s|@DEVARIO_CORE_RUNTIME_REPO@|$core_runtime_server_escaped|g" \
-  -e "s|@DEVARIO_SEAFOAM_RUNTIME_REPO@|$(escape_sed "$seafoam_runtime_url")|g" \
   -e "s|@DEVARIO_MANAGED_RUNTIME_REPOSITORY@|$managed_runtime_repository|g" \
   "$staged_profile/shelly.runtime.conf" \
-  > "$staged_profile/airootfs/etc/shelly.conf"
+  > "$staged_profile/airootfs/etc/pacman.conf"
 
 sed \
   -e "s|@DEVARIO_CORE_REPO@|$(escape_sed "$staged_core_repo")|g" \
-  -e "s|@DEVARIO_SEAFOAM_REPO@|$(escape_sed "$staged_seafoam_repo")|g" \
   -e "s|@DEVARIO_MANAGED_BUILD_REPOSITORY@|$managed_build_repository|g" \
   "$staged_profile/shelly.build.conf" > "$generated_conf"
 
@@ -426,7 +391,6 @@ if (( release_build )); then
   install -d -m 0755 "$build_record_dir"
   BUILD_RECORD="$build_record_dir/build-source.json" INPUT_LOCK="$input_lock" \
   EDITION="$DEVARIO_EDITION_ID" RELEASE_VERSION="$release_version" \
-  SEAFOAM_URL="$seafoam_runtime_url" SEAFOAM_ACTIVE="$seafoam_active" SEAFOAM_PUBLIC="$seafoam_public" \
   CORE_URL="$core_runtime_url" CORE_ACTIVE="$core_active" \
   CORE_PUBLIC="$core_public" MANAGED_URL="$managed_runtime_url" \
   MANAGED_ACTIVE="${managed_active:-}" MANAGED_PUBLIC="${managed_public:-}" \
@@ -445,7 +409,6 @@ if lock["releaseVersion"] != os.environ["RELEASE_VERSION"]: raise SystemExit("re
 data={"schemaVersion":2,"isoBuilder":lock["isoBuilder"],"releaseMode":True,"edition":os.environ["EDITION"],"releaseVersion":lock["releaseVersion"],"coreCommit":lock["core"]["commit"],
  "sourceDateEpoch":lock["sourceDateEpoch"],"inputLockSha256":hashlib.sha256(raw).hexdigest(),
  "coreRepository":{"url":os.environ["CORE_URL"],"activeSigner":os.environ["CORE_ACTIVE"],"publicKeyringSha256":hashlib.sha256(pathlib.Path(os.environ["CORE_PUBLIC"]).read_bytes()).hexdigest()}}
-data["seafoamRepository"]={"url":os.environ["SEAFOAM_URL"],"activeSigner":os.environ["SEAFOAM_ACTIVE"],"publicKeyringSha256":hashlib.sha256(pathlib.Path(os.environ["SEAFOAM_PUBLIC"]).read_bytes()).hexdigest()}
 if os.environ["EDITION"]=="managed":
  data["managedCommit"]=lock["edition"]["commit"]
  data["managedRepository"]={"url":os.environ["MANAGED_URL"],"activeSigner":os.environ["MANAGED_ACTIVE"],"publicKeyringSha256":hashlib.sha256(pathlib.Path(os.environ["MANAGED_PUBLIC"]).read_bytes()).hexdigest()}
@@ -497,7 +460,6 @@ if (( release_build )); then
     --iso "${built_images[0]}" --edition "$DEVARIO_EDITION_ID" --release
     --input-lock "$input_lock" --core-keyring "$core_keyring_source"
     --core-url "$core_runtime_url" --release-version "$release_version"
-    --seafoam-keyring "$seafoam_keyring_source" --seafoam-url "$seafoam_runtime_url"
     --write-inventory "$output_dir/IMAGE-PACKAGE-INVENTORY.json"
   )
   if (( DEVARIO_EDITION_HAS_MANAGED )); then

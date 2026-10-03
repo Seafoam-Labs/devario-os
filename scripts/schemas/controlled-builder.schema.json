@@ -36,14 +36,11 @@
         },
         "databases": {
           "type": "array",
-          "minItems": 2,
-          "maxItems": 2,
+          "minItems": 1,
+          "maxItems": 1,
           "prefixItems": [
             {
               "$ref": "#/$defs/coreDb"
-            },
-            {
-              "$ref": "#/$defs/extraDb"
             }
           ],
           "items": false
@@ -115,20 +112,6 @@
           "properties": {
             "repository": {
               "const": "devario-core"
-            }
-          }
-        }
-      ]
-    },
-    "extraDb": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/db"
-        },
-        {
-          "properties": {
-            "repository": {
-              "const": "seafoam-labs"
             }
           }
         }

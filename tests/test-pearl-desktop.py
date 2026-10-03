@@ -25,11 +25,6 @@ class PearlDesktopTests(unittest.TestCase):
             exec(compile(code, 'builder.py', 'exec'), builder.__dict__)
             builder.overlay(PROFILE / 'airootfs', root)
             self.assertFalse((root / 'etc/systemd/system/default.target').exists())
-            subprocess.run(['bash', '-euc', '''
-                source "$1/PKGBUILD"
-                srcdir="$1" pkgdir="$2"
-                package
-            ''', 'stage', str(PROJECT / 'packages/devario-aqueous-desktop'), str(root)], check=True)
             selection = tomllib.loads((root / 'etc/xdg/aqueous/session.toml').read_text())
             self.assertEqual(selection, {'version': 1, 'shell': 'pearl'})
             installed = (root / 'usr/share/devario/greetd/config.toml').read_text()
@@ -59,7 +54,7 @@ class PearlDesktopTests(unittest.TestCase):
     def test_desktop_packages(self):
         packages = set((PROFILE / 'packages.x86_64').read_text().splitlines())
         self.assertTrue({'aqueous-core', 'aqueous-session', 'aqueous-integration-pearl',
-                         'aqueous-shell-pearl', 'xdg-desktop-portal-aqueous', 'pearl', 'pearl-greeter-git'} <= packages)
+                         'aqueous-shell-pearl', 'xdg-desktop-portal-aqueous', 'pearl', 'pearl-greeter', 'devario-desktop'} <= packages)
         self.assertFalse({'aqueous', 'aqueous-noctalia', 'noctalia', 'noctalia-greeter'} & packages)
         services = (PROFILE / 'airootfs/etc/calamares/modules/services-systemd.conf').read_text()
         self.assertIn('name: pearl-greeter.service', services)

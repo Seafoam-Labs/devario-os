@@ -163,8 +163,8 @@
         },
         "databases": {
           "type": "array",
-          "minItems": 2,
-          "maxItems": 2,
+          "minItems": 1,
+          "maxItems": 1,
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -176,8 +176,7 @@
             "properties": {
               "repository": {
                 "enum": [
-                  "devario-core",
-                  "seafoam-labs"
+                  "devario-core"
                 ]
               },
               "sha256": {
@@ -451,51 +450,6 @@
           }
         }
       }
-    },
-    {
-      "if": {
-        "properties": {
-          "operation": {
-            "const": "iso"
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "repositories": {
-            "allOf": [
-              {
-                "contains": {
-                  "properties": {
-                    "name": {
-                      "const": "seafoam-labs"
-                    }
-                  },
-                  "required": [
-                    "name"
-                  ]
-                }
-              }
-            ]
-          },
-          "keyrings": {
-            "allOf": [
-              {
-                "contains": {
-                  "properties": {
-                    "name": {
-                      "const": "seafoam-labs"
-                    }
-                  },
-                  "required": [
-                    "name"
-                  ]
-                }
-              }
-            ]
-          }
-        }
-      }
     }
   ],
   "$defs": {
@@ -678,7 +632,6 @@
         "name": {
           "enum": [
             "devario-core",
-            "seafoam-labs",
             "devario-managed"
           ]
         },

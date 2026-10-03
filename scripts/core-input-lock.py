@@ -253,7 +253,7 @@ def build(args: argparse.Namespace) -> dict[str, object]:
         "controlled builder manifest signature": args.builder_manifest_signature,
         "dependency closure": args.dependency_closure,
     }
-    for repository in ("devario-core", "seafoam-labs"):
+    for repository in ("devario-core",):
         locked_files[f"Repository {repository} database"] = args.repository_snapshot_dir / f"{repository}.db"
         locked_files[f"Repository {repository} database signature"] = args.repository_snapshot_dir / f"{repository}.db.sig"
     resolved_files: dict[str, Path] = {}
@@ -299,11 +299,11 @@ def build(args: argparse.Namespace) -> dict[str, object]:
         raise ValueError("dependency closure is not canonical JSON")
     dependency_closure = validate_dependency_closure(
         dependency_closure,
-        [resolved_files[f"Repository {repository} database"] for repository in ("devario-core", "seafoam-labs")],
+        [resolved_files[f"Repository {repository} database"] for repository in ("devario-core",)],
     )
 
     verify_signature(resolved_files["bootstrap signature"], bootstrap, bootstrap_keyring)
-    for repository in ("devario-core", "seafoam-labs"):
+    for repository in ("devario-core",):
         verify_signature(
             resolved_files[f"Repository {repository} database signature"],
             resolved_files[f"Repository {repository} database"],
@@ -327,14 +327,10 @@ def build(args: argparse.Namespace) -> dict[str, object]:
     keyrings = []
     if args.core_repo:
         repositories.append(closure(args.core_repo, "devario-core", symlinks=True))
-    if args.seafoam_repo:
-        repositories.append(closure(args.seafoam_repo, "seafoam-labs", symlinks=True))
     if args.managed_repo:
         repositories.append(closure(args.managed_repo, "devario-managed", symlinks=True))
     if args.core_keyring:
         keyrings.append(closure(args.core_keyring, "devario-core"))
-    if args.seafoam_keyring:
-        keyrings.append(closure(args.seafoam_keyring, "seafoam-labs"))
     if args.managed_keyring:
         keyrings.append(closure(args.managed_keyring, "devario-managed"))
 
@@ -372,7 +368,7 @@ def build(args: argparse.Namespace) -> dict[str, object]:
                     "sha256": sha256(resolved_files[f"Repository {repository} database"]),
                     "signatureSha256": sha256(resolved_files[f"Repository {repository} database signature"]),
                 }
-                for repository in ("devario-core", "seafoam-labs")
+                for repository in ("devario-core",)
             ],
         },
         "bootstrap": {
@@ -434,8 +430,6 @@ def main() -> int:
     parser.add_argument("--release-version")
     parser.add_argument("--core-repo", type=Path)
     parser.add_argument("--core-keyring", type=Path)
-    parser.add_argument("--seafoam-repo", type=Path)
-    parser.add_argument("--seafoam-keyring", type=Path)
     parser.add_argument("--managed-repo", type=Path)
     parser.add_argument("--managed-keyring", type=Path)
     parser.add_argument("--managed-input-lock", type=Path)

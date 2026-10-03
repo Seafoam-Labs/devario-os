@@ -1,0 +1,11 @@
+[Unit]
+Description=Prepare the GPU driver for Aqueous
+After=systemd-modules-load.service systemd-udev-trigger.service
+Before=pearl-greeter.service
+ConditionPathIsDirectory=/sys/bus/pci/devices
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/devario/gpu-driver-setup --setup
+RemainAfterExit=yes
+

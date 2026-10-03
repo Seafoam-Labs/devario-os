@@ -1,7 +1,6 @@
 [Unit]
 Description=Initialize the Shelly package-manager keyring
-Requires=shelly-storage-migrate.service
-After=shelly-storage-migrate.service time-sync.target
+After=time-sync.target
 Before=pearl-greeter.service
 ConditionPathExists=!/var/lib/devario/shelly-keyring.ready
 
@@ -9,7 +8,7 @@ ConditionPathExists=!/var/lib/devario/shelly-keyring.ready
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/bin/shelly keyring init
-ExecStart=/usr/bin/shelly keyring populate devario-core seafoam-labs
+ExecStart=/usr/bin/shelly keyring populate devario-core
 ExecStart=/usr/bin/install -Dm644 /dev/null /var/lib/devario/shelly-keyring.ready
 
 [Install]

@@ -17,16 +17,14 @@ expect_rejection() {
   fi
 }
 
-mkdir -p "$image_root/etc" "$image_root/var/lib/shelly/local/base-1-1"
+mkdir -p "$image_root/etc" "$image_root/var/lib/pacman/local/base-1-1"
 printf '%s\n' \
   '[options]' \
   'Architecture = auto' \
   '[devario-core]' \
   'SigLevel = Required' \
   'Server = https://packages.example.test/devario-core' \
-  '[core]' \
-  'Include = /etc/pacman.d/mirrorlist' \
-  > "$image_root/etc/shelly.conf"
+  > "$image_root/etc/pacman.conf"
 printf '%s\n' \
   '%NAME%' base '' \
   '%VERSION%' 1-1 '' \
@@ -34,7 +32,7 @@ printf '%s\n' \
   '%BASE%' base '' \
   '%LICENSE%' GPL-2.0-only '' \
   '%PACKAGER%' 'ZoeyErinBauer <40698010+ZoeyErinBauer@users.noreply.github.com>' '' \
-  > "$image_root/var/lib/shelly/local/base-1-1/desc"
+  > "$image_root/var/lib/pacman/local/base-1-1/desc"
 
 inventory="$test_root/IMAGE-PACKAGE-INVENTORY.json"
 "$project_dir/scripts/verify-image-boundary.sh" --root "$image_root" --edition community \
@@ -42,9 +40,9 @@ inventory="$test_root/IMAGE-PACKAGE-INVENTORY.json"
 grep -Fq '"packager":"ZoeyErinBauer <40698010+ZoeyErinBauer@users.noreply.github.com>"' "$inventory" \
   || fail 'canonical inventory omitted exact package attribution'
 
-mkdir -p "$image_root/var/lib/pacman"
-expect_rejection 'legacy mutable package-manager path'
-rmdir "$image_root/var/lib/pacman"
+printf '%s\n' '[seafoam-labs]' 'Server = https://packages.example.test/seafoam' >> "$image_root/etc/pacman.conf"
+expect_rejection 'unexpected secondary repository'
+sed -i '/^\[seafoam-labs\]$/,$d' "$image_root/etc/pacman.conf"
 
 printf '%s\n' managed > "$image_root/etc/devario-managed-agent.conf"
 expect_rejection 'managed pathname in Community'
@@ -63,7 +61,7 @@ printf '%s\n' \
   '[devario-managed]' \
   'SigLevel = Required' \
   'Server = https://packages.example.test/devario-managed' \
-  >> "$image_root/etc/shelly.conf"
+  >> "$image_root/etc/pacman.conf"
 printf '%s\n' managed-product-code > "$image_root/etc/devario-managed-agent.conf"
 "$project_dir/scripts/verify-image-boundary.sh" --root "$image_root" --edition managed >/dev/null
 printf '%s\n' customer-id > "$image_root/etc/customer-id"
@@ -76,8 +74,8 @@ printf '%s\n' 'https://device:enrollment-secret@enroll.example.test/api' \
   > "$image_root/etc/arbitrary.bin"
 expect_rejection 'URL userinfo credential in Managed' managed
 rm -f -- "$image_root/etc/arbitrary.bin" "$image_root/etc/devario-managed-agent.conf"
-sed -i '/^\[devario-managed\]$/,$d' "$image_root/etc/shelly.conf"
-sed -i 's/SigLevel = Required/SigLevel = Optional TrustAll/' "$image_root/etc/shelly.conf"
+sed -i '/^\[devario-managed\]$/,$d' "$image_root/etc/pacman.conf"
+sed -i 's/SigLevel = Required/SigLevel = Optional TrustAll/' "$image_root/etc/pacman.conf"
 expect_rejection 'weak repository trust'
 
 echo 'Image-boundary tests passed.'

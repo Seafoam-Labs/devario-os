@@ -6,12 +6,6 @@
       "server": "https://repo.seafoam-labs.org/devario-core/$arch",
       "activeSigner": "BB62CD2725FD8E25558F900A84F94F672976872C",
       "publicKeyUrl": "https://repo.seafoam-labs.org/repositories/devario-core/pubkey.asc"
-    },
-    {
-      "name": "seafoam-labs",
-      "server": "https://repo.seafoam-labs.org/$arch",
-      "activeSigner": "BB62CD2725FD8E25558F900A84F94F672976872C",
-      "publicKeyUrl": "https://repo.seafoam-labs.org/pubkey.asc"
     }
   ]
 }
