@@ -27,6 +27,7 @@ for value in image candidate mode firmware edition log result; do [[ -n "${!valu
 [[ -f "$image" && ! -L "$image" && -f "$candidate" ]] || { echo 'Image and candidate must be regular files.' >&2; exit 1; }
 [[ "$mode" == live || "$mode" == installed ]] || exit 2
 [[ "$firmware" == bios || "$firmware" == uefi ]] || exit 2
+[[ "$mode" != installed || "$firmware" == uefi ]] || { echo "Installed Devario requires UEFI." >&2; exit 2; }
 [[ "$edition" == community || "$edition" == managed ]] || exit 2
 [[ "$timeout_seconds" =~ ^[1-9][0-9]*$ ]] || exit 2
 python3 "$project_dir/release/validate-json.py" "$project_dir/release/candidate-lock.schema.json" "$candidate"

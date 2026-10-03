@@ -59,4 +59,4 @@ review the installer's disk choice carefully before confirming installation.
 - Disable **Secure Boot** in the computer's UEFI settings. Devario does not
   currently configure Secure Boot support.
 - Try the legacy or BIOS USB entry when the computer does not boot the UEFI
-  entry. Devario supports both UEFI and legacy BIOS booting.
+  entry for live use. Installation requires the 64-bit UEFI entry.

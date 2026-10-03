@@ -24,7 +24,7 @@ Options:
   --iso PATH      Boot a specific ISO instead of the newest out/devario-*.iso
   --disk-only     Boot the installed VM disk without attaching an ISO
   --uefi          Boot with OVMF UEFI firmware (default)
-  --bios          Boot with legacy BIOS firmware
+  --bios          Boot live media with legacy BIOS firmware (installation requires UEFI)
   --software      Disable KVM and use software CPU emulation
   --no-gl         Disable virtio-gpu OpenGL acceleration
   --dry-run       Prepare state and print the QEMU command without running it
@@ -85,6 +85,10 @@ while (( $# )); do
   esac
   shift
 done
+
+if (( disk_only )) && [[ "$firmware_mode" == bios ]]; then
+  die "installed Devario uses systemd-boot and requires --uefi"
+fi
 
 if (( EUID == 0 )); then
   die "run this helper as your desktop user, without sudo; it elevates individual setup steps when needed"

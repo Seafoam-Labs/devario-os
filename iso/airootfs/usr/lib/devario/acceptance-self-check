@@ -89,6 +89,11 @@ if [[ "$root" == / ]]; then
   else [[ ! -d /sys/firmware/efi ]] || fail 'BIOS runtime unexpectedly exposes EFI'; fi
 fi
 if [[ "$mode" == installed ]]; then
+  [[ "$firmware" == uefi ]] || fail 'installed Devario requires UEFI'
+  [[ -f "$(root_path /var/lib/devario/systemd-boot-installed)" ]] || fail 'systemd-boot installation marker is missing'
+  for boot_file in /boot/loader/entries/devario.conf /boot/loader/entries/devario-fallback.conf /boot/EFI/systemd/systemd-bootx64.efi /boot/EFI/BOOT/BOOTX64.EFI; do
+    [[ -s "$(root_path "$boot_file")" ]] || fail "missing installed boot file: $boot_file"
+  done
   [[ -s "$(root_path /etc/machine-id)" ]] || fail 'installed system lacks a machine ID'
   [[ -s "$(root_path /etc/fstab)" ]] || fail 'installed system lacks fstab'
   [[ ! -e "$(root_path /run/devario/live)" ]] || fail 'installed system is still a Devario live root'

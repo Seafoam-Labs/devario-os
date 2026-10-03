@@ -103,7 +103,7 @@ subjects. A difference cannot be waived in a final approval.
 ## Runtime acceptance and installation review
 
 The exact candidate ISO boots under both BIOS and UEFI. The exact disk created
-by Calamares then boots under both BIOS and UEFI. The four machine-readable
+by Calamares then boots under UEFI with systemd-boot. The three machine-readable
 results and console logs use a single exact marker and are bound to the
 candidate, ISO, installed-disk lock, and edition. An unrelated ISO, a qcow2
 backing/data file, a second or suffixed marker, or a writable/extra evidence

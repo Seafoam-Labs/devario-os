@@ -12,7 +12,7 @@ mount namespace. `release/source-manifest.json` records its source provenance.
 `devario-os` owns edition composition, package selection, trust policy, and
 release authorization. The builder reads JSON and does not execute profile shell
 code. `iso/profile.json` selects x86_64, the kernel identifier, and target file
-modes. `devario-boot` owns dracut generation and installed Limine deployment.
+modes. `devario-boot` owns dracut generation and installed systemd-boot deployment.
 The builder supports the existing BIOS Syslinux/UEFI systemd-boot media layout,
 renders loopback/network templates, and produces ISO checksums and JSON reports.
 Every build requires a fresh work directory.

@@ -17,6 +17,7 @@
     "marker": {"type": "string", "pattern": "^DEVARIO_ACCEPTANCE:PASS mode=(live|installed) firmware=(bios|uefi) edition=(community|managed)$"},
     "outcome": {"const": "pass"}
   },
+  "allOf": [{"if": {"properties": {"mode": {"const": "installed"}}}, "then": {"properties": {"firmware": {"const": "uefi"}}}}],
   "$defs": {
     "file": {
       "type": "object", "additionalProperties": false,

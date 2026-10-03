@@ -44,4 +44,4 @@ while IFS=$'\t' read -r mode firmware document log; do
   exact_count="$(sed $'s/\r$//; s/\033\[[0-9;]*[[:alpha:]]//g' "$log_file" | grep -Fxc "$expected" || true)"
   [[ "$marker_count" == 1 && "$exact_count" == 1 ]] || { echo "Log does not contain exactly one clean expected marker: $log" >&2; exit 1; }
 done < <(jq -r '.results[] | [.mode,.firmware,.document.path,.log.path] | @tsv' "$manifest")
-echo 'Validated closed live/installed BIOS/UEFI promotion acceptance evidence.'
+echo 'Validated closed live BIOS/UEFI and installed UEFI promotion acceptance evidence.'

@@ -69,7 +69,7 @@ DEVARIO_BOOTSTRAP_URL="$bootstrap_url" DEVARIO_REPOSITORY_SNAPSHOT_URL="$reposit
 DEVARIO_BOOTSTRAP_CACHE="$bootstrap_cache" DEVARIO_BOOTSTRAP_KEYRING="$bootstrap_keyring" "$script_dir/build-packages-nspawn.sh" --prepare-only
 run_root() { systemd-nspawn --quiet --register=no --console=pipe --resolv-conf=replace-host --directory="$container_root" "$@"; }
 run_root /usr/bin/shelly sync standard --no-confirm
-run_root /usr/bin/shelly install standard --no-confirm python libisoburn dosfstools mtools squashfs-tools openssl util-linux coreutils limine squashfs-tools libarchive
+run_root /usr/bin/shelly install standard --no-confirm python libisoburn dosfstools mtools squashfs-tools openssl util-linux coreutils squashfs-tools libarchive
 snapshot_id="${repository_snapshot_url##*/snapshots/}"; snapshot_id="${snapshot_id%/}"; snapshot_id="${snapshot_id//\//-}"
 snapshot_dir="$bootstrap_cache/repository-snapshot-$snapshot_id"
 for name in devario-core; do cmp -s "$snapshot_dir/$name.db" "$container_root/var/lib/shelly/sync/$name.db" || { echo "ISO builder $name DB drifted." >&2; exit 1; }; done

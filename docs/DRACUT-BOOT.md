@@ -6,7 +6,7 @@
 Devario owns its boot lifecycle. The externally maintained `devario-dracut` package builds pinned upstream dracut
 112 and provides the compatible `dracut` and `initramfs` package capabilities.
 `devario-boot` owns configuration, kernel discovery, initramfs generation,
-recovery files, and Limine deployment. Shelly's ALPM hooks are transaction
+recovery files, and systemd-boot deployment. Shelly's RLPM hooks are transaction
 adapters; the generator does not call a package manager or require Arch identity.
 
 The kernel recipe installs `/usr/lib/modules/<release>/devario-kernel` as data:
@@ -39,14 +39,30 @@ After configuring target storage, crypttab, fstab, and the kernel, Calamares cal
 `/usr/lib/devario/boot-update --install`. Subsequent Shelly transactions call
 `boot-update` without that flag. An installation marker suppresses installed
 boot updates during live-image assembly. Generation runs after DKMS hooks and
-before Limine inside one process, so failed generation cannot refresh Limine.
+before systemd-boot inside one process, so failed generation cannot refresh systemd-boot.
 The package disables competing generator hooks in `/etc/shelly.d/hooks`.
+
+The installed system requires 64-bit UEFI and a mounted FAT EFI System Partition
+at `/boot`. Calamares rejects BIOS-mode installation before partitioning.
+`systemd-boot-update --check` also validates the target ESP before generation.
+`bootctl install` deploys the loader at installation; subsequent transactions use
+`bootctl update` without changing firmware boot order. If firmware variables
+cannot be written during installation, the standard `EFI/BOOT/BOOTX64.EFI`
+fallback remains usable. Deployment must produce both expected EFI executables.
+
+Devario writes `devario.conf`, `devario-fallback.conf`, and, when a saved pair
+exists, `devario-recovery.conf` under `/boot/loader/entries`. Existing
+`loader.conf` preferences and other operating systems' entries are preserved.
+Successful deployment creates `/var/lib/devario/systemd-boot-installed`.
+A previous Devario Limine marker triggers migration when booted in UEFI mode;
+that marker is removed only after success. Existing BIOS installations must be
+booted with UEFI before migration. The old Limine hook remains masked.
 
 Installed generation creates a host-only default and generic fallback. Both use
 the explicitly selected target kernel and omit the live modules and captured
-host command line. Limine supplies root, encryption, Btrfs subvolume, and resume
+host command line. systemd-boot supplies root, encryption, Btrfs subvolume, and resume
 arguments from target configuration. Initramfs files embed early microcode;
-Limine does not load a second external microcode image.
+systemd-boot does not load a second external microcode image.
 
 Calamares validates NVIDIA 615.71.09 hardware compatibility and the offline
 payload before partitioning. After copying it, the installer verifies/builds
@@ -65,7 +81,7 @@ transaction across power loss or a rollback of the package manager's changes.
 
 The first replaced kernel/image pair is saved under
 `/boot/devario-recovery/linux-devario/`, published with one directory rename;
-Limine exposes it as a recovery entry. Further transactions retain that pair. After confirming
+systemd-boot exposes it as a recovery entry. Further transactions retain that pair. After confirming
 a successful reboot, an administrator can archive or remove that saved directory
 to allow the next transaction to preserve a newer pair. The previous image is
 boot recovery, not a snapshot of the whole installation or its module tree.
@@ -93,7 +109,7 @@ under `/devario`; adapt that export path to the server. Unsigned or tampered
 network images fail verification. Local USB/optical boot does not require CMS.
 
 Before migrating an existing installation, save its matching kernel, initramfs,
-and Limine configuration outside filenames subject to package removal hooks.
+and systemd-boot configuration outside filenames subject to package removal hooks.
 Replace the provider and install `devario-boot` in the same dependency-resolved
 Shelly transaction, then run `boot-update`. Verify both boot entries and retain
 installation media for recovery. Custom presets, keyfiles, external kernels,

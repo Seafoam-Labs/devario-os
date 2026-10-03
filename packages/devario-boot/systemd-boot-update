@@ -1,0 +1,105 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -euo pipefail
+
+boot_dir=/boot
+installed_marker=/var/lib/devario/systemd-boot-installed
+legacy_marker=/var/lib/devario/limine-installed
+install_mode=false
+check_only=false
+case "${1:-}" in
+  --install) install_mode=true; shift ;;
+  --check) check_only=true; shift ;;
+  '') ;;
+  *) echo "Usage: ${0##*/} [--install|--check]" >&2; exit 64 ;;
+esac
+(( $# == 0 )) || exit 64
+fail() { echo "devario-systemd-boot: $*" >&2; exit 1; }
+note() { echo "devario-systemd-boot: $*"; }
+
+# Assembly of the live image must never deploy a target bootloader.
+if [[ "$install_mode" == false && "$check_only" == false \
+  && ! -e "$installed_marker" && ! -e "$legacy_marker" ]]; then
+  note 'target installation marker is absent; skipping live-image transaction'
+  exit 0
+fi
+[[ -d /sys/firmware/efi ]] || fail 'UEFI is required. Reboot the installer in UEFI mode.'
+if [[ -r /sys/firmware/efi/fw_platform_size ]]; then
+  [[ "$(cat /sys/firmware/efi/fw_platform_size)" == 64 ]] \
+    || fail 'Devario installation requires 64-bit UEFI firmware.'
+fi
+for tool in bootctl findmnt install chmod mktemp mv rm; do
+  command -v "$tool" >/dev/null || fail "required command is unavailable: $tool"
+done
+[[ "$(findmnt -nro TARGET --mountpoint "$boot_dir")" == "$boot_dir" ]] \
+  || fail "$boot_dir must be a mounted EFI System Partition."
+[[ "$(findmnt -nro FSTYPE --mountpoint "$boot_dir")" == vfat ]] \
+  || fail "$boot_dir must be a FAT EFI System Partition."
+# Keep bootctl's partition-type validation enabled, including inside Calamares.
+unset SYSTEMD_RELAX_ESP_CHECKS SYSTEMD_RELAX_XBOOTLDR_CHECKS
+[[ "$(bootctl --esp-path="$boot_dir" --print-esp-path)" == "$boot_dir" ]] \
+  || fail "$boot_dir is not a valid EFI System Partition."
+[[ -s /usr/lib/systemd/boot/efi/systemd-bootx64.efi \
+  || -s /usr/lib/systemd/boot/efi/systemd-bootx64.efi.signed ]] \
+  || fail 'the systemd-boot x86-64 EFI executable is missing'
+[[ "$check_only" == false ]] || exit 0
+
+for file in vmlinuz-linux-devario initramfs-linux-devario.img initramfs-linux-devario-fallback.img; do
+  [[ -s "$boot_dir/$file" ]] || fail "$boot_dir/$file is missing or empty"
+done
+helper_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+kernel_cmdline="$("$helper_dir/kernel-command-line")"
+[[ -n "$kernel_cmdline" && "$kernel_cmdline" != *$'\n'* && "$kernel_cmdline" != *$'\r'* ]] \
+  || fail 'invalid generated kernel command line'
+install -d -m 0755 "$boot_dir/loader/entries"
+staging="$(mktemp -d "$boot_dir/loader/.devario-entries.XXXXXX")"
+trap 'rm -rf -- "$staging"' EXIT
+write_entry() {
+  local filename="$1" title="$2" kernel="$3" initrd="$4" order="$5"
+  printf 'title %s\nsort-key %s\nlinux %s\ninitrd %s\noptions %s\n' \
+    "$title" "$order" "$kernel" "$initrd" "$kernel_cmdline" > "$staging/$filename"
+  chmod 0644 "$staging/$filename"
+}
+write_entry devario.conf 'Devario Linux' /vmlinuz-linux-devario /initramfs-linux-devario.img devario-01
+write_entry devario-fallback.conf 'Devario Linux (fallback initramfs)' \
+  /vmlinuz-linux-devario /initramfs-linux-devario-fallback.img devario-02
+recovery_dir="$boot_dir/devario-recovery/linux-devario"
+if [[ -s "$recovery_dir/vmlinuz-linux-devario" && -s "$recovery_dir/initramfs-linux-devario.img" ]]; then
+  write_entry devario-recovery.conf 'Devario Linux (previous kernel and initramfs)' \
+    /devario-recovery/linux-devario/vmlinuz-linux-devario \
+    /devario-recovery/linux-devario/initramfs-linux-devario.img devario-03
+fi
+# Record this before bootctl, which may create its own default loader.conf.
+if [[ ! -e "$boot_dir/loader/loader.conf" ]]; then
+  printf 'default devario.conf\ntimeout 5\neditor no\n' > "$staging/loader.conf"
+  chmod 0644 "$staging/loader.conf"
+fi
+
+# Explicit installation also migrates existing UEFI Limine installations. Updates
+# preserve firmware boot order. An unwritable NVRAM still permits fallback boot.
+if [[ "$install_mode" == true || ! -e "$installed_marker" ]]; then
+  if ! bootctl --esp-path="$boot_dir" --variables=yes install; then
+    note 'firmware entry creation failed; installing the standard UEFI fallback'
+    bootctl --esp-path="$boot_dir" --variables=no install
+  fi
+else
+  bootctl --esp-path="$boot_dir" --variables=no update
+fi
+# Recent bootctl versions may treat a chroot failure as graceful; check deployment.
+for file in EFI/systemd/systemd-bootx64.efi EFI/BOOT/BOOTX64.EFI; do
+  [[ -s "$boot_dir/$file" ]] || fail "systemd-boot deployment did not create $file"
+done
+# Leave the administrator's loader preferences and other operating systems alone.
+if [[ -f "$staging/loader.conf" ]]; then
+  mv -f -- "$staging/loader.conf" "$boot_dir/loader/loader.conf"
+fi
+for file in devario.conf devario-fallback.conf devario-recovery.conf; do
+  if [[ -f "$staging/$file" ]]; then
+    mv -f -- "$staging/$file" "$boot_dir/loader/entries/$file"
+  elif [[ "$file" == devario-recovery.conf ]]; then
+    rm -f -- "$boot_dir/loader/entries/$file"
+  fi
+done
+install -Dm0644 /dev/null "$installed_marker"
+rm -f -- "$legacy_marker"
+note 'systemd-boot and Devario boot entries are up to date'

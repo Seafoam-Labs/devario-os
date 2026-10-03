@@ -33,7 +33,6 @@ greetd
 gvfs
 hwinfo
 intel-ucode
-limine
 linux-devario
 linux-devario-headers
 linux-firmware
@@ -65,6 +64,7 @@ shelly-cli
 squashfs-tools
 sudo
 syslinux
+systemd
 terminus-font
 ttf-dejavu
 udisks2

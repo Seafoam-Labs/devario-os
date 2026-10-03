@@ -28,7 +28,7 @@ evidence that a public release passed runtime, installation, or hardware tests.
 - [ ] Exact live ISO passes BIOS and UEFI boots.
 - [ ] Calamares graphical flow is manually reviewed and the review is signed by
       Zoey's active fixed approval key, with `reviewerFingerprint` recorded.
-- [ ] Exact locked installed disk passes BIOS and UEFI boots; qcow2 evidence has
+- [ ] Exact locked installed disk passes UEFI systemd-boot checks; qcow2 evidence has
       no backing or external data file.
 - [ ] Required physical hardware, refresh/upgrade, rotation, recovery, and
       rollback tests have genuine retained evidence.

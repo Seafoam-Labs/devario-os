@@ -3,7 +3,7 @@
 
 # Image acceptance matrix
 
-Every release candidate supplies all four automated boot results below. Each
+Every release candidate supplies all three automated boot results below. Each
 result is produced by `scripts/test-image-boot.sh` from the exact locked bytes.
 Every result, installation lock, signed review, and promotion-acceptance
 manifest carries the exact candidate version as well as its lock digest.
@@ -11,7 +11,7 @@ manifest carries the exact candidate version as well as its lock digest.
 | System under test | BIOS | UEFI | Required binding |
 | --- | --- | --- | --- |
 | Candidate live ISO | pass | pass | candidate-lock SHA-256 and exact ISO subject |
-| Calamares-installed disk | pass | pass | candidate, source ISO, installation lock, exact disk |
+| Calamares-installed disk | unsupported | pass | candidate, source ISO, installation lock, exact disk |
 
 The guest self-check requires the requested edition, firmware environment,
 installed/live state, and exact section-scoped `SigLevel = Required` for
@@ -19,7 +19,9 @@ installed/live state, and exact section-scoped `SigLevel = Required` for
 exactly one credential-free HTTPS `Server`. A global setting does not satisfy
 the check. The self-check runs only after `shelly-keyring-init.service` succeeds
 and requires its `/var/lib/devario/shelly-keyring.ready` marker. Community
-rejects managed repository material.
+rejects managed repository material. Installed checks also require the systemd-boot
+marker, normal/fallback entries, and deployed EFI binaries. Promotion evidence
+uses schema version 2; version 1 represented the previous four-case matrix.
 
 The log must contain exactly one complete line in this form:
 

@@ -23,7 +23,7 @@ flowchart LR
     Image --> System["Installed Devario system"]
     Shelly --> System
     Desktop["Aqueous + Pearl"] --> System
-    Installer["Calamares + Limine"] --> System
+    Installer["Calamares + systemd-boot"] --> System
     Edition["Optional external edition data"] -. "validated composition" .-> Profile
 ```
 
@@ -32,7 +32,7 @@ flowchart LR
 | Devario ISO profile | Defines the live image, installer environment, boot media, and installed-system defaults. |
 | Aqueous and Pearl | Provide the Wayland compositor, shell, greeter, and desktop session. |
 | Calamares | Copies the tested live root and configures the target installation. |
-| Limine | Boots installed systems through UEFI or legacy BIOS. |
+| systemd-boot | Boots installed systems through 64-bit UEFI. |
 | `devario-dracut` and `devario-boot` | Supply the pinned initramfs generator and Devario-owned kernel, image, recovery, and boot-update policy. |
 | Shelly from `devario-core` | Supplies the native RLPM backend and performs repository synchronization, package installation, removal, upgrade, signature verification, and inventory. |
 | `devario-base` | Supplies base dependencies, Shelly configuration, runtime directories, and storage migration. |
@@ -62,7 +62,7 @@ package; it is not a default repository input.
    Shelly to populate the staged Devario root.
 4. The live image boots Aqueous and exposes Calamares.
 5. Calamares copies the prepared live root, configures the selected disk, and
-   installs Limine for the target firmware paths.
+   installs systemd-boot on the target EFI System Partition.
 6. The installed system initializes its own Devario core and Seafoam Labs public keyrings
    before normal package operations.
 
@@ -113,7 +113,7 @@ repository URL, credentials, policy, or packages.
 Implemented here:
 
 - bootable Devario image and installed Aqueous desktop;
-- Calamares installation and Limine boot configuration;
+- Calamares installation and systemd-boot boot configuration;
 - Shelly-only runtime and build boundary;
 - local development signing and release-mode signature enforcement;
 - NVIDIA open-driver detection and startup ordering; and

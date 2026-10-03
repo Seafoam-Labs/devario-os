@@ -2,7 +2,7 @@
 
 pkgname=devario-base
 pkgver=3
-pkgrel=10
+pkgrel=11
 pkgdesc="Minimal package set defining a base Devario installation"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -33,7 +33,7 @@ depends=(
   'xz'
   'licenses'
   'shelly>=3.1.6-2'
-  'devario-boot'
+  'devario-boot>=1-7'
   'devario-keyring'
   'systemd'
   'systemd-sysvcompat'

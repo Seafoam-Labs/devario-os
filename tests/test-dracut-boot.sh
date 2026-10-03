@@ -198,13 +198,14 @@ expect_failure "$boot_package/verify-live-image" "$test_root/image" "$test_root/
 # Exercise the real orchestration with failing/succeeding generator executables.
 cp "$boot_package/boot-update" "$test_root/helpers/"
 printf '#!/bin/sh\nexit 1\n' > "$test_root/helpers/initramfs-update"
-printf '#!/bin/sh\necho limine >> "$TEST_ROOT/order"\n' > "$test_root/helpers/limine-update"
+printf '#!/bin/sh\nif [ "$1" = --check ]; then echo check >> "$TEST_ROOT/order"; exit 0; fi\necho systemd-boot >> "$TEST_ROOT/order"\n' > "$test_root/helpers/systemd-boot-update"
 chmod +x "$test_root/helpers/"*
 expect_failure "$test_root/helpers/boot-update" --install
-[[ ! -e "$test_root/order" ]] || fail 'Limine ran after generator failure'
+[[ "$(cat "$test_root/order")" == check ]] || fail 'systemd-boot ran after generator failure'
+rm "$test_root/order"
 printf '#!/bin/sh\necho generated >> "$TEST_ROOT/order"\n' > "$test_root/helpers/initramfs-update"
 "$test_root/helpers/boot-update" --install
-[[ "$(cat "$test_root/order")" == $'generated\nlimine' ]] || fail 'boot update order'
+[[ "$(cat "$test_root/order")" == $'check\ngenerated\nsystemd-boot' ]] || fail 'boot update order'
 
 # UUID-root LUKS and Btrfs subvolume must survive command-line generation.
 printf 'UUID=root-filesystem / btrfs defaults,subvol=/@ 0 0\nUUID=swap-device none swap defaults 0 0\n' > "$test_root/fstab"

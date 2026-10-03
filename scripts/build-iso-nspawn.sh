@@ -145,7 +145,7 @@ run_container_root() {
 echo "Installing the Devario ISO toolchain through Shelly..."
 run_container_root /usr/bin/shelly sync standard --no-confirm
 run_container_root /usr/bin/shelly install standard --no-confirm \
-  python libisoburn dosfstools mtools squashfs-tools openssl util-linux coreutils limine
+  python libisoburn dosfstools mtools squashfs-tools openssl util-linux coreutils
 
 if [[ -n "${DEVARIO_NSPAWN_WORK_DIR:-}" ]]; then
   container_work_dir="$DEVARIO_NSPAWN_WORK_DIR"

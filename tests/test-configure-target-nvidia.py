@@ -203,7 +203,7 @@ class NvidiaTests(unittest.TestCase):
         self.assertLess(sequence.index("shellprocess@nvidia_preflight"), sequence.index("partition"))
         self.assertLess(sequence.index("unpackfs"), sequence.index("shellprocess@nvidia"))
         self.assertLess(sequence.index("networkcfg"), sequence.index("shellprocess@nvidia"))
-        self.assertLess(sequence.index("shellprocess@nvidia"), sequence.index("shellprocess@limine"))
+        self.assertLess(sequence.index("shellprocess@nvidia"), sequence.index("shellprocess@systemd_boot"))
         for name, chroot, timeout in (("nvidia_preflight", True, 120), ("nvidia", False, 1800)):
             instance = next(i for i in settings["instances"] if i["id"] == name)
             self.assertEqual(instance["module"], "shellprocess")

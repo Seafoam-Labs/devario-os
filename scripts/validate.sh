@@ -85,7 +85,8 @@ required_files=(
   "$profile_dir/airootfs/etc/calamares/settings.conf"
   "$profile_dir/airootfs/etc/calamares/modules/unpackfs.conf"
   "$profile_dir/airootfs/etc/calamares/modules/partition.conf"
-  "$profile_dir/airootfs/etc/calamares/modules/limine.conf"
+  "$profile_dir/airootfs/etc/calamares/modules/systemd_boot.conf"
+  "$profile_dir/airootfs/etc/calamares/modules/boot_preflight.conf"
   "$profile_dir/airootfs/etc/calamares/modules/prepare_target.conf"
   "$profile_dir/airootfs/etc/calamares/modules/nvidia_preflight.conf"
   "$profile_dir/airootfs/etc/calamares/modules/nvidia.conf"
@@ -101,7 +102,7 @@ required_files=(
   "$profile_dir/airootfs/etc/systemd/system/multi-user.target.wants/devario-acceptance-self-check.service"
   "$profile_dir/airootfs/etc/systemd/system/shelly-keyring-init.service"
   "$profile_dir/airootfs/usr/lib/devario/acceptance-self-check"
-  "$project_dir/packages/devario-boot/limine-update"
+  "$project_dir/packages/devario-boot/systemd-boot-update"
   "$profile_dir/airootfs/usr/lib/devario/prepare-target-kernel"
   "$profile_dir/airootfs/usr/local/bin/devario-aqueous-live-session"
   "$project_dir/packages/devario-boot/95-devario-boot.hook"
@@ -244,7 +245,7 @@ done < <(
   find "$project_dir/packages" -mindepth 2 -maxdepth 2 -type f -name PKGBUILD -print
   printf '%s\n' "$project_dir/scripts/lib/edition.sh"
   printf '%s\n' "$profile_dir/late-airootfs/etc/skel/.bashrc"
-  for boot_helper in kernel.sh kernel-command-line initramfs-update boot-update limine-update module-setup.sh live-root.sh install-root.sh verify-live-image; do
+  for boot_helper in kernel.sh kernel-command-line initramfs-update boot-update systemd-boot-update module-setup.sh live-root.sh install-root.sh verify-live-image; do
     printf '%s\n' "$project_dir/packages/devario-boot/$boot_helper"
   done
   printf '%s\n' "$profile_dir/airootfs/usr/lib/devario/prepare-target-kernel"
@@ -280,6 +281,9 @@ fi
 if ! DEVARIO_VALIDATION_TEST_WHEELHOUSE="${DEVARIO_VALIDATION_WHEELHOUSE:-${VIRTUAL_ENV%/envs/*}/wheels}" \
   python3 "$project_dir/tests/test-validation-env.py"; then
   fail "Python validation environment tests failed"
+fi
+if ! DEVARIO_PROFILE_DIR="$profile_dir" python3 "$project_dir/tests/test-systemd-boot.py"; then
+  fail "systemd-boot deployment and installer preflight tests failed"
 fi
 if ! python3 "$project_dir/tests/test-stage-core-repository.py"; then
   fail "Repository staging and provider selection tests failed"
@@ -398,7 +402,7 @@ package_is_listed() {
 for required_package in \
   aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous \
   calamares ckbcomp devario-desktop \
-  devario-base devario-boot devario-dracut devario-keyring greetd limine pearl pearl-greeter shelly fastfetch \
+  devario-base devario-boot devario-dracut devario-keyring greetd systemd pearl pearl-greeter shelly fastfetch \
   linux-devario linux-devario-headers nvidia-open-dkms nvidia-utils \
   vulkan-intel vulkan-radeon vulkan-swrast xorg-xwayland; do
   if ! package_is_listed "$required_package"; then
@@ -845,9 +849,9 @@ services_systemd="$profile_dir/airootfs/etc/calamares/modules/services-systemd.c
 calamares_settings="$profile_dir/airootfs/etc/calamares/settings.conf"
 unpackfs_config="$profile_dir/airootfs/etc/calamares/modules/unpackfs.conf"
 partition_config="$profile_dir/airootfs/etc/calamares/modules/partition.conf"
-limine_config="$profile_dir/airootfs/etc/calamares/modules/limine.conf"
-limine_update="$project_dir/packages/devario-boot/limine-update"
-limine_hook="$project_dir/packages/devario-boot/95-devario-boot.hook"
+systemd_boot_config="$profile_dir/airootfs/etc/calamares/modules/systemd_boot.conf"
+systemd_boot_update="$project_dir/packages/devario-boot/systemd-boot-update"
+systemd_boot_hook="$project_dir/packages/devario-boot/95-devario-boot.hook"
 live_greetd_config="$profile_dir/late-airootfs/etc/greetd/config.toml"
 installed_greetd_config="$project_dir/packages/devario-aqueous-desktop/greetd-config.toml"
 live_session_wrapper="$profile_dir/airootfs/usr/local/bin/devario-aqueous-live-session"
@@ -904,9 +908,9 @@ if grep -Eq '^[[:space:]]*-[[:space:]]*(grubcfg|bootloader)[[:space:]]*$' \
   fail "Calamares still schedules a GRUB bootloader module"
 fi
 if ! grep -Fq 'module: shellprocess' "$calamares_settings" \
-  || ! grep -Fq 'config: limine.conf' "$calamares_settings" \
-  || ! grep -Fq 'shellprocess@limine' "$calamares_settings"; then
-  fail "Calamares does not schedule the dedicated Limine installation job"
+  || ! grep -Fq 'config: systemd_boot.conf' "$calamares_settings" \
+  || ! grep -Fq 'shellprocess@systemd_boot' "$calamares_settings"; then
+  fail "Calamares does not schedule the dedicated systemd-boot installation job"
 fi
 if ! grep -Fqx '  - source: "/run/devario/install-root"' "$unpackfs_config" \
   || ! grep -Fqx '    sourcefs: "file"' "$unpackfs_config"; then
@@ -952,36 +956,35 @@ for live_boot_config in \
 done
 if ! grep -Fqx 'efiSystemPartition: "/boot"' "$partition_config" \
   || ! grep -Fqx 'efiSystemPartitionSize: 4096M' "$partition_config" \
-  || ! grep -Fqx 'createHybridBootloaderLayout: true' "$partition_config" \
+  || ! grep -Fqx 'createHybridBootloaderLayout: false' "$partition_config" \
   || ! grep -Fqx 'defaultFileSystemType: "btrfs"' "$partition_config"; then
-  fail "Calamares must use Btrfs with the 4096M FAT /boot and hybrid Limine layout"
+  fail "Calamares must use Btrfs with the 4096M FAT /boot for UEFI systemd-boot"
 fi
-if ! grep -Fqx '  - "/usr/lib/devario/boot-update --install"' "$limine_config"; then
-  fail "the Limine Calamares job does not invoke the target installer"
+if ! grep -Fqx '  - "/usr/lib/devario/boot-update --install"' "$systemd_boot_config"; then
+  fail "the systemd-boot Calamares job does not invoke the target installer"
 fi
-if [[ ! -x "$limine_update" ]]; then
-  fail "the installed Limine update helper must be executable"
+if [[ ! -x "$systemd_boot_update" ]]; then
+  fail "the installed systemd-boot update helper must be executable"
 fi
-for limine_helper_text in \
-  'path: boot():/vmlinuz-linux-devario' \
-  'module_path: boot():/initramfs-linux-devario.img' \
-  'module_path: boot():/initramfs-linux-devario-fallback.img' \
-  'install -Dm0644 "$limine_share/BOOTX64.EFI"' \
-  'limine bios-install "$disk_device"' \
-  'installed_marker=/var/lib/devario/limine-installed' \
+for systemd_boot_helper_text in \
+  '/vmlinuz-linux-devario /initramfs-linux-devario.img' \
+  '/vmlinuz-linux-devario /initramfs-linux-devario-fallback.img' \
+  'bootctl --esp-path="$boot_dir" --variables=yes install' \
+  'bootctl --esp-path="$boot_dir" --variables=no update' \
+  'installed_marker=/var/lib/devario/systemd-boot-installed' \
   'target installation marker is absent; skipping live-image transaction' \
   'kernel-command-line'; do
-  if ! grep -Fq "$limine_helper_text" "$limine_update"; then
-    fail "the Limine update helper is missing: $limine_helper_text"
+  if ! grep -Fq "$systemd_boot_helper_text" "$systemd_boot_update"; then
+    fail "the systemd-boot update helper is missing: $systemd_boot_helper_text"
   fi
 done
-for limine_hook_target in devario-boot devario-dracut amd-ucode intel-ucode limine; do
-  if ! grep -Fqx "Target = $limine_hook_target" "$limine_hook"; then
-    fail "the Limine ALPM hook does not track $limine_hook_target"
+for systemd_boot_hook_target in devario-boot devario-dracut amd-ucode intel-ucode systemd; do
+  if ! grep -Fqx "Target = $systemd_boot_hook_target" "$systemd_boot_hook"; then
+    fail "the systemd-boot RLPM hook does not track $systemd_boot_hook_target"
   fi
 done
-if ! grep -Fqx 'Exec = /usr/lib/devario/boot-update' "$limine_hook"; then
-  fail "the Limine ALPM hook does not invoke the update helper"
+if ! grep -Fqx 'Exec = /usr/lib/devario/boot-update' "$systemd_boot_hook"; then
+  fail "the systemd-boot RLPM hook does not invoke the update helper"
 fi
 
 installed_grub_references="$(
@@ -1184,6 +1187,9 @@ pacman_reference_is_allowed() {
       [[ "$text" == *'"format": "{pacman} (Shelly)"'* ]]; return ;;
     scripts/build-packages.sh)
       [[ "$text" == *'PACMAN="$makepkg_adapter"'* ]]; return ;;
+    scripts/audit-iso-package-paths.py)
+      # Detection of forbidden package paths is not a runtime dependency.
+      [[ "$text" == *'"usr/share/pacman/keyrings/"'* ]]; return ;;
   esac
   return 1
 }

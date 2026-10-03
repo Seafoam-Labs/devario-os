@@ -25,9 +25,8 @@ Target = intel-ucode
 Target = nvidia-open-dkms
 Target = nvidia-utils
 Target = linux-devario-headers
-Target = limine
 
 [Action]
-Description = Generating Devario initramfs and updating Limine...
+Description = Generating Devario initramfs and updating systemd-boot...
 When = PostTransaction
 Exec = /usr/lib/devario/boot-update

@@ -394,7 +394,7 @@ devario_compose_profile() {
     [devario-base]=1
     [devario-keyring]=1
     [greetd]=1
-    [limine]=1
+    [systemd]=1
     [linux-devario]=1
     [linux-devario-headers]=1
     [devario-boot]=1

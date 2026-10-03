@@ -37,9 +37,8 @@ The installed system does not ship the `pacman` or `pacman-key` executables. It 
 - Calamares 3.4.2 built from Codeberg with [Pearl appearance](packages/calamares/README.md), including dark/light palettes and reduced-motion support
 - Devario-packaged `ckbcomp` for Calamares keyboard previews on clean Arch builders
 - Offline installation by unpacking the tested live SquashFS
-- Limine installation for BIOS and UEFI targets, with a FAT `/boot` shared by
-  both firmware paths
-- ext4 as the default filesystem, with Btrfs, XFS, and F2FS available
+- systemd-boot installation for 64-bit UEFI targets, with a FAT EFI partition at `/boot`
+- Btrfs as the default filesystem, with Btrfs, XFS, and F2FS available
 - Shelly-backed repository search, installation, removal, upgrades, and keyring initialization
 - Persistent first-boot initialization of the Devario signing keyring
 
@@ -106,12 +105,11 @@ session at boot, but the account is not materialized in the SquashFS copied by
 Calamares. Target preparation also removes any legacy `liveuser` account as a
 defense against images built before this separation was introduced.
 
-Automatic partitioning creates a GPT disk with a 1 GiB FAT `/boot` and an
-8 MiB BIOS boot partition, allowing the same installation to start through
-Limine under UEFI or legacy BIOS. A manual layout must likewise provide a FAT
-partition mounted at `/boot`; legacy BIOS on GPT additionally requires a BIOS
-boot partition. The installer stops instead of writing an unbootable Limine
-configuration when those requirements are not met.
+Installations require 64-bit UEFI. Automatic partitioning creates a GPT disk
+with a 4096 MiB FAT EFI System Partition mounted at `/boot`; manual layouts
+must provide the same mount and EFI partition type. Calamares checks UEFI
+before partitioning. The live USB can still boot through legacy BIOS for live
+use, but must be rebooted in UEFI mode before installing.
 
 The native ISO build prerequisites and pending full-image verification are
 documented in [ISO construction](docs/ISO-BUILDER.md). Snapshot and bootstrap
@@ -215,7 +213,7 @@ no `python-jsonschema` repository package is required. See
 for offline caches and standalone validator commands.
 
 ```sh
-shelly install standard --upgrade python libisoburn dosfstools mtools squashfs-tools openssl util-linux base-devel git limine
+shelly install standard --upgrade python libisoburn dosfstools mtools squashfs-tools openssl util-linux base-devel git
 ```
 
 For virtual-machine testing, the QEMU helper installs `qemu-desktop` and
@@ -513,8 +511,8 @@ Before publishing an image, verify that:
 3. The Pearl application launcher lists Install Devario and opens Calamares
    through Polkit.
 4. Automatic and manual partitioning complete successfully.
-5. The installed system boots through Limine without the ISO attached in both
-   UEFI and legacy BIOS modes.
+5. The installed system boots through systemd-boot in UEFI mode without the ISO attached.
+   Installation launched from BIOS mode is rejected before partitioning.
 6. NetworkManager and `pearl-greeter.service` are enabled on the installed system.
 7. Pearl Greeter lists `Aqueous`, authenticates a user, and starts the
    packaged UWSM session.
@@ -522,11 +520,11 @@ Before publishing an image, verify that:
 9. Shelly comes from `devario-core`, uses its native RLPM backend, and runs without `devario-alpm-runtime`.
 10. Keyring initialization and a signed full system upgrade succeed.
 11. Package install, local-package install, removal, provider resolution, and ALPM hooks work.
-12. A kernel, dracut, DKMS, microcode, or Limine upgrade runs Devario's ordered
+12. A kernel, dracut, DKMS, microcode, or systemd upgrade runs Devario's ordered
     dracut generation and boot update, refreshes
-    `limine.conf` and the deployed Limine binaries, and leaves the system bootable.
+    `/boot/loader/entries/devario*.conf` and the deployed systemd-boot binaries, and leaves the system bootable.
     Verify that the active release contains `devario` in `uname -r` and that
-    both normal and fallback Limine entries use the matching artifact names.
+    both normal and fallback systemd-boot entries use the matching artifact names.
     See [the boot contract and recovery instructions](docs/DRACUT-BOOT.md).
 13. On Turing-or-newer NVIDIA hardware, `/run/devario/gpu-driver` contains
     `nvidia`, `nvidia-smi` succeeds, and

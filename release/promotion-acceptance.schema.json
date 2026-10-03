@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "candidateSha256", "candidateVersion", "edition", "diskFormat", "installedDisk", "installationLock", "installationReview", "results"],
   "properties": {
-    "schemaVersion": {"const": 1},
+    "schemaVersion": {"const": 2},
     "candidateSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "candidateVersion": {"type": "string", "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
     "edition": {"enum": ["community", "managed"]},
@@ -19,7 +19,7 @@
       "properties": {"document": {"$ref": "#/$defs/file"}, "signature": {"$ref": "#/$defs/file"}}
     },
     "results": {
-      "type": "array", "minItems": 4, "maxItems": 4,
+      "type": "array", "minItems": 3, "maxItems": 3,
       "items": {
         "type": "object", "additionalProperties": false,
         "required": ["mode", "firmware", "document", "log"],
@@ -32,7 +32,6 @@
       "allOf": [
         {"contains": {"properties": {"mode": {"const": "live"}, "firmware": {"const": "bios"}}, "required": ["mode", "firmware"]}, "minContains": 1, "maxContains": 1},
         {"contains": {"properties": {"mode": {"const": "live"}, "firmware": {"const": "uefi"}}, "required": ["mode", "firmware"]}, "minContains": 1, "maxContains": 1},
-        {"contains": {"properties": {"mode": {"const": "installed"}, "firmware": {"const": "bios"}}, "required": ["mode", "firmware"]}, "minContains": 1, "maxContains": 1},
         {"contains": {"properties": {"mode": {"const": "installed"}, "firmware": {"const": "uefi"}}, "required": ["mode", "firmware"]}, "minContains": 1, "maxContains": 1}
       ]
     }

@@ -12,32 +12,36 @@ write_core_shelly() {
   local server="${1:-https://packages.devario.example/core/\$arch}"
   printf '%s\n' '[options]' 'SigLevel = Never' '[devario-core]' 'SigLevel = Required' "Server = $server" > "$root/etc/shelly.conf"
 }
+mkdir -p "$root/boot/loader/entries" "$root/boot/EFI/systemd" "$root/boot/EFI/BOOT"
+: > "$root/var/lib/devario/systemd-boot-installed"
+for file in loader/entries/devario.conf loader/entries/devario-fallback.conf EFI/systemd/systemd-bootx64.efi EFI/BOOT/BOOTX64.EFI; do printf 'boot fixture\n' > "$root/boot/$file"; done
 write_os_release community; write_core_shelly
-output="$($check --root "$root" --mode installed --firmware bios --edition community)"
-[[ "$output" == 'DEVARIO_ACCEPTANCE:PASS mode=installed firmware=bios edition=community' ]] || { echo 'Valid Community self-check did not pass.' >&2; exit 1; }
+if "$check" --root "$root" --mode installed --firmware bios --edition community >/dev/null 2>&1; then echo 'Installed BIOS unexpectedly accepted.' >&2; exit 1; fi
+output="$($check --root "$root" --mode installed --firmware uefi --edition community)"
+[[ "$output" == 'DEVARIO_ACCEPTANCE:PASS mode=installed firmware=uefi edition=community' ]] || { echo 'Valid Community self-check did not pass.' >&2; exit 1; }
 grep -Fqx 'Requires=shelly-keyring-init.service' "$service" || { echo 'Acceptance service does not require successful keyring initialization.' >&2; exit 1; }
 grep -Eq '^After=.*\bshelly-keyring-init\.service\b' "$service" || { echo 'Acceptance service is not ordered after keyring initialization.' >&2; exit 1; }
 ! grep -Fqx 'Requires=shelly-storage-migrate.service' "$project_dir/iso/airootfs/etc/systemd/system/shelly-keyring-init.service" || { echo 'Keyring initialization must not relocate RLPM state.' >&2; exit 1; }
 rm -f "$root/var/lib/devario/shelly-keyring.ready"
-if "$check" --root "$root" --mode installed --firmware bios --edition community >/dev/null 2>&1; then echo 'Self-check passed without the keyring-ready marker.' >&2; exit 1; fi
+if "$check" --root "$root" --mode installed --firmware uefi --edition community >/dev/null 2>&1; then echo 'Self-check passed without the keyring-ready marker.' >&2; exit 1; fi
 : > "$root/var/lib/devario/shelly-keyring.ready"
 
 printf '%s\n' '[options]' 'SigLevel = Required' '[devario-core]' 'Server = https://packages.devario.example/core/' > "$root/etc/shelly.conf"
-if "$check" --root "$root" --mode installed --firmware bios --edition community >/dev/null 2>&1; then echo 'Global SigLevel incorrectly satisfied the repository requirement.' >&2; exit 1; fi
+if "$check" --root "$root" --mode installed --firmware uefi --edition community >/dev/null 2>&1; then echo 'Global SigLevel incorrectly satisfied the repository requirement.' >&2; exit 1; fi
 write_core_shelly; sed -i 's#https://packages#https://user:password@packages#' "$root/etc/shelly.conf"
-if "$check" --root "$root" --mode installed --firmware bios --edition community >/dev/null 2>&1; then echo 'Credential-bearing repository URL was accepted.' >&2; exit 1; fi
+if "$check" --root "$root" --mode installed --firmware uefi --edition community >/dev/null 2>&1; then echo 'Credential-bearing repository URL was accepted.' >&2; exit 1; fi
 for unsafe_suffix in '?token=value' '#fragment' '\\escaped'; do
   write_core_shelly "https://packages.devario.example/core/\$arch$unsafe_suffix"
-  if "$check" --root "$root" --mode installed --firmware bios --edition community >/dev/null 2>&1; then
+  if "$check" --root "$root" --mode installed --firmware uefi --edition community >/dev/null 2>&1; then
     echo "Unsafe repository URL suffix was accepted: $unsafe_suffix" >&2
     exit 1
   fi
 done
 write_core_shelly; printf '%s\n' 'Server = https://second.devario.example/core/' >> "$root/etc/shelly.conf"
-if "$check" --root "$root" --mode installed --firmware bios --edition community >/dev/null 2>&1; then echo 'Duplicate repository Server was accepted.' >&2; exit 1; fi
+if "$check" --root "$root" --mode installed --firmware uefi --edition community >/dev/null 2>&1; then echo 'Duplicate repository Server was accepted.' >&2; exit 1; fi
 
 write_os_release managed; write_core_shelly
-if "$check" --root "$root" --mode installed --firmware bios --edition managed >/dev/null 2>&1; then echo 'Managed image passed without managed repository trust.' >&2; exit 1; fi
+if "$check" --root "$root" --mode installed --firmware uefi --edition managed >/dev/null 2>&1; then echo 'Managed image passed without managed repository trust.' >&2; exit 1; fi
 printf '%s\n' '[devario-managed]' 'SigLevel = Required' 'Server = https://packages.devario.example/managed/$arch' >> "$root/etc/shelly.conf"
-"$check" --root "$root" --mode installed --firmware bios --edition managed >/dev/null
+"$check" --root "$root" --mode installed --firmware uefi --edition managed >/dev/null
 echo 'Acceptance self-check tests passed.'

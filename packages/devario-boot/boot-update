@@ -7,14 +7,15 @@ case "${1:-}" in
   '') install_mode=false ;;
   *) exit 64 ;;
 esac
-if [[ "$install_mode" == false && ! -e /var/lib/devario/limine-installed ]]; then
+if [[ "$install_mode" == false && ! -e /var/lib/devario/systemd-boot-installed && ! -e /var/lib/devario/limine-installed ]]; then
   echo 'Devario boot update: target installation marker is absent; skipping live-image transaction.'
   exit 0
 fi
+"$helper_dir/systemd-boot-update" --check
 "$helper_dir/initramfs-update" --mode installed
-# A single process owns this sequence: a failed generation never refreshes Limine.
+# A single process owns this sequence: a failed generation never refreshes systemd-boot.
 if [[ "$install_mode" == true ]]; then
-  "$helper_dir/limine-update" --install
+  "$helper_dir/systemd-boot-update" --install
 else
-  "$helper_dir/limine-update"
+  "$helper_dir/systemd-boot-update"
 fi
