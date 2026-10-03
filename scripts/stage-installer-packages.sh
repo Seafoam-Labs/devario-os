@@ -47,7 +47,10 @@ done
 # The downloaded package signatures remain intact. Only locally regenerated
 # database metadata loses its old signature; it is checked against every archive.
 rm -f -- "$stage"/devario-core.{db,files}{,.tar.zst}{,.sig}
-repo-add "$stage/devario-core.db.tar.zst" "$stage"/*.pkg.tar.zst
+shelly repo-db add "$stage/devario-core.db.tar.zst" "$stage"/*.pkg.tar.zst
+# Shelly releases its flock but retains the sidecar. This private staging tree
+# has no other writer; omit the inactive lock from the published closure.
+rm -f -- "$stage/devario-core.db.tar.zst.lock"
 echo 'Verifying the regenerated repository and local installer inputs...'
 devario_verify_repository "$stage" devario-core "$keyring_dir" development local-installer
 python3 "$script_dir/audit-iso-repositories.py" --database devario-core "$stage/devario-core.db" \

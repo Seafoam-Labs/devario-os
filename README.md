@@ -277,7 +277,8 @@ To create a local Community ISO from start to finish, run
 
 The script installs/upgrades host tools through Shelly, prepares the pinned
 Python validation environment, validates the OS sources, downloads and verifies
-the signed core repository, builds the six local installer packages, audits the
+the signed core repository, builds the six local installer packages in an isolated
+root populated exclusively from `devario-core`, audits the
 resulting package set, assembles the ISO with sudo, and verifies its SHA-256
 checksum. A configured Shelly installation, sudo access, and the build host
 described above are prerequisites. It uses its own checkout regardless of the
@@ -288,6 +289,21 @@ the caller's settings at `work/iso-runs/<run>/shelly-config/`. That selection
 also reaches elevated dependency transactions and ISO assembly. Your normal
 Shelly settings are preserved. A Shelly version that cannot select RLPM stops
 the build before any package transactions.
+
+GCC, glibc (including `crt1.o`), binutils, and all recipe build dependencies come
+from that verified snapshot. The root is provisioned through the snapshot's
+RLPM-only Shelly CLI, and native package builds run as an unprivileged user in
+systemd-nspawn. Host compiler flags, startup objects, and CachyOS repositories
+do not enter the package build. Calamares's x86-64-v3 ISA check remains enabled.
+The builder records planned and installed package versions under
+`work/iso-runs/<run>/packages/` and retains its root and logs there. This path
+constructs the root directly from package archives; no separate bootstrap image
+is required. `scripts/build-packages.sh` remains the native/controlled makepkg
+entry point for separately managed builders.
+
+Missing build dependencies stop the run before provisioning and are listed with
+their requiring packages in `packages/dependency-audit.json`. Publish the missing
+packages to `devario-core`, then rerun with a fresh repository snapshot.
 
 Each run retains its ISO, checksum, and assembler reports under
 `work/iso-runs/<run>/out/`, with `build.log` beside that directory. Package and

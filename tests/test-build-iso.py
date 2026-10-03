@@ -54,12 +54,13 @@ if name == "stage-core-repository.py":
     sys.exit(int(os.environ.get("INITIAL_AUDIT_FAILURE", "0")))
 if name == "verify":
     assert (pathlib.Path(args[0]) / "verified-snapshot").exists()
-if name == "build-packages.sh":
+if name == "build-packages-core.py":
     assert os.geteuid() != 0
-    assert os.environ["DEVARIO_BUILDER_PREPARE"] == "0"
-    assert os.environ["DEVARIO_SIGNING_KEY"] == ""
     assert json.loads((pathlib.Path(os.environ["XDG_CONFIG_HOME"]) / "shelly/config.json").read_text())["NativePackageBackend"] == "rlpm"
-    (pathlib.Path(os.environ["DEVARIO_PACKAGE_OUTPUT_DIR"]) / "installer-packages").touch()
+    assert (pathlib.Path(args[args.index("--repo") + 1]) / "verified-snapshot").exists()
+    work = pathlib.Path(args[args.index("--work") + 1])
+    assert not work.exists()
+    (work / "artifacts").mkdir(parents=True)
 if name == "build-iso.sh":
     assert json.loads((pathlib.Path(os.environ["XDG_CONFIG_HOME"]) / "shelly/config.json").read_text())["NativePackageBackend"] == "rlpm"
     work = pathlib.Path(os.environ["DEVARIO_WORK_DIR"])
@@ -95,12 +96,12 @@ class BuildISOTests(unittest.TestCase):
         # These are checked for presence but run only inside the real helpers.
         for name in ("bsdtar", "repo-add", "gpg", "gpgv", "git", "patch", "xorriso",
                      "mkfs.fat", "mcopy", "mksquashfs", "openssl", "unshare",
-                     "mount", "umount", "chroot", "readelf", "makepkg"):
+                     "mount", "umount", "chroot", "readelf", "systemd-nspawn"):
             (self.bin / name).symlink_to("/usr/bin/true")
-        for name in ("prepare-validation-env.py", "stage-core-repository.py",
+        for name in ("prepare-validation-env.py", "stage-core-repository.py", "build-packages-core.py",
                      "audit-iso-repositories.py", "audit-iso-package-paths.py"):
             (self.scripts / name).touch()
-        for name in ("build-iso.sh", "build-packages.sh", "stage-installer-packages.sh", "validate.sh"):
+        for name in ("build-iso.sh", "stage-installer-packages.sh", "validate.sh"):
             (self.bin / name).symlink_to(mock)
             (self.scripts / name).write_text(f'#!/usr/bin/env bash\nexec {name} "$@"\n')
         (self.scripts / "with-validation-env.sh").write_text('exec "$@"\n')
@@ -134,7 +135,7 @@ class BuildISOTests(unittest.TestCase):
                              DEVARIO_VALIDATION_OFFLINE="1")
         self.assertEqual(result.returncode, 0, result.stdout)
         phases = ["shelly", "prepare-validation-env.py", "validate.sh", "stage-core-repository.py",
-                  "build-packages.sh", "audit-iso-repositories.py", "audit-iso-package-paths.py", "build-iso.sh"]
+                  "build-packages-core.py", "stage-installer-packages.sh", "audit-iso-repositories.py", "audit-iso-package-paths.py", "build-iso.sh"]
         # Backend configuration happens before the Shelly package transaction.
         operations = [call["name"] for call in self.calls() if call["name"] in phases
                       and not (call["name"] == "shelly" and call["args"][0] == "config")]
@@ -147,6 +148,11 @@ class BuildISOTests(unittest.TestCase):
         self.assertEqual(json.loads(self.config.read_text())["NativePackageBackend"], "libalpm")
         build_config = json.loads((self.run_dir / "shelly-config/shelly/config.json").read_text())
         self.assertEqual(build_config, {"NativePackageBackend": "rlpm", "ParallelDownloadCount": 3})
+        self.assertNotIn("build-packages.sh", self.names())
+        host_install = next(call for call in self.calls() if call["name"] == "shelly" and call["args"][0] == "install")
+        self.assertNotIn("base-devel", host_install["args"])
+        staged = next(call for call in self.calls() if call["name"] == "stage-installer-packages.sh")
+        self.assertEqual(staged["args"], [str(self.run_dir / "packages/artifacts")])
         self.assertIn("ISO ready:", result.stdout)
 
     def test_backend_selection_failure_stops_before_package_transactions(self):
@@ -156,7 +162,7 @@ class BuildISOTests(unittest.TestCase):
                 self.log.unlink(missing_ok=True)
                 result = self.invoke(**{failure: "1"})
                 self.assertNotEqual(result.returncode, 0, result.stdout)
-                self.assertNotIn("build-packages.sh", self.names())
+                self.assertNotIn("build-packages-core.py", self.names())
                 self.assertNotIn("build-iso.sh", self.names())
                 self.assertFalse(any(call["name"] == "shelly" and call["args"][0] == "install"
                                      for call in self.calls()))
@@ -172,11 +178,11 @@ class BuildISOTests(unittest.TestCase):
     def test_download_failure_cannot_be_mistaken_for_audit_failure(self):
         result = self.invoke(DOWNLOAD_FAILED="1")
         self.assertNotEqual(result.returncode, 0)
-        self.assertNotIn("build-packages.sh", self.names())
+        self.assertNotIn("build-packages-core.py", self.names())
         self.assertIn("Build failed during Stage and verify", result.stdout)
 
     def test_failed_validation_trust_build_or_audit_stops_assembly(self):
-        for failed_step in ("validate.sh", "verify", "build-packages.sh",
+        for failed_step in ("validate.sh", "verify", "build-packages-core.py", "stage-installer-packages.sh",
                             "audit-iso-repositories.py", "audit-iso-package-paths.py"):
             with self.subTest(step=failed_step):
                 self.run_dir = self.root / failed_step
@@ -196,7 +202,7 @@ class BuildISOTests(unittest.TestCase):
         self.assertEqual((source / "verified-snapshot").read_text(), "original")
         self.assertEqual(list(source.iterdir()), [source / "verified-snapshot"])
         self.assertNotIn("stage-core-repository.py", self.names())
-        self.assertNotIn("build-packages.sh", self.names())
+        self.assertNotIn("build-packages-core.py", self.names())
         self.assertFalse(any(call["name"] == "shelly" and call["args"][0] == "install"
                              for call in self.calls()))
         staged = next(call for call in self.calls() if call["name"] == "stage-installer-packages.sh")

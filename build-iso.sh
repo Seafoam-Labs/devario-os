@@ -19,8 +19,8 @@ usage() {
 Usage: ./build-iso.sh [OPTIONS]
 
 Run as your normal user on an x86_64 Arch/Devario build host with Shelly
-configured. Uses Shelly's RLPM backend for package operations. sudo is used
-for ISO assembly; Shelly elevates for dependencies.
+configured. Uses Shelly's RLPM backend for package operations. Local packages
+build in a fresh container using only devario-core tools and dependencies.
 
   --os-dir DIRECTORY        Override this checkout (also DEVARIO_OS_DIR)
   --repo-dir DIRECTORY      Copy an existing core snapshot instead of downloading
@@ -79,7 +79,7 @@ done
 
 [[ -n "$os_dir" && -d "$os_dir" ]] || die 'Cannot locate devario-os; pass --os-dir DIRECTORY.'
 os_dir="$(realpath -e -- "$os_dir")"
-for helper in build-iso.sh build-packages.sh stage-core-repository.py stage-installer-packages.sh \
+for helper in build-iso.sh build-packages-core.py stage-core-repository.py stage-installer-packages.sh \
   validate.sh with-validation-env.sh prepare-validation-env.py audit-iso-repositories.py \
   audit-iso-package-paths.py lib/repository.sh; do
   [[ -r "$os_dir/scripts/$helper" ]] || die "Missing devario-os helper: scripts/$helper"
@@ -170,15 +170,15 @@ export SHELLY_ELEVATOR="$run_dir/rlpm-elevate"
 phase 'Prepare host tools'
 if (( install_dependencies )); then
   run shelly install standard --upgrade --no-confirm python libisoburn dosfstools mtools \
-    squashfs-tools openssl util-linux base-devel git libarchive gnupg binutils zstd patch
+    squashfs-tools openssl util-linux systemd git libarchive gnupg binutils zstd patch
 fi
 if (( ! dry_run )); then
-  for tool in python3 bsdtar repo-add gpg gpgv git patch awk find sha256sum \
+  for tool in python3 bsdtar gpg gpgv git patch awk find sha256sum \
     xorriso mkfs.fat mcopy mksquashfs openssl unshare mount umount chroot flock readelf; do
     command -v "$tool" >/dev/null || die "Missing host tool: $tool (rerun without --skip-deps)."
   done
   if [[ -z "$installer_dir" ]]; then
-    command -v makepkg >/dev/null || die 'makepkg is required to build installer packages.'
+    command -v systemd-nspawn >/dev/null || die 'systemd-nspawn is required to build installer packages.'
   fi
 fi
 run sudo -v
@@ -226,10 +226,10 @@ if [[ -n "$installer_dir" ]]; then
   run env DEVARIO_CORE_REPO_DIR="$repo_dir" DEVARIO_CORE_KEYRING_DIR="$keyring_dir" \
     bash "$os_dir/scripts/stage-installer-packages.sh" "$installer_dir"
 else
-  run env DEVARIO_PACKAGE_OUTPUT_DIR="$repo_dir" DEVARIO_PACKAGE_WORK_DIR="$run_dir/packages" \
-    DEVARIO_KEYRING_DIR="$keyring_dir" DEVARIO_KEY_POLICY=development \
-    DEVARIO_SIGNING_KEY= DEVARIO_BUILDER_PREPARE=0 \
-    bash "$os_dir/scripts/build-packages.sh"
+  run python3 "$os_dir/scripts/build-packages-core.py" --repo "$repo_dir" \
+    --work "$run_dir/packages" --keyring "$keyring_dir"
+  run env DEVARIO_CORE_REPO_DIR="$repo_dir" DEVARIO_CORE_KEYRING_DIR="$keyring_dir" \
+    bash "$os_dir/scripts/stage-installer-packages.sh" "$run_dir/packages/artifacts"
 fi
 
 phase 'Audit the complete package closure and installed paths'
