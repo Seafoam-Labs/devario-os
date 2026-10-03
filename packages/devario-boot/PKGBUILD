@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 pkgname=devario-boot
 pkgver=1
-pkgrel=5
+pkgrel=6
 pkgdesc="Devario kernel, dracut and Limine lifecycle"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -49,9 +49,9 @@ package() {
   for file in module-setup.sh live-root.sh install-root.sh verify-live-image; do
     install -Dm755 "$srcdir/$file" "$pkgdir/usr/lib/dracut/modules.d/91devario-live/$file"
   done
-  install -Dm644 "$srcdir/95-devario-boot.hook" "$pkgdir/usr/share/libalpm/hooks/95-devario-boot.hook"
-  install -dm755 "$pkgdir/etc/pacman.d/hooks"
+  install -Dm644 "$srcdir/95-devario-boot.hook" "$pkgdir/usr/share/rlpm/hooks/95-devario-boot.hook"
+  install -dm755 "$pkgdir/etc/shelly.d/hooks"
   for file in 60-dracut-remove 90-dracut-install 60-mkinitcpio-remove 90-mkinitcpio-install 95-devario-limine; do
-    ln -s /dev/null "$pkgdir/etc/pacman.d/hooks/$file.hook"
+    ln -s /dev/null "$pkgdir/etc/shelly.d/hooks/$file.hook"
   done
 }

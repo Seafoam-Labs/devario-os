@@ -1,6 +1,6 @@
 pkgname=devario-keyring
 pkgver=20260923
-pkgrel=1
+pkgrel=2
 pkgdesc="Devario repository signing keys"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -20,11 +20,11 @@ sha256sums=(
 
 package() {
   install -Dm644 "$srcdir/devario.gpg" \
-    "$pkgdir/usr/share/pacman/keyrings/devario-core.gpg"
+    "$pkgdir/usr/share/shelly/keyrings/devario-core.gpg"
   install -Dm644 "$srcdir/devario-trusted" \
-    "$pkgdir/usr/share/pacman/keyrings/devario-core-trusted"
+    "$pkgdir/usr/share/shelly/keyrings/devario-core-trusted"
   install -Dm644 "$srcdir/devario-revoked" \
-    "$pkgdir/usr/share/pacman/keyrings/devario-core-revoked"
+    "$pkgdir/usr/share/shelly/keyrings/devario-core-revoked"
   install -Dm644 "$srcdir/active-signer" \
     "$pkgdir/usr/share/devario/keyrings/devario-core-active-signer"
 }

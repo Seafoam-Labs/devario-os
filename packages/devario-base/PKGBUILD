@@ -2,7 +2,7 @@
 
 pkgname=devario-base
 pkgver=3
-pkgrel=9
+pkgrel=10
 pkgdesc="Minimal package set defining a base Devario installation"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -49,10 +49,10 @@ provides=("base=${pkgver}")
 conflicts=('base' 'devario-alpm-runtime')
 replaces=('base' 'devario-alpm-runtime')
 
-backup=('etc/pacman.conf')
+backup=('etc/shelly.conf')
 source=('shelly.conf' 'devario-report.sh' 'devario-report.desktop')
 sha256sums=(
-  '1328582757c6327d232af66301e8f753f3a351965989fe39d004fba80ce1d032'
+  'bc3ec8837e5ee51dc80b1a6a20a3cf223cdfb7ab417337e473dfdfb3dc03aaa2'
   '119b53a8143666fec4dbd22373857651bbe8d14206722209016f71b3fd9a84e6'
   '80393599bf8724177dafe28a258f59756c1713e52a3777fff1663df82deb634d'
 )
@@ -60,15 +60,15 @@ sha256sums=(
 package() {
   install -Dm755 "$srcdir/devario-report.sh" "$pkgdir/usr/bin/devario-report.sh"
   install -Dm644 "$srcdir/devario-report.desktop" "$pkgdir/usr/share/applications/devario-report.desktop"
-  install -Dm644 "$srcdir/shelly.conf" "$pkgdir/etc/pacman.conf"
+  install -Dm644 "$srcdir/shelly.conf" "$pkgdir/etc/shelly.conf"
   install -dm755 \
-    "$pkgdir/etc/pacman.d/gnupg" "$pkgdir/etc/pacman.d/hooks" \
-    "$pkgdir/usr/share/libalpm/hooks" "$pkgdir/var/cache/pacman/pkg" "$pkgdir/var/lib/pacman"
+    "$pkgdir/etc/shelly.d/gnupg" "$pkgdir/etc/shelly.d/hooks" \
+    "$pkgdir/usr/share/rlpm/hooks" "$pkgdir/var/cache/shelly/pkg" "$pkgdir/var/lib/shelly"
   printf '%s\n' 'u alpm - "Shelly Package Management" -' | \
     install -Dm644 /dev/stdin "$pkgdir/usr/lib/sysusers.d/alpm.conf"
   local unit wantsdir="$pkgdir/usr/lib/systemd/system/sockets.target.wants"
   install -dm755 "$wantsdir"
   for unit in dirmngr gpg-agent gpg-agent-browser gpg-agent-extra gpg-agent-ssh keyboxd; do
-    ln -s "../${unit}@.socket" "$wantsdir/${unit}@etc-pacman.d-gnupg.socket"
+    ln -s "../${unit}@.socket" "$wantsdir/${unit}@etc-shelly.d-gnupg.socket"
   done
 }
