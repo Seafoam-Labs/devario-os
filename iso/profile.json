@@ -8,6 +8,7 @@
     "/etc/sudoers.d/10-devario-live": "440",
     "/usr/lib/devario/prepare-target-kernel": "755",
     "/usr/lib/devario/configure-target-nvidia": "755",
+    "/usr/lib/devario/gpu-driver-setup": "755",
     "/usr/local/bin/devario-aqueous-live-session": "755"
   }
 }

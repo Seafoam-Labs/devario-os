@@ -48,10 +48,38 @@ transfers retain verified cache files for retry. A later refresh must use a
 fresh destination, for example `--output repo/core-next`, so the existing
 verified snapshot is not overwritten.
 
+For a local ISO, the six OS-owned packages (`calamares`, `ckbcomp`,
+`devario-filesystem`, `devario-keyring`, `devario-boot`, and `devario-base`) may
+be built locally without signatures. Merge a directory containing their archives
+into the staged snapshot with:
+
+```sh
+./scripts/stage-installer-packages.sh work/iso-preparation/artifacts
+```
+
+This regenerates the local build database without signing it, verifies every
+other package against the bundled active signing key, and checks database hashes,
+dependency resolution, and hook paths before replacing `repo/core`. The previous
+snapshot is preserved alongside it. Any supplied package signature must still
+verify, including signatures on OS-owned packages. The exception applies to
+local ISO construction; controlled production release inputs retain their signing
+requirements. Runtime repository configuration still requires signatures. Some
+OS-owned packages remain installed after installation; this exception does not
+change the policy for future repository downloads.
+
+The temporary build configuration sets `SigLevel = Never` in both `[options]`
+and the local repository section, after the wrapper's archive verification.
+Shelly revision `1913c78d` treats a repository's zero-valued `Never` policy as
+inheritance, so a global `Required` policy incorrectly rejects these unsigned
+installer inputs. `shelly.runtime.conf` continues to require signatures.
+Native assembly output is retained in `out/devario-iso-assembler.log`; its last
+200 lines are also included in the failure report. Retry failed assembly with a
+fresh `DEVARIO_WORK_DIR`; the assembler does not resume populated work trees.
+
 The command emits dependency and installed-path audit reports beside the staged
 repository. A nonzero result can mean the signed snapshot was staged correctly
-but is not yet ISO-ready: missing OS packages or packages with old hook paths
-still require publication. The ISO build repeats these preflight checks and
+but is not yet ISO-ready: missing OS packages need local staging, and downloaded
+packages with old hook paths need rebuilt repository artifacts. The ISO build repeats these preflight checks and
 requires the Shelly public-key-directory patch, preventing silent omission of
 package hooks. The current source recipe folder is not evidence that the
 published archive already contains its changes.

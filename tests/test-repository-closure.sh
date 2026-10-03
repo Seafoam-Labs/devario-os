@@ -70,4 +70,55 @@ if devario_verify_repository "$repository" devario-core \
   fail 'a repository database with a substituted package digest was accepted'
 fi
 
+# Local ISO mode accepts only the six OS-owned names without signatures.
+write_desc "$digest"
+bsdtar -caf "$repository/devario-core.db.tar.zst" -C "$database_root" fixture-1-1/desc
+rm -f "$repository"/*.sig
+if devario_verify_repository "$repository" devario-core \
+    "$project_dir/packages/devario-keyring" development local-installer \
+    >"$test_root/stdout" 2>"$test_root/stderr"; then
+  fail 'an unsigned downloaded package was accepted in local installer mode'
+fi
+printf '%s\n' signature > "$package.sig"
+devario_verify_repository "$repository" devario-core \
+  "$project_dir/packages/devario-keyring" development local-installer
+# A supplied bad signature must never be ignored.
+devario_gpgv_active_signature() { return 1; }
+if devario_verify_repository "$repository" devario-core \
+    "$project_dir/packages/devario-keyring" development local-installer \
+    >"$test_root/stdout" 2>"$test_root/stderr"; then
+  fail 'an invalid downloaded package signature was accepted'
+fi
+rm -f "$package" "$package.sig"
+sed -i 's/pkgname = fixture/pkgname = calamares/; s/pkgbase = fixture/pkgbase = calamares/' "$package_root/.PKGINFO"
+package="$repository/calamares-1-1-any.pkg.tar.zst"
+bsdtar -caf "$package" -C "$package_root" .PKGINFO
+size="$(stat -c '%s' "$package")"
+digest="$(sha256sum "$package")"; digest="${digest%% *}"
+write_desc "$digest"
+sed -i 's/^fixture$/calamares/' "$database_root/fixture-1-1/desc"
+for database in devario-core.db.tar.zst devario-core.files.tar.zst; do
+  bsdtar -caf "$repository/$database" -C "$database_root" fixture-1-1/desc
+done
+devario_verify_repository "$repository" devario-core \
+  "$project_dir/packages/devario-keyring" development local-installer
+printf '%s\n' invalid > "$package.sig"
+if devario_verify_repository "$repository" devario-core \
+    "$project_dir/packages/devario-keyring" development local-installer \
+    >"$test_root/stdout" 2>"$test_root/stderr"; then
+  fail 'an invalid local installer package signature was ignored'
+fi
+rm "$package.sig"
+if devario_verify_repository "$repository" devario-core \
+    "$project_dir/packages/devario-keyring" production local-installer \
+    >"$test_root/stdout" 2>"$test_root/stderr"; then
+  fail 'local installer exception was accepted for controlled production inputs'
+fi
+for name in calamares ckbcomp devario-filesystem devario-keyring devario-boot devario-base; do
+  devario_is_local_installer_package "$name" || fail "missing local installer exception: $name"
+done
+for name in shelly systemd devario-desktop calamares-extra; do
+  if devario_is_local_installer_package "$name"; then fail "unexpected unsigned exception: $name"; fi
+done
+
 echo 'Repository-closure tests passed.'

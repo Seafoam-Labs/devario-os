@@ -482,5 +482,7 @@ rm -f -- \
   "$repo_dir/$repository_name.db.tar.zst.old.sig" \
   "$repo_dir/$repository_name.files.tar.zst.old" \
   "$repo_dir/$repository_name.files.tar.zst.old.sig"
-devario_verify_repository "$repo_dir" "$repository_name" "$keyring_dir" "$key_policy"
+core_package_policy=strict
+if (( ! release_build )) && [[ -z "$signing_key" ]]; then core_package_policy=local-installer; fi
+devario_verify_repository "$repo_dir" "$repository_name" "$keyring_dir" "$key_policy" "$core_package_policy"
 echo "Local repository is ready at $repo_dir"

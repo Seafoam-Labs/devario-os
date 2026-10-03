@@ -165,8 +165,9 @@ else
 fi
 
 key_policy=development
-if (( release_build )); then key_policy=production; fi
-devario_verify_repository "$staged_core_repo" devario-core "$core_keyring_source" "$key_policy"
+core_package_policy=local-installer
+if (( release_build )); then key_policy=production; core_package_policy=strict; fi
+devario_verify_repository "$staged_core_repo" devario-core "$core_keyring_source" "$key_policy" "$core_package_policy"
 core_active="$DEVARIO_ACTIVE_SIGNER"; core_public="$DEVARIO_KEYRING_PUBLIC"
 core_fingerprints=("${DEVARIO_PUBLIC_FINGERPRINTS[@]}")
 if (( DEVARIO_EDITION_HAS_MANAGED )); then
@@ -296,6 +297,10 @@ while IFS= read -r package_name || [[ -n "$package_name" ]]; do
     exit 1
   fi
 done < "$staged_profile/packages.x86_64"
+
+qt_declarative_packages=("$staged_core_repo"/qt6-declarative-[0-9]*.pkg.tar.zst)
+(( ${#qt_declarative_packages[@]} == 1 )) || { echo 'Expected exactly one qt6-declarative archive.' >&2; exit 1; }
+bash "$script_dir/verify-qt-quick-package.sh" "${qt_declarative_packages[0]}"
 
 audit_args=(--database devario-core "$staged_core_repo/devario-core.db")
 if (( DEVARIO_EDITION_HAS_MANAGED )); then
@@ -442,6 +447,7 @@ fi
 
 gpgme_trace="$output_dir/devario-gpgme.log"
 failure_report="$output_dir/devario-iso-failure-report.log"
+assembler_log="$output_dir/devario-iso-assembler.log"
 install -m 0644 /dev/null "$gpgme_trace"
 rm -f -- "$failure_report"
 
@@ -453,8 +459,9 @@ DEVARIO_EDITION_ISO_PUBLISHER="$DEVARIO_EDITION_ISO_PUBLISHER" \
 DEVARIO_EDITION_ISO_APPLICATION="$DEVARIO_EDITION_ISO_APPLICATION" \
   python3 "$script_dir/run-iso-builder.py" \
     --profile "$staged_profile" --work "$work_dir" --output "$output_dir" \
-    --shelly "$devario_shelly" --config "$generated_conf" --keyring "$build_gpgdir"
-builder_status=$?
+    --shelly "$devario_shelly" --config "$generated_conf" --keyring "$build_gpgdir" \
+    2>&1 | tee "$assembler_log"
+builder_status=${PIPESTATUS[0]}
 set -e
 
 if (( builder_status != 0 )); then
@@ -462,6 +469,8 @@ if (( builder_status != 0 )); then
     printf 'Devario ISO exit status: %s\n' "$builder_status"
     printf 'Generated ALPM configuration: %s\n' "$generated_conf"
     printf 'Temporary GPG directory: %s\n\n' "$build_gpgdir"
+    printf '%s\n' '--- Image assembler output (last 200 lines) ---'
+    tail -n 200 "$assembler_log"
     printf '%s\n' '--- Generated ALPM configuration ---'
     sed -n '1,240p' "$generated_conf"
     printf '%s\n' '--- Temporary keyring files ---'

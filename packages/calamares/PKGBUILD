@@ -2,7 +2,7 @@
 
 pkgname=calamares
 pkgver=3.4.2
-pkgrel=5
+pkgrel=6
 pkgdesc="Distribution-independent installer framework"
 arch=('x86_64')
 url="https://codeberg.org/Calamares/calamares"
@@ -28,6 +28,7 @@ depends=(
   'yaml-cpp'
 )
 makedepends=(
+  'cmake'
   'extra-cmake-modules'
   'libglvnd'
   'ninja'

@@ -464,16 +464,35 @@ devario_inventory_database() {
   mapfile -t output_ref < <(printf '%s\n' "${output_ref[@]}" | LC_ALL=C sort)
 }
 
+devario_is_local_installer_package() {
+  case "$1" in
+    calamares|ckbcomp|devario-filesystem|devario-keyring|devario-boot|devario-base) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 devario_verify_repository() {
   local repo_dir="$1"
   local repository_name="$2"
   local keyring_dir="$3"
   local policy="${4:-development}"
+  local package_policy="${5:-strict}"
   local database="$repo_dir/$repository_name.db.tar.zst"
   local files_database="$repo_dir/$repository_name.files.tar.zst"
   local path basename target package_name repository_is_signed=0
   declare -A package_names=()
   local -a packages=() expected_inventory=() database_inventory=() files_inventory=()
+
+  case "$package_policy" in
+    strict) ;;
+    local-installer)
+      [[ "$repository_name" == devario-core && "$policy" == development ]] || {
+        devario_repository_error 'local installer inputs require a non-release core repository'
+        return 1
+      }
+      ;;
+    *) devario_repository_error 'unknown package signature policy'; return 1 ;;
+  esac
 
   devario_validate_keyring_bundle "$keyring_dir" "$repository_name" "$policy" || return 1
   [[ -d "$repo_dir" && ! -L "$repo_dir" ]] || {
@@ -556,9 +575,15 @@ devario_verify_repository() {
       return 1
     fi
     package_names["$package_name"]=1
-    if [[ "$policy" == production ]]; then
+    if [[ "$policy" == production || "$package_policy" == local-installer ]]; then
+      # Locally built ISO inputs need no detached signature. A supplied
+      # signature must still be valid; downloaded packages always need one.
+      if [[ "$package_policy" == local-installer && ! -e "$path.sig" && ! -L "$path.sig" ]] \
+        && devario_is_local_installer_package "$package_name"; then
+        continue
+      fi
       devario_is_plain_file "$path.sig" && [[ -s "$path.sig" ]] || {
-        devario_repository_error "production package lacks a detached signature: $(basename -- "$path")"
+        devario_repository_error "repository package lacks a detached signature: $(basename -- "$path")"
         return 1
       }
       devario_gpgv_active_signature "$path.sig" "$path" || return 1

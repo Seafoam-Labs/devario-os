@@ -94,6 +94,7 @@ required_files=(
   "$profile_dir/airootfs/usr/share/devario/nvidia-supported-gpus.json"
   "$project_dir/tests/test-configure-target-nvidia.py"
   "$project_dir/tests/test-pearl-desktop.py"
+  "$profile_dir/airootfs/etc/xdg/uwsm/env.d/60-devario-gpu.sh"
   "$profile_dir/airootfs/etc/calamares/modules/services-systemd.conf"
   "$profile_dir/late-airootfs/etc/greetd/config.toml"
   "$profile_dir/airootfs/etc/polkit-1/rules.d/49-devario-live-installer.rules"
@@ -245,6 +246,7 @@ done < <(
   find "$project_dir/packages" -mindepth 2 -maxdepth 2 -type f -name PKGBUILD -print
   printf '%s\n' "$project_dir/scripts/lib/edition.sh"
   printf '%s\n' "$profile_dir/late-airootfs/etc/skel/.bashrc"
+  printf '%s\n' "$profile_dir/airootfs/etc/xdg/uwsm/env.d/60-devario-gpu.sh"
   for boot_helper in kernel.sh kernel-command-line initramfs-update boot-update systemd-boot-update module-setup.sh live-root.sh install-root.sh verify-live-image; do
     printf '%s\n' "$project_dir/packages/devario-boot/$boot_helper"
   done
@@ -1226,9 +1228,12 @@ if grep -Eq '^HoldPkg[[:space:]]=.*\bpacman\b' "$profile_dir/shelly.build.conf";
   fail "the ALPM configuration must not hold the absent pacman package"
 fi
 
-if ! grep -Eq '^[[:space:]]*SigLevel[[:space:]]*=[[:space:]]*Never[[:space:]]*$' \
-  "$profile_dir/shelly.build.conf"; then
-  fail "the staged build repository must disable ALPM verification after build-iso verification"
+if ! awk '
+  /^\[/ { options = ($0 == "[options]") }
+  options && /^[[:space:]]*SigLevel[[:space:]]*=[[:space:]]*Never[[:space:]]*$/ { found = 1 }
+  END { exit !found }
+' "$profile_dir/shelly.build.conf"; then
+  fail "the build-only global signature policy must be Never after build-iso verification"
 fi
 
 if grep -Eq '^[[:space:]]*SigLevel[[:space:]]*=.*\bTrustAll\b' \
@@ -1359,6 +1364,12 @@ if command -v bsdtar >/dev/null 2>&1; then
     fi
   done
 
+  for artifact in "$project_dir"/repo/core/qt6-declarative-[0-9]*.pkg.tar.zst; do
+    if ! bash "$script_dir/verify-qt-quick-package.sh" "$artifact"; then
+      fail 'Calamares requires the complete Qt Quick runtime payload'
+    fi
+  done
+
   for artifact in "${aqueous_artifacts[@]}"; do
     artifact_contents="$(bsdtar -tf "$artifact")"
     for required_path in \
@@ -1451,21 +1462,10 @@ if command -v bsdtar >/dev/null 2>&1; then
   if (( ${#devario_artifacts[@]} )) \
     && command -v gpgv >/dev/null 2>&1 \
     && [[ -s "$project_dir/packages/devario-keyring/devario.gpg" ]]; then
-    for signed_artifact in "${devario_artifacts[@]}"; do
-      if [[ ! -s "$signed_artifact.sig" ]] \
-        || ! gpgv --keyring "$project_dir/packages/devario-keyring/devario.gpg" \
-          "$signed_artifact.sig" "$signed_artifact" >/dev/null 2>&1; then
-        fail "$(basename -- "$signed_artifact") lacks a valid Devario signature"
-      fi
-    done
-    for repository_database in devario-core.db.tar.zst devario-core.files.tar.zst; do
-      database_path="$project_dir/repo/core/$repository_database"
-      if [[ ! -s "$database_path" || ! -s "$database_path.sig" ]] \
-        || ! gpgv --keyring "$project_dir/packages/devario-keyring/devario.gpg" \
-          "$database_path.sig" "$database_path" >/dev/null 2>&1; then
-        fail "$repository_database lacks a valid Devario signature"
-      fi
-    done
+    if ! devario_verify_repository "$project_dir/repo/core" devario-core \
+      "$project_dir/packages/devario-keyring" development local-installer; then
+      fail "core repository must verify downloaded packages and its local installer closure"
+    fi
   fi
 
   for artifact in "${ckbcomp_artifacts[@]}"; do

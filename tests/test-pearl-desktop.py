@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check the packaged Pearl defaults and live overlay after greeter install hooks."""
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -14,6 +15,72 @@ PROFILE = Path(os.environ.get('DEVARIO_PROFILE_DIR', PROJECT / 'iso'))
 
 
 class PearlDesktopTests(unittest.TestCase):
+    def test_session_driver_filter_follows_pci_hardware(self):
+        source = (PROFILE / 'airootfs/etc/xdg/uwsm/env.d/60-devario-gpu.sh').read_text()
+        # Run the real detector and sourced session script against fixture paths.
+        cases = [
+            ('intel', [('0x8086', '0x030000')], True, True),
+            ('amd', [('0x1002', '0x030000')], True, True),
+            ('nvidia', [('0x10de', '0x030000')], True, False),
+            ('hybrid', [('0x8086', '0x030000'), ('0x10de', '0x030200')], True, False),
+            ('audio-only', [('0x8086', '0x030000'), ('0x10de', '0x040300')], True, True),
+            ('invalid-pci', [('0x8086', 'invalid')], True, False),
+            ('missing-pci', None, True, False),
+            ('missing-mesa', [('0x8086', '0x030000')], False, False),
+        ]
+        for name, devices, mesa_present, filtered in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix='devario-session-gpu-') as temporary:
+                root = Path(temporary)
+                helper = root / 'gpu-driver-setup'
+                helper.write_bytes((PROFILE / 'airootfs/usr/lib/devario/gpu-driver-setup').read_bytes())
+                helper.chmod(0o755)
+                pci = root / 'pci'
+                if devices is not None:
+                    pci.mkdir()
+                    for index, (vendor, device_class) in enumerate(devices):
+                        device = pci / str(index)
+                        device.mkdir()
+                        (device / 'vendor').write_text(vendor + '\n')
+                        (device / 'class').write_text(device_class + '\n')
+                mesa = root / '50_mesa.json'
+                if mesa_present:
+                    mesa.write_text('{}\n')
+                script = root / 'env.sh'
+                script.write_text(source.replace('/usr/lib/devario/gpu-driver-setup', str(helper))
+                                  .replace('/usr/share/glvnd/egl_vendor.d/50_mesa.json', str(mesa)))
+                env = dict(os.environ, DEVARIO_PCI_DEVICES_ROOT=str(pci),
+                           __EGL_VENDOR_LIBRARY_FILENAMES='existing-egl',
+                           VK_LOADER_DRIVERS_DISABLE='*other*')
+                result = subprocess.run(
+                    ['sh', '-c', '. "$1"; printf "%s\\n" "$__EGL_VENDOR_LIBRARY_FILENAMES" "$VK_LOADER_DRIVERS_DISABLE"',
+                     'gpu-env-test', str(script)], env=env, check=True, capture_output=True, text=True)
+                self.assertEqual(result.stdout.splitlines(),
+                                 [str(mesa), '*other*,*nvidia*'] if filtered else ['existing-egl', '*other*'])
+
+    def test_gpu_service_helper_is_executable_in_image(self):
+        with tempfile.TemporaryDirectory(prefix='devario-gpu-permissions-') as temporary:
+            root = Path(temporary) / 'root'
+            root.mkdir()
+            with tarfile.open(PROJECT / 'tools/devario-iso-builder/devario-iso-builder.tar.gz') as source:
+                code = source.extractfile('devario-iso-builder/builder.py').read()
+            builder = types.ModuleType('builder')
+            exec(compile(code, 'builder.py', 'exec'), builder.__dict__)
+            builder.overlay(PROFILE / 'airootfs', root)
+            helper_path = '/usr/lib/devario/gpu-driver-setup'
+            helper = root / helper_path.lstrip('/')
+            permissions = json.loads((PROFILE / 'profile.json').read_text())['permissions']
+            if helper_path in permissions:
+                helper.chmod(int(permissions[helper_path], 8))
+            self.assertTrue(os.access(helper, os.X_OK), 'systemd cannot execute the GPU setup helper')
+            unit = (root / 'usr/lib/systemd/system/devario-gpu-driver.service').read_text()
+            self.assertIn(f'ExecStart={helper_path} --setup', unit)
+            pci = Path(temporary) / 'pci'
+            pci.mkdir()
+            state = Path(temporary) / 'state/gpu-driver'
+            env = dict(os.environ, DEVARIO_PCI_DEVICES_ROOT=str(pci), DEVARIO_GPU_STATE_FILE=str(state))
+            subprocess.run([str(helper), '--setup'], env=env, check=True, capture_output=True)
+            self.assertEqual(state.read_text().strip(), 'none')
+
     def test_package_and_live_login_after_hooks(self):
         with tempfile.TemporaryDirectory(prefix='devario-pearl-test-') as temporary:
             root = Path(temporary) / 'root'

@@ -259,24 +259,26 @@ scriptlets.
 
 ## Build
 
-Initialize a local development signing key and export its public material into the keyring package. The ignored
-`.devario-signing/` directory contains the secret key and must remain private:
+Stage the signed packages published by Remora before building local ISO inputs:
 
 ```sh
-./scripts/init-repository-key.sh
+python3 scripts/stage-core-repository.py
 ```
 
-Build Calamares, its `ckbcomp` helper, the Devario base, boot and keyring packages,
-and Devario's desktop
-policy package. If a local fingerprint exists, the script signs every package
-and the repository database automatically. The kernel, headers, dracut,
-Shelly, Aqueous 0.9.1, its Pearl
-integration, and Pearl come from `devario-core`; `pearl-greeter-git` comes from
-`seafoam-labs` and provides Pearl Greeter:
+Build Calamares, `ckbcomp`, `devario-filesystem`, `devario-base`, `devario-boot`,
+and `devario-keyring`. These six local ISO inputs and the regenerated build
+database do not require signing. Downloaded packages retain their signature
+checks. The kernel, headers, dracut, Shelly, Aqueous, `devario-desktop`, Pearl,
+and `pearl-greeter` come from `devario-core`:
 
 ```sh
 ./scripts/build-packages.sh
 ```
+
+If those six archives have already been built, merge their directory with
+`./scripts/stage-installer-packages.sh /path/to/artifacts` instead. No local
+signing key is needed for this workflow. Controlled release builds retain the
+separate signing requirements described below.
 
 Core artifacts are written only to `repo/core/`; that directory is never
 shared with managed-edition artifacts.
@@ -330,11 +332,11 @@ Validate an external edition explicitly:
 ./scripts/validate.sh --edition ../devario-managed-overlay
 ```
 
-Build the ISO using the pinned Devario builder. The wrapper verifies the signed
-local `devario-core` and `seafoam-labs` repository closures, extracts the Devario
+Build the ISO using the pinned Devario builder. The wrapper verifies the local
+`devario-core` repository with the six-package installer exception, extracts the Devario
 Shelly binary, and initializes a temporary verification keyring outside the live
 root. The declarative profile lives in `iso/profile.json`. Supply the complete
-repositories through `DEVARIO_CORE_REPO_DIR` and `DEVARIO_SEAFOAM_REPO_DIR`.
+repository through `DEVARIO_CORE_REPO_DIR`.
 See [ISO builder prerequisites and verification](docs/ISO-BUILDER.md).
 
 ```sh
