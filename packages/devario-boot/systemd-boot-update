@@ -83,7 +83,9 @@ if [[ "$install_mode" == true || ! -e "$installed_marker" ]]; then
     bootctl --esp-path="$boot_dir" --variables=no install
   fi
 else
-  bootctl --esp-path="$boot_dir" --variables=no update
+  # An equal or newer loader is a successful no-op during kernel updates.
+  # Keep the ESP/source preflight above and deployment checks below strict.
+  bootctl --esp-path="$boot_dir" --variables=no --graceful update
 fi
 # Recent bootctl versions may treat a chroot failure as graceful; check deployment.
 for file in EFI/systemd/systemd-bootx64.efi EFI/BOOT/BOOTX64.EFI; do

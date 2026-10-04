@@ -53,6 +53,15 @@ esac
 [ "${FAIL_BOOTCTL:-0}" = 0 ] || exit 1
 case "$*" in *--variables=yes*) [ "${FAIL_NVRAM:-0}" = 0 ] || exit 1;; esac
 [ "${SILENT_SKIP:-0}" = 0 ] || exit 0
+case " $* " in
+  *" update "*)
+    if cmp -s "$EFI_SOURCE/systemd-bootx64.efi" "$BOOT/EFI/systemd/systemd-bootx64.efi" \
+      && cmp -s "$EFI_SOURCE/systemd-bootx64.efi" "$BOOT/EFI/BOOT/BOOTX64.EFI"; then
+      echo 'Skipping, same boot loader version in place already.' >&2
+      case " $* " in *" --graceful "*) exit 0;; *) exit 1;; esac
+    fi
+    ;;
+esac
 mkdir -p "$BOOT/EFI/BOOT" "$BOOT/EFI/systemd"
 [ -e "$BOOT/loader/loader.conf" ] || echo 'default machine-id-*' > "$BOOT/loader/loader.conf"
 cp "$EFI_SOURCE/systemd-bootx64.efi" "$BOOT/EFI/BOOT/BOOTX64.EFI"
@@ -109,8 +118,41 @@ cp "$EFI_SOURCE/systemd-bootx64.efi" "$BOOT/EFI/systemd/systemd-bootx64.efi"
         self.assertEqual(preferences.read_text(), 'default windows\ntimeout 10\n')
         self.assertEqual(other.read_text(), 'other OS')
         self.assertFalse(stale.exists())
-        self.assertIn('--variables=no update', (self.root / 'calls').read_text())
+        self.assertIn('--variables=no --graceful update', (self.root / 'calls').read_text())
         self.assertNotIn('--variables=yes', (self.root / 'calls').read_text())
+
+    def test_unchanged_bootloader_still_refreshes_entries_on_repeated_updates(self):
+        self.assertEqual(self.run_helper('--install').returncode, 0)
+        entries = self.boot / 'loader/entries'
+        for _ in range(2):
+            for name in ('devario.conf', 'devario-fallback.conf'):
+                (entries / name).write_text('stale entry')
+            result = self.run_helper()
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('same boot loader version', result.stderr)
+            self.assertIn('boot entries are up to date', result.stdout)
+            for name in ('devario.conf', 'devario-fallback.conf'):
+                self.assertIn('root=UUID=root', (entries / name).read_text())
+            self.assertFalse(list((self.boot / 'loader').glob('.devario-entries.*')))
+
+    def test_update_failure_does_not_publish_entries(self):
+        self.assertEqual(self.run_helper('--install').returncode, 0)
+        entry = self.boot / 'loader/entries/devario.conf'
+        entry.write_text('previous entry')
+        result = self.run_helper(FAIL_BOOTCTL='1')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(entry.read_text(), 'previous entry')
+        self.assertNotIn('boot entries are up to date', result.stdout)
+
+    def test_gracefully_skipped_update_requires_deployed_binaries(self):
+        self.assertEqual(self.run_helper('--install').returncode, 0)
+        entry = self.boot / 'loader/entries/devario.conf'
+        entry.write_text('previous entry')
+        (self.boot / 'EFI/BOOT/BOOTX64.EFI').unlink()
+        result = self.run_helper(SILENT_SKIP='1')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('deployment did not create EFI/BOOT/BOOTX64.EFI', result.stderr)
+        self.assertEqual(entry.read_text(), 'previous entry')
 
     def test_uefi_limine_migration(self):
         self.legacy.touch()
