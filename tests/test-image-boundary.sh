@@ -18,13 +18,7 @@ expect_rejection() {
 }
 
 mkdir -p "$image_root/etc" "$image_root/var/lib/shelly/local/base-1-1"
-printf '%s\n' \
-  '[options]' \
-  'Architecture = auto' \
-  '[devario-core]' \
-  'SigLevel = Required' \
-  'Server = https://packages.example.test/devario-core' \
-  > "$image_root/etc/shelly.conf"
+cp "$project_dir/packages/devario-base/shelly.conf" "$image_root/etc/shelly.conf"
 printf '%s\n' \
   '%NAME%' base '' \
   '%VERSION%' 1-1 '' \
@@ -39,6 +33,19 @@ inventory="$test_root/IMAGE-PACKAGE-INVENTORY.json"
   --write-inventory "$inventory" >/dev/null
 grep -Fq '"packager":"ZoeyErinBauer <40698010+ZoeyErinBauer@users.noreply.github.com>"' "$inventory" \
   || fail 'canonical inventory omitted exact package attribution'
+
+cp "$image_root/etc/shelly.conf" "$test_root/shelly.conf"
+for repository in devario-browser devario-development devario-entertainment devario-gaming devario-utilities; do
+  sed "/^\[$repository\]$/,/^$/d" "$test_root/shelly.conf" > "$image_root/etc/shelly.conf"
+  expect_rejection "missing $repository configuration"
+  sed "/^\[$repository\]$/,/^$/s/SigLevel = Required/SigLevel = Optional/" \
+    "$test_root/shelly.conf" > "$image_root/etc/shelly.conf"
+  expect_rejection "optional signatures in $repository"
+  sed "/^\[$repository\]$/,/^$/s#https://mirrors.seafoam-labs.org/#https://unexpected.example.test/#" \
+    "$test_root/shelly.conf" > "$image_root/etc/shelly.conf"
+  expect_rejection "unconfigured mirror for $repository"
+done
+cp "$test_root/shelly.conf" "$image_root/etc/shelly.conf"
 
 printf '%s\n' '[seafoam-labs]' 'Server = https://packages.example.test/seafoam' >> "$image_root/etc/shelly.conf"
 expect_rejection 'unexpected secondary repository'
@@ -63,7 +70,8 @@ printf '%s\n' \
   'Server = https://packages.example.test/devario-managed' \
   >> "$image_root/etc/shelly.conf"
 printf '%s\n' managed-product-code > "$image_root/etc/devario-managed-agent.conf"
-"$project_dir/scripts/verify-image-boundary.sh" --root "$image_root" --edition managed >/dev/null
+"$project_dir/scripts/verify-image-boundary.sh" --root "$image_root" --edition managed \
+  --managed-url https://packages.example.test/devario-managed >/dev/null
 printf '%s\n' customer-id > "$image_root/etc/customer-id"
 expect_rejection 'customer identifier pathname in Managed' managed
 rm -f -- "$image_root/etc/customer-id"

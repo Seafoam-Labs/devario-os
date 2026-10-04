@@ -9,8 +9,12 @@ root="$(mktemp -d /tmp/devario-self-check-test.XXXXXX)"; trap 'rm -rf -- "$root"
 mkdir -p "$root/etc" "$root/var/lib/devario"; printf 'machine-id\n' > "$root/etc/machine-id"; printf '/dev/root / ext4 defaults 0 1\n' > "$root/etc/fstab"; : > "$root/var/lib/devario/shelly-keyring.ready"
 write_os_release() { printf 'ID=devario\nVARIANT_ID=%s\n' "$1" > "$root/etc/os-release"; }
 write_core_shelly() {
-  local server="${1:-https://packages.devario.example/core/\$arch}"
+  local server="${1:-https://packages.devario.example/core/\$arch}" repository
   printf '%s\n' '[options]' 'SigLevel = Never' '[devario-core]' 'SigLevel = Required' "Server = $server" > "$root/etc/shelly.conf"
+  for repository in devario-browser devario-development devario-entertainment devario-gaming devario-utilities; do
+    printf '\n[%s]\nSigLevel = Required\nServer = https://mirrors.seafoam-labs.org/%s/$arch\n' \
+      "$repository" "$repository" >> "$root/etc/shelly.conf"
+  done
 }
 mkdir -p "$root/boot/loader/entries" "$root/boot/EFI/systemd" "$root/boot/EFI/BOOT"
 : > "$root/var/lib/devario/systemd-boot-installed"
@@ -34,7 +38,15 @@ cp "$project_dir/iso/airootfs/etc/polkit-1/rules.d/49-devario-live-installer.rul
 if "$check" --root "$root" --mode installed --firmware uefi --edition community >/dev/null 2>&1; then echo 'Installed image retained live installer authorization.' >&2; exit 1; fi
 rm "$rule"
 
-printf '%s\n' '[options]' 'SigLevel = Required' '[devario-core]' 'Server = https://packages.devario.example/core/' > "$root/etc/shelly.conf"
+for repository in devario-browser devario-development devario-entertainment devario-gaming devario-utilities; do
+  write_core_shelly
+  sed -i "/^\[$repository\]$/,/^$/d" "$root/etc/shelly.conf"
+  if "$check" --root "$root" --mode installed --firmware uefi --edition community >/dev/null 2>&1; then
+    echo "Self-check passed without $repository." >&2; exit 1
+  fi
+done
+write_core_shelly
+sed -i '/^\[options\]$/,/^\[/s/SigLevel = Never/SigLevel = Required/; /^\[devario-core\]$/,/^$/ { /SigLevel = Required/d; }' "$root/etc/shelly.conf"
 if "$check" --root "$root" --mode installed --firmware uefi --edition community >/dev/null 2>&1; then echo 'Global SigLevel incorrectly satisfied the repository requirement.' >&2; exit 1; fi
 write_core_shelly; sed -i 's#https://packages#https://user:password@packages#' "$root/etc/shelly.conf"
 if "$check" --root "$root" --mode installed --firmware uefi --edition community >/dev/null 2>&1; then echo 'Credential-bearing repository URL was accepted.' >&2; exit 1; fi

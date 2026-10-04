@@ -69,6 +69,10 @@ login template without live autologin.
 Calamares does not invoke a package manager during installation. Its `unpackfs` module copies the prepared live root
 filesystem, and the remaining modules configure that copy for the target machine.
 
+The live environment defaults to UTC through `iso/airootfs/etc/localtime`,
+preventing systemd's initial setup service from prompting for a timezone at boot.
+Calamares applies the user's selected timezone to the installed system.
+
 ISO construction verifies that every Devario-owned package is present exactly
 once in the local repository before installing the live root. In particular,
 `linux-devario`, `linux-devario-headers`, and `devario-dracut` must be supplied
@@ -146,12 +150,18 @@ that could bypass that adapter.
 Shelly's native RLPM backend uses `/etc/shelly.conf`, `/etc/shelly.d/gnupg`,
 `/etc/shelly.d/hooks`, `/var/lib/shelly`, and `/var/cache/shelly/pkg` directly.
 These are file locations, not configuration aliases or a Pacman executable
-requirement. Community enables only `devario-core`.
+requirement. Live and installed systems enable `devario-core` first, followed by
+`devario-browser`, `devario-development`, `devario-entertainment`, `devario-gaming`,
+and `devario-utilities`. Each repository requires package and database signatures
+verified through the existing Devario keyring. Calamares copies this configuration
+into the installed system, so configuring these repositories works offline.
 
 `devario-base` supplies this configuration and storage layout. New images do
 not enable the old storage-relocation service. The historical migration utility
 is retained in source for previous installations, but is not installed by the
 current base recipe.
+
+Rebuild `devario-base` 3-13 and the ISO to include all six repository defaults.
 
 The desktop comes from `devario-core/devario-desktop`, with stable Aqueous and
 `pearl-greeter`. The ISO profile retains Devario's session, greeter, and GPU

@@ -1,7 +1,7 @@
 pkgbase = devario-base
 	pkgdesc = Minimal package set defining a base Devario installation
 	pkgver = 3
-	pkgrel = 12
+	pkgrel = 13
 	url = https://github.com/Seafoam-Labs/devario-os
 	arch = any
 	license = GPL-3.0-or-later
@@ -48,7 +48,7 @@ pkgbase = devario-base
 	source = shelly.conf
 	source = devario-report.sh
 	source = devario-report.desktop
-	sha256sums = bc3ec8837e5ee51dc80b1a6a20a3cf223cdfb7ab417337e473dfdfb3dc03aaa2
+	sha256sums = 3ef465c9ebbe8cb187438f3d51b222b8fca204e43e6b2f5862e791e4298058e0
 	sha256sums = 119b53a8143666fec4dbd22373857651bbe8d14206722209016f71b3fd9a84e6
 	sha256sums = 80393599bf8724177dafe28a258f59756c1713e52a3777fff1663df82deb634d
 

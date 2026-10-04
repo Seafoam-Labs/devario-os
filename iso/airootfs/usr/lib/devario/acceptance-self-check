@@ -77,7 +77,10 @@ require_repository() {
   fi
 }
 if [[ -r "$shelly_conf" ]]; then
-  require_repository devario-core
+  for repository in devario-core devario-browser devario-development \
+    devario-entertainment devario-gaming devario-utilities; do
+    require_repository "$repository"
+  done
   if [[ "$edition" == managed ]]; then
     require_repository devario-managed
   elif grep -Eqi 'devario-managed|managed\.seafoam|tenant|enrollment' "$shelly_conf"; then

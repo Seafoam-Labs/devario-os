@@ -19,10 +19,16 @@ Every build requires a fresh work directory.
 
 ## Repository inputs
 
-Community uses only `devario-core`, served at
+Community image construction uses only `devario-core`, served at
 `https://repo.seafoam-labs.org/devario-core/$arch` and trusted through
 `devario-keyring`. A Managed edition can add its explicitly supplied managed
 repository. The separate `seafoam-labs` repository is no longer an ISO input.
+
+The runtime configuration copied by Calamares also enables `devario-browser`,
+`devario-development`, `devario-entertainment`, `devario-gaming`, and
+`devario-utilities` from `https://mirrors.seafoam-labs.org/<repository>/$arch`.
+Core has priority. All six use the Devario keyring and require package and
+database signatures; configuration during installation needs no network access.
 
 Supply complete local repository closures using `DEVARIO_CORE_REPO_DIR`
 (default `repo/core`). The

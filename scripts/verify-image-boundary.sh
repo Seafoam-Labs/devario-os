@@ -179,7 +179,7 @@ if [[ ! -f "$shelly_config" || -L "$shelly_config" ]]; then
   echo 'The image does not contain a safe /etc/shelly.conf.' >&2
   exit 1
 fi
-SHELLY_CONFIG="$shelly_config" EDITION="$edition" EXPECTED_CORE_URL="$expected_core_url" EXPECTED_MANAGED_URL="$expected_managed_url" python3 -c 'import os, re
+REPOSITORY_DEFAULTS="$script_dir/../repositories/defaults.json" SHELLY_CONFIG="$shelly_config" EDITION="$edition" EXPECTED_CORE_URL="$expected_core_url" EXPECTED_MANAGED_URL="$expected_managed_url" python3 -c 'import json, os, re
 from urllib.parse import urlsplit
 lines=open(os.environ["SHELLY_CONFIG"], encoding="utf-8").read().splitlines()
 sections={}
@@ -191,7 +191,8 @@ for raw in lines:
  if match:
   current=match.group(1); sections.setdefault(current, []); continue
  if current: sections[current].append(line)
-required=["devario-core"] + (["devario-managed"] if os.environ["EDITION"] == "managed" else [])
+defaults={repo["name"]: repo["server"] for repo in json.load(open(os.environ["REPOSITORY_DEFAULTS"], encoding="utf-8"))["repositories"]}
+required=list(defaults) + (["devario-managed"] if os.environ["EDITION"] == "managed" else [])
 if set(sections) != {"options", *required}: raise SystemExit("unexpected repository section")
 for name in required:
  values=sections.get(name)
@@ -209,7 +210,8 @@ for name in required:
  except ValueError: raise SystemExit(f"{name} server URL has an invalid port")
  if parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment or (port is not None and not 1<=port<=65535) or "//" in parsed.path or any(part in (".","..") for part in parsed.path.split("/")):
   raise SystemExit(f"{name} server URL is not canonical credential-free HTTPS")
- expected=os.environ["EXPECTED_CORE_URL"] if name == "devario-core" else os.environ["EXPECTED_MANAGED_URL"]
+ expected=(os.environ["EXPECTED_CORE_URL"] if name == "devario-core" else
+           os.environ["EXPECTED_MANAGED_URL"] if name == "devario-managed" else defaults[name])
  if expected and servers != ["Server = " + expected]: raise SystemExit(f"{name} URL differs from release evidence")
 if os.environ["EDITION"] == "community" and "devario-managed" in sections:
  raise SystemExit("Community image contains the managed repository section")'

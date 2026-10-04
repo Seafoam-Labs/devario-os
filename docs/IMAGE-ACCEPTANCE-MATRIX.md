@@ -15,7 +15,9 @@ manifest carries the exact candidate version as well as its lock digest.
 
 The guest self-check requires the requested edition, firmware environment,
 installed/live state, and exact section-scoped `SigLevel = Required` for
-`[devario-core]` (and `[devario-managed]` for Managed). Each section must have
+`[devario-core]`, `[devario-browser]`, `[devario-development]`,
+`[devario-entertainment]`, `[devario-gaming]`, and `[devario-utilities]`
+(and `[devario-managed]` for Managed). Each section must have
 exactly one credential-free HTTPS `Server`. A global setting does not satisfy
 the check. The self-check runs only after `shelly-keyring-init.service` succeeds
 and requires its `/var/lib/devario/shelly-keyring.ready` marker. Community

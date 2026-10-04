@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import configparser
 import importlib.machinery
 import importlib.util
 import json
@@ -24,14 +25,26 @@ audit = module(PROJECT / "scripts/audit-iso-repositories.py", "audit")
 class IndependenceTests(unittest.TestCase):
     def test_repository_defaults(self):
         repositories = json.loads((PROJECT / "repositories/defaults.json").read_text())["repositories"]
-        self.assertEqual([r["name"] for r in repositories], ["devario-core"])
-        runtime = (PROJECT / "packages/devario-base/shelly.conf").read_text()
-        for repo in repositories:
-            self.assertIn("[" + repo["name"] + "]", runtime)
-            self.assertIn(repo["server"], runtime)
-        self.assertNotIn("[seafoam-labs]", runtime)
-        self.assertNotIn("[core]", runtime)
-        self.assertNotIn("[extra]", runtime)
+        names = ["devario-core", "devario-browser", "devario-development",
+                 "devario-entertainment", "devario-gaming", "devario-utilities"]
+        self.assertEqual([r["name"] for r in repositories], names)
+        for path in ("packages/devario-base/shelly.conf", "iso/shelly.runtime.conf"):
+            with self.subTest(path=path):
+                runtime = (PROJECT / path).read_text()
+                core_url = repositories[0]["server"]
+                if path.startswith("iso/"):
+                    core_url = "https://snapshot.example.test/devario-core/x86_64"
+                    runtime = runtime.replace("@DEVARIO_CORE_RUNTIME_REPO@", core_url)
+                    runtime = runtime.replace("@DEVARIO_CORE_RUNTIME_SIGLEVEL@", "Required")
+                    runtime = runtime.replace("@DEVARIO_MANAGED_RUNTIME_REPOSITORY@", "")
+                # Shelly permits repeated options such as HookDir.
+                config = configparser.ConfigParser(interpolation=None, allow_no_value=True, strict=False)
+                config.read_string(runtime)
+                self.assertEqual(config.sections(), ["options", *names])
+                for repo in repositories:
+                    section = config[repo["name"]]
+                    self.assertEqual(section["SigLevel"], "Required")
+                    self.assertEqual(section["Server"], core_url if repo["name"] == "devario-core" else repo["server"])
 
     def test_compatibility_preserves_configuration(self):
         original = "[options]\n# user configuration\n[devario-core]\nServer = https://example.test/\n"

@@ -6,6 +6,36 @@
       "server": "https://repo.seafoam-labs.org/devario-core/$arch",
       "activeSigner": "BB62CD2725FD8E25558F900A84F94F672976872C",
       "publicKeyUrl": "https://repo.seafoam-labs.org/repositories/devario-core/pubkey.asc"
+    },
+    {
+      "name": "devario-browser",
+      "server": "https://mirrors.seafoam-labs.org/devario-browser/$arch",
+      "activeSigner": "BB62CD2725FD8E25558F900A84F94F672976872C",
+      "publicKeyUrl": "https://repo.seafoam-labs.org/repositories/devario-browser/pubkey.asc"
+    },
+    {
+      "name": "devario-development",
+      "server": "https://mirrors.seafoam-labs.org/devario-development/$arch",
+      "activeSigner": "BB62CD2725FD8E25558F900A84F94F672976872C",
+      "publicKeyUrl": "https://repo.seafoam-labs.org/repositories/devario-development/pubkey.asc"
+    },
+    {
+      "name": "devario-entertainment",
+      "server": "https://mirrors.seafoam-labs.org/devario-entertainment/$arch",
+      "activeSigner": "BB62CD2725FD8E25558F900A84F94F672976872C",
+      "publicKeyUrl": "https://repo.seafoam-labs.org/repositories/devario-entertainment/pubkey.asc"
+    },
+    {
+      "name": "devario-gaming",
+      "server": "https://mirrors.seafoam-labs.org/devario-gaming/$arch",
+      "activeSigner": "BB62CD2725FD8E25558F900A84F94F672976872C",
+      "publicKeyUrl": "https://repo.seafoam-labs.org/repositories/devario-gaming/pubkey.asc"
+    },
+    {
+      "name": "devario-utilities",
+      "server": "https://mirrors.seafoam-labs.org/devario-utilities/$arch",
+      "activeSigner": "BB62CD2725FD8E25558F900A84F94F672976872C",
+      "publicKeyUrl": "https://repo.seafoam-labs.org/repositories/devario-utilities/pubkey.asc"
     }
   ]
 }
