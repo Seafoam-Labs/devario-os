@@ -37,9 +37,11 @@ intel-ucode
 linux-devario
 linux-devario-headers
 linux-firmware
+lsof
 lvm2
 man-db
 mesa
+mesa-utils
 nbd
 nemo
 networkmanager
@@ -48,6 +50,7 @@ noto-fonts
 ntfs-3g
 nvidia-open-dkms
 nvidia-utils
+nvme-cli
 openssh
 parted
 pearl
@@ -63,6 +66,7 @@ rsync
 shelly
 shelly-cli
 squashfs-tools
+strace
 sudo
 syslinux
 systemd
@@ -70,9 +74,12 @@ terminus-font
 ttf-dejavu
 udisks2
 upower
+usbutils
 vulkan-intel
 vulkan-radeon
 vulkan-swrast
+vulkan-tools
+wayland-utils
 wireplumber
 xdg-desktop-portal-aqueous
 xdg-user-dirs

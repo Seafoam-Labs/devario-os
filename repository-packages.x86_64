@@ -199,6 +199,7 @@ tar
 thin-provisioning-tools
 tpm2-tss
 tzdata
+usbutils
 util-linux
 util-linux-libs
 wpa_supplicant
@@ -478,12 +479,14 @@ limine
 llvm-libs
 lm_sensors
 lmdb
+lsof
 lua
 lua54
 lv2
 mailcap
 md4c
 mesa
+mesa-utils
 mobile-broadband-provider-info
 mpg123
 mtdev
@@ -495,6 +498,7 @@ noto-fonts
 ntfs-3g
 nvidia-open-dkms
 nvidia-utils
+nvme-cli
 ocl-icd
 onetbb
 oniguruma
@@ -578,6 +582,7 @@ spirv-tools
 squashfs-tools
 sratom
 srt
+strace
 svt-av1
 terminus-font
 tinysparql
@@ -597,8 +602,10 @@ vulkan-intel
 vulkan-mesa-implicit-layers
 vulkan-radeon
 vulkan-swrast
+vulkan-tools
 wayland
 wayland-protocols
+wayland-utils
 webrtc-audio-processing-1
 wireplumber
 wl-clipboard
