@@ -179,22 +179,20 @@ class NvidiaTests(unittest.TestCase):
                     self.assertEqual(events[0], ["dkms", "autoinstall", "-k", KERNEL])
                 self.assertFalse(any("modprobe" in e for e in events))
 
-    def test_preflight_checks_pristine_root_and_no_gpu_skips(self):
+    def test_preflight_dispatch_and_no_gpu_skips(self):
         with patch.object(nvidia.sys, "argv", [str(HELPER), "--preflight"]), \
                 patch.object(nvidia, "detect", return_value=[DEVICE]), \
-                patch.object(nvidia.subprocess, "run") as run:
+                patch.object(nvidia, "preflight") as preflight:
             nvidia.main()
-            args, kwargs = run.call_args
-            self.assertEqual(args[0], ["chroot", "/run/devario/install-root", nvidia.HELPER, "--check-payload"])
-            self.assertEqual(json.loads(kwargs["input"]), [DEVICE])
+            preflight.assert_called_once_with([DEVICE])
         for mode in ("--configure", "--preflight"):
             with patch.object(nvidia.sys, "argv", [str(HELPER), mode]), \
                     patch.object(nvidia, "detect", return_value=[]), \
                     patch.object(nvidia, "configure") as configure, \
-                    patch.object(nvidia.subprocess, "run") as run:
+                    patch.object(nvidia, "preflight") as preflight:
                 nvidia.main()
                 configure.assert_not_called()
-                run.assert_not_called()
+                preflight.assert_not_called()
 
     def test_calamares_order_and_package_contract(self):
         import yaml
@@ -210,6 +208,7 @@ class NvidiaTests(unittest.TestCase):
             config = yaml.safe_load((PROFILE / "airootfs/etc/calamares/modules" / instance["config"]).read_text())
             self.assertEqual(config["dontChroot"], chroot)
             self.assertGreaterEqual(config["timeout"], timeout)
+            self.assertFalse(config["verbose"], "Calamares must retain output for its error dialog")
             self.assertEqual(config["script"], [nvidia.HELPER + (" --preflight" if chroot else " --configure")])
         permissions = json.loads((PROFILE / "profile.json").read_text())["permissions"]
         self.assertEqual(permissions[nvidia.HELPER], "755")

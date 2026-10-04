@@ -94,6 +94,7 @@ required_files=(
   "$profile_dir/airootfs/usr/lib/devario/configure-target-nvidia"
   "$profile_dir/airootfs/usr/share/devario/nvidia-supported-gpus.json"
   "$project_dir/tests/test-configure-target-nvidia.py"
+  "$project_dir/tests/test-nvidia-preflight-image.py"
   "$project_dir/tests/test-pearl-desktop.py"
   "$project_dir/tests/test-live-installer.js"
   "$profile_dir/airootfs/etc/xdg/uwsm/env.d/60-devario-gpu.sh"
@@ -314,6 +315,10 @@ fi
 if ! DEVARIO_PROFILE_DIR="$profile_dir" \
   python3 "$project_dir/tests/test-configure-target-nvidia.py"; then
   fail "Calamares NVIDIA installation behavior tests failed"
+fi
+if [[ -n "${DEVARIO_NVIDIA_TEST_ROOT:-}" ]] && ! DEVARIO_PROFILE_DIR="$profile_dir" \
+  python3 "$project_dir/tests/test-nvidia-preflight-image.py" "$DEVARIO_NVIDIA_TEST_ROOT"; then
+  fail "Calamares NVIDIA preflight image integration tests failed"
 fi
 if ! DEVARIO_PROFILE_DIR="$profile_dir" \
   bash "$project_dir/tests/test-prepare-target-kernel.sh"; then

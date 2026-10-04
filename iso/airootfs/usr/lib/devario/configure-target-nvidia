@@ -165,6 +165,27 @@ def configure(devices):
     log(f"enabled NVIDIA_EARLY_KMS for {version} / {kernel}")
 
 
+def preflight(devices):
+    # Inspect the pristine payload copied by unpackfs. Shelly's read-only
+    # inventory command still initializes user state and resolves paths via
+    # /proc/self/fd. Supply those in a private mount namespace, without writing
+    # to the source image or exposing these mounts to unpackfs. The namespace
+    # releases its mounts on both success and failure; no live mounts change.
+    result = subprocess.run([
+        "unshare", "--mount", "--propagation", "private", "--fork", "--kill-child",
+        "sh", "-eu", "-c", '''
+root=/run/devario/install-root
+mount -t proc -o ro,nosuid,nodev,noexec proc "$root/proc"
+mount -t tmpfs -o mode=0700,nosuid,nodev tmpfs "$root/root"
+mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs "$root/var/log"
+exec env -i HOME=/root PATH=/usr/bin:/bin LC_ALL=C \\
+    chroot "$root" "$1" --check-payload
+''', "devario-nvidia-preflight", HELPER], input=json.dumps(devices), text=True, check=False)
+    if result.returncode != 0:
+        raise RuntimeError(f"Pristine NVIDIA payload check failed (exit {result.returncode}); "
+                           "see command output above")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_mutually_exclusive_group()
@@ -179,10 +200,7 @@ def main():
         log("no NVIDIA display controllers; early KMS remains disabled")
         return
     if mode == "preflight":
-        # Validate the pristine root actually copied by unpackfs, not packages
-        # that might have been changed in the writable live session.
-        subprocess.run(["chroot", "/run/devario/install-root", HELPER, "--check-payload"],
-                       input=json.dumps(devices), text=True, check=True)
+        preflight(devices)
     else:
         configure(devices)
 
