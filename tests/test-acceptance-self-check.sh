@@ -26,6 +26,14 @@ rm -f "$root/var/lib/devario/shelly-keyring.ready"
 if "$check" --root "$root" --mode installed --firmware uefi --edition community >/dev/null 2>&1; then echo 'Self-check passed without the keyring-ready marker.' >&2; exit 1; fi
 : > "$root/var/lib/devario/shelly-keyring.ready"
 
+rule="$root/etc/polkit-1/rules.d/49-devario-live-installer.rules"
+if "$check" --root "$root" --mode live --firmware bios --edition community >/dev/null 2>&1; then echo 'Live image passed without installer authorization.' >&2; exit 1; fi
+mkdir -p "$(dirname "$rule")"
+cp "$project_dir/iso/airootfs/etc/polkit-1/rules.d/49-devario-live-installer.rules" "$rule"
+"$check" --root "$root" --mode live --firmware bios --edition community >/dev/null
+if "$check" --root "$root" --mode installed --firmware uefi --edition community >/dev/null 2>&1; then echo 'Installed image retained live installer authorization.' >&2; exit 1; fi
+rm "$rule"
+
 printf '%s\n' '[options]' 'SigLevel = Required' '[devario-core]' 'Server = https://packages.devario.example/core/' > "$root/etc/shelly.conf"
 if "$check" --root "$root" --mode installed --firmware uefi --edition community >/dev/null 2>&1; then echo 'Global SigLevel incorrectly satisfied the repository requirement.' >&2; exit 1; fi
 write_core_shelly; sed -i 's#https://packages#https://user:password@packages#' "$root/etc/shelly.conf"

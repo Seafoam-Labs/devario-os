@@ -23,6 +23,14 @@ rejects managed repository material. Installed checks also require the systemd-b
 marker, normal/fallback entries, and deployed EFI binaries. Promotion evidence
 uses schema version 2; version 1 represented the previous four-case matrix.
 
+Live checks also query the running Polkit daemon for a `liveuser` process, with prompting
+disabled, for Calamares elevation (both its named action and the generic pkexec
+action constrained to `/usr/bin/calamares` as root) and the KPMCore disk helper.
+A missing rule, denied request, authentication requirement, or timeout fails the
+boot check. The live image must also retain root ownership and mode 4755 on
+`pkexec` so it can elevate the installer. Installed checks require removal of
+the live installer rule.
+
 The log must contain exactly one complete line in this form:
 
 ```text
@@ -38,6 +46,11 @@ target selection, partition summary, bootloader choice, completion, and that no
 credentials were captured. The review records the active approver fingerprint.
 Real hardware checks required for a particular release are retained alongside
 the release record; source validation never fabricates them.
+
+For graphical launch, start **Install Devario** from Pearl and verify that no
+password dialog appears, Calamares runs with effective UID 0 (`isRoot: true` in
+its log), and disk discovery completes without KPMCore authorization errors.
+The noninteractive Polkit checks do not replace this graphical check.
 
 For the dracut migration, additionally verify normal/fallback installed boot,
 encrypted and plain root, the offered filesystem and swap/resume layouts,

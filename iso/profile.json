@@ -6,6 +6,7 @@
     "/etc/shadow": "400",
     "/etc/polkit-1/rules.d/49-devario-live-installer.rules": "644",
     "/etc/sudoers.d/10-devario-live": "440",
+    "/usr/bin/pkexec": "4755",
     "/usr/lib/devario/prepare-target-kernel": "755",
     "/usr/lib/devario/configure-target-nvidia": "755",
     "/usr/lib/devario/gpu-driver-setup": "755",

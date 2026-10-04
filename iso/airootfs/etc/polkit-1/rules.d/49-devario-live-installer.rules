@@ -1,9 +1,19 @@
-// Permit the Devario live user to start Calamares, including from UWSM-managed
-// processes that Polkit cannot associate with the active logind session.
+// Permit installer elevation and disk discovery for the Devario live user,
+// including UWSM processes outside the active logind session scope.
 // This file is removed from the installed system by prepare_target.conf.
 polkit.addRule(function(action, subject) {
-    if (action.id == "io.calamares.calamares.pkexec.run" &&
-        subject.user == "liveuser") {
-        return polkit.Result.YES;
+    if (subject.user == "liveuser") {
+        if (action.id == "org.kde.kpmcore.externalcommand.init") {
+            return polkit.Result.YES;
+        }
+
+        // pkexec can use its generic action if the Calamares action is not
+        // selected. Both paths must execute exactly Calamares as root.
+        if ((action.id == "io.calamares.calamares.pkexec.run" ||
+             action.id == "org.freedesktop.policykit.exec") &&
+            action.lookup("program") == "/usr/bin/calamares" &&
+            action.lookup("user") == "root") {
+            return polkit.Result.YES;
+        }
     }
 });

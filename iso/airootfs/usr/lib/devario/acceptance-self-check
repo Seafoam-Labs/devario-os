@@ -29,6 +29,7 @@ fail() { failures+=("$*"); }
 root_path() { printf '%s%s\n' "${root%/}" "$1"; }
 os_release="$(root_path /etc/os-release)"; shelly_conf="$(root_path /etc/shelly.conf)"
 keyring_ready="$(root_path /var/lib/devario/shelly-keyring.ready)"
+installer_rule="$(root_path /etc/polkit-1/rules.d/49-devario-live-installer.rules)"
 [[ -r "$os_release" ]] || fail 'missing /etc/os-release'
 [[ -r "$shelly_conf" ]] || fail 'missing /etc/shelly.conf'
 [[ -f "$keyring_ready" && ! -L "$keyring_ready" ]] || fail 'Shelly keyring initialization did not complete'
@@ -97,11 +98,38 @@ if [[ "$mode" == installed ]]; then
   [[ -s "$(root_path /etc/machine-id)" ]] || fail 'installed system lacks a machine ID'
   [[ -s "$(root_path /etc/fstab)" ]] || fail 'installed system lacks fstab'
   [[ ! -e "$(root_path /run/devario/live)" ]] || fail 'installed system is still a Devario live root'
+  [[ ! -e "$installer_rule" && ! -L "$installer_rule" ]] || fail 'installed system retains live installer authorization'
 else
   [[ -x "$(root_path /usr/bin/calamares)" || "$root" != / ]] || fail 'live image lacks Calamares'
+  [[ -s "$installer_rule" && ! -L "$installer_rule" ]] || fail 'live image lacks the installer authorization rule'
   if [[ "$root" == / ]]; then
     [[ -e /run/devario/live ]] || fail 'live image lacks the Devario dracut marker'
     mountpoint -q /run/devario/install-root || fail 'pristine installation source is not mounted'
+    [[ "$(stat -c '%u:%a' /usr/bin/pkexec)" == 0:4755 ]] || fail 'pkexec must be owned by root with mode 4755'
+    # Polkit requires a trusted caller to supply executable/target-user details.
+    # Query as root for a liveuser process held open on a pipe, without creating
+    # a logind session or allowing a prompt. The handshake ensures the subject
+    # has dropped root privileges before its authorization is tested.
+    coproc INSTALLER_SUBJECT {
+      setpriv --reuid=liveuser --regid=liveuser --init-groups \
+        sh -c 'echo "$$"; read -r finished'
+    }
+    installer_input=${INSTALLER_SUBJECT[1]} installer_output=${INSTALLER_SUBJECT[0]}
+    installer_job=$INSTALLER_SUBJECT_PID
+    if read -r -t 15 installer_pid <&"$installer_output" && [[ "$installer_pid" =~ ^[0-9]+$ ]]; then
+      installer_start=$(awk '{print $22}' "/proc/$installer_pid/stat")
+      installer_uid=$(id -u liveuser)
+      for action in io.calamares.calamares.pkexec.run org.freedesktop.policykit.exec org.kde.kpmcore.externalcommand.init; do
+        if ! timeout 15s pkcheck --process "$installer_pid,$installer_start,$installer_uid" \
+          --action-id "$action" -d program /usr/bin/calamares -d user root; then
+          fail "live installer requires authentication or authorization failed: $action"
+        fi
+      done
+    else
+      fail 'could not start the liveuser authorization probe'
+    fi
+    exec {installer_input}>&- {installer_output}<&-
+    wait "$installer_job" || true
   fi
 fi
 

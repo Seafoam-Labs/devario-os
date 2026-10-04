@@ -220,9 +220,11 @@ environment from hash-pinned wheels. Python must provide `venv` and `ensurepip`;
 no `python-jsonschema` repository package is required. See
 [Python validation preparation](docs/ISO-BUILDER.md#python-validation-preparation)
 for offline caches and standalone validator commands.
+Source validation also requires Node.js to execute the live installer's Polkit
+rule against allowed and denied authorization requests.
 
 ```sh
-shelly install standard --upgrade python libisoburn dosfstools mtools squashfs-tools openssl util-linux base-devel git
+shelly install standard --upgrade python nodejs libisoburn dosfstools mtools squashfs-tools openssl util-linux base-devel git
 ```
 
 For virtual-machine testing, the QEMU helper installs `qemu-desktop` and

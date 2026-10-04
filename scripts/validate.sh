@@ -95,6 +95,7 @@ required_files=(
   "$profile_dir/airootfs/usr/share/devario/nvidia-supported-gpus.json"
   "$project_dir/tests/test-configure-target-nvidia.py"
   "$project_dir/tests/test-pearl-desktop.py"
+  "$project_dir/tests/test-live-installer.js"
   "$profile_dir/airootfs/etc/xdg/uwsm/env.d/60-devario-gpu.sh"
   "$profile_dir/airootfs/etc/calamares/modules/services-systemd.conf"
   "$profile_dir/late-airootfs/etc/greetd/config.toml"
@@ -300,6 +301,9 @@ if ! python3 "$project_dir/tests/test-stage-core-repository.py"; then
 fi
 if ! python3 "$project_dir/tests/test-pearl-desktop.py"; then
   fail "Pearl desktop and live login integration tests failed"
+fi
+if ! DEVARIO_PROFILE_DIR="$profile_dir" node "$project_dir/tests/test-live-installer.js"; then
+  fail "Live installer authorization tests failed (Node.js is required)"
 fi
 if ! python3 "$project_dir/tests/test-devario-report.py"; then
   fail "Devario report behavior and packaging tests failed"
@@ -1113,6 +1117,10 @@ if ! grep -Fqx 'Exec=/usr/bin/pkexec /usr/bin/calamares' \
 fi
 for required_polkit_text in \
   'action.id == "io.calamares.calamares.pkexec.run"' \
+  'action.id == "org.freedesktop.policykit.exec"' \
+  'action.id == "org.kde.kpmcore.externalcommand.init"' \
+  'action.lookup("program") == "/usr/bin/calamares"' \
+  'action.lookup("user") == "root"' \
   'subject.user == "liveuser"' \
   'return polkit.Result.YES;'; do
   if ! grep -Fq "$required_polkit_text" "$live_installer_polkit"; then
