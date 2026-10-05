@@ -7,6 +7,13 @@ polkit.addRule(function(action, subject) {
             return polkit.Result.YES;
         }
 
+        // The Wayland launcher validates the socket and runs only Calamares.
+        if (action.id == "org.freedesktop.policykit.exec" &&
+            action.lookup("program") == "/usr/lib/devario/start-installer" &&
+            action.lookup("user") == "root") {
+            return polkit.Result.YES;
+        }
+
         // pkexec can use its generic action if the Calamares action is not
         // selected. Both paths must execute exactly Calamares as root.
         if ((action.id == "io.calamares.calamares.pkexec.run" ||

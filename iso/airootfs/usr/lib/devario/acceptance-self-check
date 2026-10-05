@@ -102,6 +102,7 @@ if [[ "$mode" == installed ]]; then
   [[ -s "$(root_path /etc/fstab)" ]] || fail 'installed system lacks fstab'
   [[ ! -e "$(root_path /run/devario/live)" ]] || fail 'installed system is still a Devario live root'
   [[ ! -e "$installer_rule" && ! -L "$installer_rule" ]] || fail 'installed system retains live installer authorization'
+  [[ ! -e "$(root_path /usr/lib/devario/start-installer)" ]] || fail 'installed system retains the live installer launcher'
 else
   [[ -x "$(root_path /usr/bin/calamares)" || "$root" != / ]] || fail 'live image lacks Calamares'
   [[ -s "$installer_rule" && ! -L "$installer_rule" ]] || fail 'live image lacks the installer authorization rule'
@@ -109,6 +110,7 @@ else
     [[ -e /run/devario/live ]] || fail 'live image lacks the Devario dracut marker'
     mountpoint -q /run/devario/install-root || fail 'pristine installation source is not mounted'
     [[ "$(stat -c '%u:%a' /usr/bin/pkexec)" == 0:4755 ]] || fail 'pkexec must be owned by root with mode 4755'
+    [[ "$(stat -c '%u:%a' /usr/lib/devario/start-installer)" == 0:755 ]] || fail 'the Wayland installer launcher must be owned by root with mode 755'
     # Polkit requires a trusted caller to supply executable/target-user details.
     # Query as root for a liveuser process held open on a pipe, without creating
     # a logind session or allowing a prompt. The handshake ensures the subject
@@ -128,6 +130,10 @@ else
           fail "live installer requires authentication or authorization failed: $action"
         fi
       done
+      if ! timeout 15s pkcheck --process "$installer_pid,$installer_start,$installer_uid" \
+        --action-id org.freedesktop.policykit.exec -d program /usr/lib/devario/start-installer -d user root; then
+        fail 'the Wayland installer launcher requires authentication or authorization failed'
+      fi
     else
       fail 'could not start the liveuser authorization probe'
     fi

@@ -37,6 +37,10 @@ cp "$project_dir/iso/airootfs/etc/polkit-1/rules.d/49-devario-live-installer.rul
 "$check" --root "$root" --mode live --firmware bios --edition community >/dev/null
 if "$check" --root "$root" --mode installed --firmware uefi --edition community >/dev/null 2>&1; then echo 'Installed image retained live installer authorization.' >&2; exit 1; fi
 rm "$rule"
+mkdir -p "$root/usr/lib/devario"
+touch "$root/usr/lib/devario/start-installer"
+if "$check" --root "$root" --mode installed --firmware uefi --edition community >/dev/null 2>&1; then echo 'Installed image retained the live installer launcher.' >&2; exit 1; fi
+rm "$root/usr/lib/devario/start-installer"
 
 for repository in devario-browser devario-development devario-entertainment devario-gaming devario-utilities; do
   write_core_shelly

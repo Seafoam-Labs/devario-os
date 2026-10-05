@@ -1,0 +1,71 @@
+#!/usr/bin/python3 -I
+"""Launch the live installer as root on the live user's Wayland display."""
+
+import os
+from pathlib import Path
+import pwd
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+
+HELPER = "/usr/lib/devario/start-installer"
+
+
+def validate_socket(socket, uid, runtime):
+    socket = Path(socket)
+    if not socket.is_absolute():
+        raise ValueError("the Wayland socket must have an absolute path")
+    socket = socket.resolve(strict=True)
+    if socket.parent != runtime or runtime.stat().st_uid != uid:
+        raise ValueError("the Wayland socket must be in the live user's runtime directory")
+    info = socket.stat()
+    if not stat.S_ISSOCK(info.st_mode) or info.st_uid != uid:
+        raise ValueError("the Wayland display must be a socket owned by the live user")
+    return str(socket)
+
+
+def main(args):
+    live_uid = pwd.getpwnam("liveuser").pw_uid
+    runtime = Path("/run/user") / str(live_uid)
+    if os.geteuid() != 0:
+        if os.getuid() != live_uid or args:
+            raise ValueError("this launcher is only available to the live user")
+        display = os.environ.get("WAYLAND_DISPLAY")
+        if not display:
+            raise ValueError("start the installer from the Aqueous Wayland session")
+        socket = Path(display)
+        if not socket.is_absolute():
+            socket = Path(os.environ.get("XDG_RUNTIME_DIR", str(runtime))) / socket
+        socket = validate_socket(socket, live_uid, runtime)
+        # Arguments survive pkexec's environment reset. Never elevate env, a
+        # shell, arbitrary Calamares arguments, or a caller-selected executable.
+        os.execv("/usr/bin/pkexec", ["pkexec", "--disable-internal-agent", HELPER, socket])
+    else:
+        if os.environ.get("PKEXEC_UID") != str(live_uid) or len(args) != 1:
+            raise ValueError("the elevated launcher requires a live-user pkexec request")
+        socket = validate_socket(args[0], live_uid, runtime)
+        # Qt requires a runtime directory owned by its effective user. Use an
+        # absolute Wayland socket so it still connects to the live compositor.
+        root_runtime = tempfile.mkdtemp(prefix="devario-installer-", dir="/run")
+        try:
+            environment = {
+                "PATH": "/usr/bin:/usr/sbin",
+                "HOME": "/root", "USER": "root", "LOGNAME": "root",
+                "LANG": os.environ.get("LANG", "C.UTF-8"),
+                "QT_QPA_PLATFORM": "wayland",
+                "WAYLAND_DISPLAY": socket,
+                "XDG_RUNTIME_DIR": root_runtime,
+            }
+            return subprocess.run(["/usr/bin/calamares"], env=environment, cwd="/root").returncode
+        finally:
+            shutil.rmtree(root_runtime)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except (KeyError, OSError, ValueError) as error:
+        print(f"Cannot start the Devario installer: {error}", file=sys.stderr)
+        sys.exit(1)

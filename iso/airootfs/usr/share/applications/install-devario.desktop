@@ -2,7 +2,8 @@
 Type=Application
 Name=Install Devario
 Comment=Install Devario on this computer
-Exec=/usr/bin/pkexec /usr/bin/calamares
+Exec=/usr/lib/devario/start-installer
+Keywords=calamares;installer;devario;
 Icon=calamares
 Terminal=false
 Categories=System;

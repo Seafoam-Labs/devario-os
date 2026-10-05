@@ -169,7 +169,7 @@ export SHELLY_ELEVATOR="$run_dir/rlpm-elevate"
 
 phase 'Prepare host tools'
 if (( install_dependencies )); then
-  run shelly install standard --upgrade --no-confirm python libisoburn dosfstools mtools \
+  run shelly install standard --needed --no-confirm python libisoburn dosfstools mtools \
     squashfs-tools openssl util-linux systemd git libarchive gnupg binutils zstd patch
 fi
 if (( ! dry_run )); then

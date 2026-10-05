@@ -16,6 +16,7 @@ assert.equal(rules.length, 1);
 const launchActions = ['io.calamares.calamares.pkexec.run', 'org.freedesktop.policykit.exec'];
 const diskAction = 'org.kde.kpmcore.externalcommand.init';
 const launch = {program: '/usr/bin/calamares', user: 'root'};
+const helper = '/usr/lib/devario/start-installer';
 let cases = 0;
 function check(id, user, details, expected, session = {}) {
     const actual = rules[0]({id, lookup: key => details[key]}, {user, ...session});
@@ -25,11 +26,17 @@ function check(id, user, details, expected, session = {}) {
 
 for (const session of [{local: true, active: true}, {local: false, active: false}, {}]) {
     for (const id of launchActions) check(id, 'liveuser', launch, 'yes', session);
+    check('org.freedesktop.policykit.exec', 'liveuser', {program: helper, user: 'root'}, 'yes', session);
     check(diskAction, 'liveuser', {}, 'yes', session);
 }
 for (const user of ['zoey', 'installeduser', 'liveuser2', 'root', undefined]) {
     for (const id of [...launchActions, diskAction]) check(id, user, launch, undefined);
+    check('org.freedesktop.policykit.exec', user, {program: helper, user: 'root'}, undefined);
 }
+for (const user of ['liveuser', 'nobody', undefined]) {
+    check('org.freedesktop.policykit.exec', 'liveuser', {program: helper, user}, undefined);
+}
+check(launchActions[0], 'liveuser', {program: helper, user: 'root'}, undefined);
 for (const id of launchActions) {
     for (const program of ['/usr/bin/sh', '/usr/bin/env', '/tmp/calamares', 'calamares', undefined]) {
         check(id, 'liveuser', {...launch, program}, undefined);
@@ -45,11 +52,14 @@ for (const id of ['org.freedesktop.policykit.exec.other', 'org.freedesktop.syste
 }
 
 assert.match(read('airootfs/usr/share/applications/install-devario.desktop'),
-             /^Exec=\/usr\/bin\/pkexec \/usr\/bin\/calamares$/m);
+             /^Exec=\/usr\/lib\/devario\/start-installer$/m);
+assert.match(read('late-airootfs/usr/share/applications/calamares.desktop'), /^Hidden=true$/m);
 const permissions = JSON.parse(read('profile.json')).permissions;
 assert.equal(permissions[rulePath], '644');
 assert.equal(permissions['/usr/bin/pkexec'], '4755', 'pkexec must retain its setuid bit in the image');
+assert.equal(permissions[helper], '755');
 const cleanup = read('airootfs/etc/calamares/modules/prepare_target.conf');
 assert.ok(cleanup.includes('rm -f ' + rulePath), 'installed system must remove the live rule');
 assert.ok(cleanup.includes('userdel --remove liveuser'), 'installed system must remove the live user');
+assert.ok(cleanup.includes('/usr/share/applications/calamares.desktop ' + helper));
 console.log(`Live installer authorization: ${cases} policy cases and launcher/cleanup checks passed.`);

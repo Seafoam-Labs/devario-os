@@ -97,6 +97,9 @@ required_files=(
   "$project_dir/tests/test-nvidia-preflight-image.py"
   "$project_dir/tests/test-pearl-desktop.py"
   "$project_dir/tests/test-live-installer.js"
+  "$project_dir/tests/test-start-installer.py"
+  "$profile_dir/airootfs/usr/lib/devario/start-installer"
+  "$profile_dir/late-airootfs/usr/share/applications/calamares.desktop"
   "$profile_dir/airootfs/etc/xdg/uwsm/env.d/60-devario-gpu.sh"
   "$profile_dir/airootfs/etc/calamares/modules/services-systemd.conf"
   "$profile_dir/late-airootfs/etc/greetd/config.toml"
@@ -305,6 +308,9 @@ if ! python3 "$project_dir/tests/test-pearl-desktop.py"; then
 fi
 if ! DEVARIO_PROFILE_DIR="$profile_dir" node "$project_dir/tests/test-live-installer.js"; then
   fail "Live installer authorization tests failed (Node.js is required)"
+fi
+if ! DEVARIO_PROFILE_DIR="$profile_dir" python3 "$project_dir/tests/test-start-installer.py"; then
+  fail "the live installer privilege and Wayland handoff tests failed"
 fi
 if ! python3 "$project_dir/tests/test-devario-report.py"; then
   fail "Devario report behavior and packaging tests failed"
@@ -1006,7 +1012,7 @@ for systemd_boot_helper_text in \
   '/vmlinuz-linux-devario /initramfs-linux-devario.img' \
   '/vmlinuz-linux-devario /initramfs-linux-devario-fallback.img' \
   'bootctl --esp-path="$boot_dir" --variables=yes install' \
-  'bootctl --esp-path="$boot_dir" --variables=no update' \
+  'bootctl --esp-path="$boot_dir" --variables=no --graceful update' \
   'installed_marker=/var/lib/devario/systemd-boot-installed' \
   'target installation marker is absent; skipping live-image transaction' \
   'kernel-command-line'; do
@@ -1116,11 +1122,12 @@ fi
 if [[ ! -f "$live_installer_desktop" ]]; then
   fail "the Pearl launcher is missing the Install Devario desktop entry"
 fi
-if ! grep -Fqx 'Exec=/usr/bin/pkexec /usr/bin/calamares' \
+if ! grep -Fqx 'Exec=/usr/lib/devario/start-installer' \
   "$live_installer_desktop"; then
-  fail "the live installer desktop entry must launch Calamares through Polkit"
+  fail "the live installer desktop entry must use the Wayland-aware Polkit launcher"
 fi
 for required_polkit_text in \
+  'action.lookup("program") == "/usr/lib/devario/start-installer"' \
   'action.id == "io.calamares.calamares.pkexec.run"' \
   'action.id == "org.freedesktop.policykit.exec"' \
   'action.id == "org.kde.kpmcore.externalcommand.init"' \
@@ -1132,6 +1139,10 @@ for required_polkit_text in \
     fail "the live installer Polkit rule is missing: $required_polkit_text"
   fi
 done
+if ! grep -Fq 'rm -f /usr/share/applications/calamares.desktop /usr/lib/devario/start-installer' \
+  "$prepare_target"; then
+  fail "Calamares must remove the live Wayland launcher and duplicate desktop entry"
+fi
 if grep -Eq 'subject\.(local|active)' "$live_installer_polkit"; then
   fail "the live installer Polkit rule must support UWSM-managed processes outside the logind session scope"
 fi
