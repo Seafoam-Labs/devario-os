@@ -161,6 +161,11 @@ printf '%s\n' "${!trusted_set[@]}" | LC_ALL=C sort \
   | sed '/^$/d; s/$/:4:/' > "$temporary_trusted"
 printf '%s\n' "${!revoked_set[@]}" | LC_ALL=C sort \
   | sed '/^$/d' > "$temporary_revoked"
+# An empty revocation list still needs one byte for Remora's source uploads.
+# Both Devario and Shelly ignore blank lines when reading fingerprints.
+if [[ ! -s "$temporary_revoked" ]]; then
+  printf '\n' > "$temporary_revoked"
+fi
 
 install -m 0644 "$temporary_bundle" "$keyring_dir/devario.gpg"
 install -m 0644 "$temporary_trusted" "$keyring_dir/devario-trusted"

@@ -1,6 +1,6 @@
 pkgname=devario-keyring
 pkgver=20260923
-pkgrel=2
+pkgrel=3
 pkgdesc="Devario repository signing keys"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -14,7 +14,7 @@ source=(
 sha256sums=(
   'e4a35b1431350637d8babb5358865953f130e3b706c0d02e3babdb5e481a576a'
   '442d605891a618ef4783f018521aac8bb609b1abb67f9db21ae4c94b642a1c03'
-  'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+  '01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b'
   '0a08e600db32175055ed10052427e97425f6f626c273e0e95b722ea423769cab'
 )
 

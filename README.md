@@ -69,7 +69,7 @@ login template without live autologin.
 Calamares does not invoke a package manager during installation. Its `unpackfs` module copies the prepared live root
 filesystem, and the remaining modules configure that copy for the target machine.
 
-The live environment defaults to UTC through `iso/airootfs/etc/localtime`,
+The ISO build stages `/etc/localtime` as a link to the packaged UTC timezone,
 preventing systemd's initial setup service from prompting for a timezone at boot.
 Calamares applies the user's selected timezone to the installed system.
 
