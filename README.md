@@ -584,8 +584,104 @@ the ISO:
 ./scripts/setup-qemu.sh --disk-only
 ```
 
-UEFI and BIOS use separate persistent disks below `out/qemu/`. If host OpenGL
-causes a display error, rerun with `--no-gl`.
+UEFI and BIOS use separate persistent disks below `out/qemu/`. The graphical
+helper enables Venus with `virtio-vga-gl,hostmem=4G,blob=true,venus=true` and
+shared memfd guest RAM. Aqueous requires Vulkan; ordinary VirGL OpenGL
+acceleration and the guest's CPU Vulkan driver do not provide the required
+Vulkan device for the virtio DRM display. The ISO therefore requires
+`vulkan-virtio`, including `libvulkan_virtio.so` and its ICD manifest.
+On guests whose DRM devices are all virtio GPUs, Devario also selects Zink for
+GBM allocation in greetd, UWSM, and the elevated installer. This keeps display
+and client buffers on Venus: importing ordinary VirGL GBM buffers into Venus
+failed with the tested QEMU external EGL context. Native and mixed GPU systems
+keep their existing allocator selection.
+
+The host needs a working Vulkan driver, `vulkan-tools`, and QEMU and
+virglrenderer builds with Venus support. The helper checks QEMU device options
+and host Vulkan enumeration before preparing a desktop VM. The backend must
+also initialize successfully at VM startup. See
+[Mesa's Venus requirements and QEMU configuration](https://docs.mesa3d.org/drivers/venus.html).
+`DEVARIO_QEMU_HOSTMEM` changes the GPU memory aperture; it defaults to `4G`.
+`--no-gl` supports console boot testing only and cannot start Aqueous or
+Pearl Greeter. `--software` changes CPU acceleration and still requests Venus
+unless combined with `--no-gl`.
+Intel KVM hosts additionally need QEMU 11+ and a host kernel meeting Mesa's
+Venus mapping requirements; the helper enables `honor-guest-pat=on` there.
+
+For virt-manager, select a virtio video device and enable 3D acceleration and
+OpenGL display support. Check the generated QEMU command for `venus=true`,
+`blob=true`, and a nonzero `hostmem`; the 3D checkbox alone does not establish
+Vulkan support. Configure those properties using the installed libvirt
+version's supported device overrides, and use shared memfd guest memory.
+Confirm `vulkaninfo --summary` in the guest reports `DRIVER_ID_MESA_VENUS`.
+
+For libvirt 8.2+ test domains, add
+`xmlns:qemu="http://libvirt.org/schemas/domain/qemu/1.0"` to the existing
+`<domain>` element. Set shared memory backing as follows:
+
+```xml
+<memoryBacking>
+  <source type="memfd"/>
+  <access mode="shared"/>
+</memoryBacking>
+```
+
+Give the existing virtio `<video>` device an alias
+`<alias name="ua-venus-video"/>`, alongside its model with
+`<acceleration accel3d="yes"/>`. Add this override directly under `<domain>`:
+
+```xml
+<qemu:override>
+  <qemu:device alias="ua-venus-video">
+    <qemu:frontend>
+      <qemu:property name="venus" type="bool" value="true"/>
+      <qemu:property name="blob" type="bool" value="true"/>
+      <qemu:property name="hostmem" type="unsigned" value="4294967296"/>
+    </qemu:frontend>
+  </qemu:device>
+</qemu:override>
+```
+
+Keep the display's OpenGL support enabled. These are QEMU-specific test-domain
+overrides; check them against the installed hypervisor versions. See
+[libvirt's device override documentation](https://libvirt.org/drvqemu.html#overriding-properties-of-qemu-devices).
+
+Run the full live desktop probes on a host with KVM and Venus support:
+
+```sh
+python3 scripts/test-live-desktop.py --iso /path/to/devario.iso --output out/desktop-live --phase live
+python3 scripts/test-live-desktop.py --iso /path/to/devario.iso --output out/desktop-greeter --phase greeter
+```
+
+Use a fresh output directory for each run. `--render-node /dev/dri/renderD129`
+selects a particular host GPU on a hybrid system; use the appropriate node for
+your hardware. The probes boot the candidate's exact kernel and initramfs
+against its full live filesystem, verify Venus, a responsive Aqueous Wayland
+display, Pearl, and a mapped Calamares window, and retain logs, the QEMU command,
+an ISO digest, and a screenshot. The greeter phase exercises the packaged
+installed-login configuration in the disposable live overlay. These probes
+complement the BIOS/UEFI bootloader and installed-disk acceptance tests.
+The on-image probe runs only when its explicit QEMU firmware request is present.
+Screenshots use a private Unix VNC socket because GL scanout can lack the
+surface needed by QMP `screendump`.
+`result.json` records the guest checks and QEMU exit status separately, including
+failed runs. Overall acceptance requires a captured display and a clean QEMU
+exit; a guest pass alone does not hide a host graphics cleanup crash.
+
+On a hybrid host, select matching host EGL and Vulkan drivers. For example,
+the AMD/Mesa backend used for these probes can be selected per process:
+
+```sh
+__EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/50_mesa.json \
+__GLX_VENDOR_LIBRARY_NAME=mesa \
+VK_DRIVER_FILES=/usr/share/vulkan/icd.d/radeon_icd.json \
+python3 scripts/test-live-desktop.py --iso /path/to/devario.iso \
+  --output out/desktop-live-amd --render-node /dev/dri/renderD129
+```
+
+Adjust the driver paths and render node for the host. Successful Vulkan
+enumeration alone does not prove that the guest compositor can match its DRM
+device to the exported Vulkan device.
 
 Before publishing an image, verify that:
 
@@ -621,6 +717,9 @@ Before publishing an image, verify that:
 
 - Development images deliberately trust their embedded repository. Public images must use release mode with a signed
   HTTPS repository.
+- The October 6 live-boot recording also shows a failed optical-device loopback
+  unit and a delay rebuilding the dynamic linker cache. Boot proceeds beyond
+  both; investigate them separately from Vulkan desktop startup.
 - Devario maintainers must track Seafoam Labs kernel security releases, rebuild and
   sign the pinned kernel promptly, and publish corresponding source materials.
 - Calamares targets x86-64-v3 and must be built with compatible startup objects

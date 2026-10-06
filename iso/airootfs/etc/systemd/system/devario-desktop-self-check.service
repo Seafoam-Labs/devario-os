@@ -1,0 +1,15 @@
+[Unit]
+Description=Devario graphical desktop acceptance probe
+ConditionPathExists=/sys/firmware/qemu_fw_cfg/by_name/opt/org.devario/desktop/raw
+After=pearl-greeter.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/lib/devario/desktop-self-check
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=300
+
+[Install]
+WantedBy=graphical.target

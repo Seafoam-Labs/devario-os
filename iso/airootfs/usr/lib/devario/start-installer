@@ -58,6 +58,9 @@ def main(args):
                 "WAYLAND_DISPLAY": socket,
                 "XDG_RUNTIME_DIR": root_runtime,
             }
+            if subprocess.run(['/usr/lib/devario/graphics-session', '--detect-virtio'],
+                              check=False).returncode == 0:
+                environment['MESA_LOADER_DRIVER_OVERRIDE'] = 'zink'
             return subprocess.run(["/usr/bin/calamares"], env=environment, cwd="/root").returncode
         finally:
             shutil.rmtree(root_runtime)

@@ -26,7 +26,7 @@ Options:
   --uefi          Boot with OVMF UEFI firmware (default)
   --bios          Boot live media with legacy BIOS firmware (installation requires UEFI)
   --software      Disable KVM and use software CPU emulation
-  --no-gl         Disable virtio-gpu OpenGL acceleration
+  --no-gl         Console boot testing only; disables the Vulkan desktop GPU
   --dry-run       Prepare state and print the QEMU command without running it
   -h, --help      Show this help
 
@@ -35,6 +35,8 @@ Environment:
   DEVARIO_QEMU_CPUS       Guest CPU count (default: 4)
   DEVARIO_QEMU_DISK_SIZE  Sparse test-disk size (default: 64G)
   DEVARIO_QEMU_STATE_DIR  VM state directory (default: out/qemu)
+  DEVARIO_QEMU_HOSTMEM    Venus GPU host-visible memory aperture (default: 4G)
+  DEVARIO_QEMU_FIRMWARE_DIR  Optional directory to search first for OVMF
 EOF
 }
 
@@ -98,6 +100,7 @@ if (( disk_only )) && [[ -n "$iso_path" ]]; then
 fi
 
 memory="${DEVARIO_QEMU_MEMORY:-6G}"
+hostmem="${DEVARIO_QEMU_HOSTMEM:-4G}"
 cpus="${DEVARIO_QEMU_CPUS:-4}"
 disk_size="${DEVARIO_QEMU_DISK_SIZE:-64G}"
 state_dir="${DEVARIO_QEMU_STATE_DIR:-$project_dir/out/qemu}"
@@ -107,6 +110,8 @@ fi
 
 [[ "$memory" =~ ^[1-9][0-9]*([MGT])?$ ]] \
   || die "DEVARIO_QEMU_MEMORY must be a positive size such as 6G"
+[[ "$hostmem" =~ ^[1-9][0-9]*[MGT]$ ]] \
+  || die "DEVARIO_QEMU_HOSTMEM must be a positive size with a unit, such as 4G"
 [[ "$cpus" =~ ^[1-9][0-9]*$ ]] \
   || die "DEVARIO_QEMU_CPUS must be a positive integer"
 [[ "$disk_size" =~ ^[1-9][0-9]*([MGT])?$ ]] \
@@ -120,7 +125,11 @@ find_ovmf() {
   local firmware_pair
   local code_name
   local vars_name
-  local -a firmware_dirs=(
+  local -a firmware_dirs=()
+  if [[ -n "${DEVARIO_QEMU_FIRMWARE_DIR:-}" ]]; then
+    firmware_dirs+=("$DEVARIO_QEMU_FIRMWARE_DIR")
+  fi
+  firmware_dirs+=(
     /usr/share/edk2/x64
     /usr/share/edk2/ovmf
     /usr/share/OVMF
@@ -151,14 +160,15 @@ find_ovmf() {
 dependencies_ready() {
   command -v qemu-system-x86_64 >/dev/null 2>&1 \
     && command -v qemu-img >/dev/null 2>&1 \
-    && find_ovmf
+    && find_ovmf \
+    && { (( ! enable_gl )) || command -v vulkaninfo >/dev/null 2>&1; }
 }
 
 if ! dependencies_ready; then
   command -v shelly >/dev/null 2>&1 \
-    || die "Shelly is required to install qemu-desktop and edk2-ovmf"
+    || die "Shelly is required to install qemu-desktop, edk2-ovmf, and vulkan-tools"
   echo "Installing QEMU and OVMF through Shelly..."
-  shelly install standard --upgrade qemu-desktop edk2-ovmf
+  shelly install standard --upgrade qemu-desktop edk2-ovmf vulkan-tools
   hash -r
 fi
 
@@ -212,6 +222,14 @@ if [[ -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" ]]; then
   die "no graphical session was detected; run this helper from the desktop"
 fi
 
+if (( enable_gl )); then
+  # shellcheck source=lib/qemu-graphics.sh
+  source "$script_dir/lib/qemu-graphics.sh"
+  devario_qemu_check_venus || die 'Venus desktop prerequisites are unavailable'
+else
+  warn '--no-gl boots the console only; Aqueous and Pearl Greeter require Vulkan'
+fi
+
 if (( ! disk_only )); then
   if [[ -n "$iso_path" ]]; then
     [[ -f "$iso_path" ]] || die "ISO does not exist: $iso_path"
@@ -240,9 +258,17 @@ if [[ ! -f "$disk_path" ]]; then
   qemu-img create -f qcow2 "$disk_path" "$disk_size"
 fi
 
+accelerator_options="$acceleration"
+if (( enable_gl )) && [[ "$acceleration" == kvm ]] \
+  && grep -Fqm1 'GenuineIntel' /proc/cpuinfo; then
+  # Venus host-visible mappings on Intel require QEMU 11+ honoring guest PAT.
+  accelerator_options+=',honor-guest-pat=on'
+fi
+
 qemu_args=(
   -name 'Devario ISO Test'
-  -machine "q35,accel=$acceleration"
+  -machine q35
+  -accel "$accelerator_options"
   -cpu "$cpu_model"
   -smp "$cpus"
   -m "$memory"
@@ -253,8 +279,14 @@ qemu_args=(
 )
 
 if (( enable_gl )); then
+  # -m interprets a bare number as MiB; memory-backend-memfd interprets it as
+  # bytes. Normalize the latter so both describe the same guest RAM.
+  ram_size="$memory"
+  [[ "$ram_size" =~ [MGT]$ ]] || ram_size="${ram_size}M"
   qemu_args+=(
-    -device virtio-vga-gl
+    -object "memory-backend-memfd,id=devario-ram,size=$ram_size,share=on"
+    -machine memory-backend=devario-ram
+    -device "virtio-vga-gl,hostmem=$hostmem,blob=true,venus=true"
     -display gtk,gl=on
   )
 else

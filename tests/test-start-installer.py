@@ -86,6 +86,19 @@ class LauncherTests(unittest.TestCase):
 
     @patch.object(launcher.pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=1000))
     @patch.object(launcher.os, 'geteuid', return_value=0)
+    def test_virtio_installer_uses_venus_allocator(self, *_):
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.dict(os.environ, {'PKEXEC_UID': '1000'}, clear=True), \
+             patch.object(launcher, 'validate_socket', return_value='/run/user/1000/wayland-1'), \
+             patch.object(launcher.tempfile, 'mkdtemp', return_value=str(Path(directory) / 'runtime')), \
+             patch.object(launcher.subprocess, 'run', side_effect=[
+                 SimpleNamespace(returncode=0), SimpleNamespace(returncode=0)]) as run:
+            (Path(directory) / 'runtime').mkdir()
+            launcher.main(['/run/user/1000/wayland-1'])
+            self.assertEqual(run.call_args.kwargs['env']['MESA_LOADER_DRIVER_OVERRIDE'], 'zink')
+
+    @patch.object(launcher.pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=1000))
+    @patch.object(launcher.os, 'geteuid', return_value=0)
     def test_invalid_elevated_request(self, *_):
         for environment, args in [({}, ['/run/user/1000/wayland-1']),
                                   ({'PKEXEC_UID': '2000'}, ['/run/user/1000/wayland-1']),

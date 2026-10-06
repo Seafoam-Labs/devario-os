@@ -11,6 +11,8 @@
     "/usr/lib/devario/prepare-target-kernel": "755",
     "/usr/lib/devario/configure-target-nvidia": "755",
     "/usr/lib/devario/gpu-driver-setup": "755",
+    "/usr/lib/devario/desktop-self-check": "755",
+    "/usr/lib/devario/graphics-session": "755",
     "/usr/local/bin/devario-aqueous-live-session": "755"
   }
 }

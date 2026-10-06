@@ -79,6 +79,7 @@ vulkan-intel
 vulkan-radeon
 vulkan-swrast
 vulkan-tools
+vulkan-virtio
 wayland-utils
 wireplumber
 xdg-desktop-portal-aqueous

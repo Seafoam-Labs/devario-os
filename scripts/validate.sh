@@ -96,6 +96,14 @@ required_files=(
   "$project_dir/tests/test-configure-target-nvidia.py"
   "$project_dir/tests/test-nvidia-preflight-image.py"
   "$project_dir/tests/test-pearl-desktop.py"
+  "$project_dir/tests/test-qemu-graphics.py"
+  "$project_dir/scripts/lib/qemu-graphics.sh"
+  "$project_dir/scripts/test-live-desktop.py"
+  "$profile_dir/airootfs/usr/lib/devario/desktop-self-check"
+  "$profile_dir/airootfs/usr/lib/devario/graphics-session"
+  "$profile_dir/airootfs/etc/xdg/uwsm/env.d/61-devario-virtio.sh"
+  "$profile_dir/late-airootfs/usr/share/devario/greetd/config.toml"
+  "$profile_dir/airootfs/etc/systemd/system/devario-desktop-self-check.service"
   "$project_dir/tests/test-live-installer.js"
   "$project_dir/tests/test-start-installer.py"
   "$profile_dir/airootfs/usr/lib/devario/start-installer"
@@ -301,6 +309,9 @@ fi
 if ! python3 "$project_dir/tests/test-pearl-desktop.py"; then
   fail "Pearl desktop and live login integration tests failed"
 fi
+if ! python3 "$project_dir/tests/test-qemu-graphics.py"; then
+  fail "QEMU Venus setup behavior tests failed"
+fi
 if ! DEVARIO_PROFILE_DIR="$profile_dir" node "$project_dir/tests/test-live-installer.js"; then
   fail "Live installer authorization tests failed (Node.js is required)"
 fi
@@ -424,7 +435,7 @@ for required_package in \
   calamares ckbcomp devario-desktop \
   devario-base devario-boot devario-dracut devario-keyring greetd systemd pearl pearl-greeter shelly fastfetch fish \
   linux-devario linux-devario-headers nvidia-open-dkms nvidia-utils \
-  vulkan-intel vulkan-radeon vulkan-swrast xorg-xwayland; do
+  vulkan-intel vulkan-radeon vulkan-swrast vulkan-virtio xorg-xwayland; do
   if ! package_is_listed "$required_package"; then
     fail "packages.x86_64 does not include $required_package"
   fi
@@ -491,9 +502,11 @@ if ! grep -Fq "'0001-devario-wayland-runtime.patch'" "$calamares_pkgbuild" \
 fi
 
 declare -A pinned_desktop_sources=(
+  ["packages/devario-aqueous-desktop/graphics-session"]='e6bc412c7b9cd8b4eca018bffc83e06d01bd30336ae03f6fa16aed56c87d7eeb'
+  ["packages/devario-aqueous-desktop/61-devario-virtio.sh"]='4670c72c1612df9e7a0b9ccb5e61cb9d224d7e33a30b8029ad8a6853b249442e'
   ["packages/devario-aqueous-desktop/devario-gpu-driver.service"]='ec8e672fb2e7a451bd97ca9ccbc4ade0a91a7f0e097a5e3a6ce99ec144871807'
   ["packages/devario-aqueous-desktop/gpu-driver-setup"]='533cfa381f0d7eb1ef1e5da15037992fd5f59c539cfe6d4a8f14e6d6d3aeb99f'
-  ["packages/devario-aqueous-desktop/greetd-config.toml"]='f2d467b8a555bc335c5a27074660d2520636b69157fcb5137072a9b3a08bf68a'
+  ["packages/devario-aqueous-desktop/greetd-config.toml"]='ef1c8b33c7a25969f2268588ca6f100c4905f46b238ff2998ef26f91fdfb1386'
   ["packages/devario-aqueous-desktop/greetd-gpu-driver.conf"]='a997663d00e362e780c6d29989bcb9dfdb50d5b00142322bee207d68be8c3801'
 )
 for pinned_path in "${!pinned_desktop_sources[@]}"; do
@@ -1045,7 +1058,7 @@ if [[ -e "$profile_dir/airootfs/etc/calamares/modules/displaymanager.conf" ]]; t
 fi
 
 for greetd_config in "$live_greetd_config" "$installed_greetd_config"; do
-  if ! grep -Fqx 'command = "/usr/lib/pearl/pearl-greeter-host"' \
+  if ! grep -Fqx 'command = "/usr/lib/devario/graphics-session /usr/lib/pearl/pearl-greeter-host"' \
     "$greetd_config" \
     || ! grep -Fqx 'user = "pearl-greeter"' "$greetd_config"; then
     fail "${greetd_config#"$project_dir/"} does not launch Pearl Greeter with Aqueous selected"

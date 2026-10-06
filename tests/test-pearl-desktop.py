@@ -15,6 +15,26 @@ PROFILE = Path(os.environ.get('DEVARIO_PROFILE_DIR', PROJECT / 'iso'))
 
 
 class PearlDesktopTests(unittest.TestCase):
+    def test_virtio_allocator_excludes_native_and_mixed_gpus(self):
+        graphics = types.ModuleType('graphics')
+        exec((PROFILE / 'airootfs/usr/lib/devario/graphics-session').read_text(), graphics.__dict__)
+        cases = [([], False), (['virtio_gpu'], True),
+                 (['virtio-pci'], True),
+                 (['simple-framebuffer', 'virtio_gpu'], True),
+                 (['amdgpu'], False), (['nvidia'], False),
+                 (['virtio_gpu', 'amdgpu'], False), (['missing'], False)]
+        for drivers, expected in cases:
+            with self.subTest(drivers=drivers), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                for index, driver in enumerate(drivers):
+                    device = root / f'card{index}' / 'device'
+                    device.mkdir(parents=True)
+                    target = root / 'drivers' / driver
+                    if driver != 'missing':
+                        target.mkdir(parents=True, exist_ok=True)
+                    (device / 'driver').symlink_to(target)
+                self.assertEqual(graphics.virtio_only(root), expected)
+
     def test_session_driver_filter_follows_pci_hardware(self):
         source = (PROFILE / 'airootfs/etc/xdg/uwsm/env.d/60-devario-gpu.sh').read_text()
         # Run the real detector and sourced session script against fixture paths.
@@ -97,7 +117,7 @@ class PearlDesktopTests(unittest.TestCase):
             installed = (root / 'usr/share/devario/greetd/config.toml').read_text()
             installed_config = tomllib.loads(installed)
             self.assertEqual(installed_config['default_session'], {
-                'command': '/usr/lib/pearl/pearl-greeter-host', 'user': 'pearl-greeter'})
+                'command': '/usr/lib/devario/graphics-session /usr/lib/pearl/pearl-greeter-host', 'user': 'pearl-greeter'})
             self.assertEqual(installed_config['terminal']['vt'], 7)
             self.assertFalse(installed_config['general']['source_profile'])
             self.assertNotIn('initial_session', installed_config)
@@ -126,6 +146,18 @@ class PearlDesktopTests(unittest.TestCase):
         services = (PROFILE / 'airootfs/etc/calamares/modules/services-systemd.conf').read_text()
         self.assertIn('name: pearl-greeter.service', services)
         self.assertNotIn('name: greetd.service', services)
+
+    def test_virtio_vulkan_driver(self):
+        packages = set((PROFILE / 'packages.x86_64').read_text().splitlines())
+        self.assertIn('vulkan-virtio', packages, 'Aqueous requires Venus on a virtio GPU')
+        repository = PROJECT / 'repo/core'
+        for archive in repository.glob('vulkan-virtio-*.pkg.tar.zst'):
+            with self.subTest(archive=archive.name):
+                listing = subprocess.check_output(['bsdtar', '-tf', str(archive)], text=True).splitlines()
+                self.assertIn('usr/lib/libvulkan_virtio.so', listing)
+                manifest = json.loads(subprocess.check_output([
+                    'bsdtar', '-xOf', str(archive), 'usr/share/vulkan/icd.d/virtio_icd.json']))
+                self.assertEqual(manifest['ICD']['library_path'], 'libvulkan_virtio.so')
 
 
 if __name__ == '__main__':

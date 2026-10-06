@@ -1,0 +1,122 @@
+#!/usr/bin/python3 -I
+"""Exercise the real desktop only when a QEMU acceptance request is present."""
+import json
+import os
+from pathlib import Path
+import pwd
+import shutil
+import stat
+import subprocess
+import time
+
+REQUEST = Path('/sys/firmware/qemu_fw_cfg/by_name/opt/org.devario/desktop/raw')
+
+
+def run(*args, timeout=15, check=True):
+    result = subprocess.run(args, text=True, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, timeout=timeout)
+    if check and result.returncode:
+        raise RuntimeError(f'{args[0]} failed ({result.returncode}): {result.stdout}')
+    return result.stdout
+
+
+def wait_for(description, predicate, seconds=180):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        value = predicate()
+        if value:
+            return value
+        time.sleep(1)
+    raise RuntimeError(f'timed out waiting for {description}')
+
+
+def main():
+    if not REQUEST.is_file():
+        return
+    phase = REQUEST.read_text().strip().removeprefix('phase=')
+    if phase not in ('live', 'greeter'):
+        raise RuntimeError('desktop request must be phase=live or phase=greeter')
+    if not Path('/run/devario/live').exists():
+        raise RuntimeError('this probe requires the writable live environment')
+    if phase == 'greeter':
+        # Exercise the packaged installed-login configuration in the disposable
+        # live overlay, without changing the pristine installation payload.
+        shutil.copyfile('/usr/share/devario/greetd/config.toml', '/etc/greetd/config.toml')
+        run('systemctl', 'restart', 'pearl-greeter.service', timeout=40)
+    account = pwd.getpwnam('liveuser' if phase == 'live' else 'pearl-greeter')
+    runtime = Path('/run/user') / str(account.pw_uid)
+
+    def display_socket():
+        if not runtime.is_dir():
+            return None
+        for socket in runtime.glob('wayland-*'):
+            info = socket.stat()
+            if stat.S_ISSOCK(info.st_mode) and info.st_uid == account.pw_uid:
+                return socket
+        return None
+
+    socket = wait_for(f'{account.pw_name} Wayland display', display_socket)
+    environment = [f'XDG_RUNTIME_DIR={runtime}', f'WAYLAND_DISPLAY={socket.name}',
+                   f'DBUS_SESSION_BUS_ADDRESS=unix:path={runtime}/bus']
+
+    def client(*args, **kwargs):
+        return run('runuser', '-u', account.pw_name, '--', 'env', *environment, *args, **kwargs)
+
+    summary = client('vulkaninfo', '--summary', timeout=30)
+    print(summary, flush=True)
+    if 'DRIVER_ID_MESA_VENUS' not in summary:
+        raise RuntimeError('guest did not enumerate the Mesa Venus Vulkan driver')
+    protocols = client('wayland-info')
+    if 'aqueous_shell_manager_v1' not in protocols:
+        raise RuntimeError('the running compositor does not expose the Aqueous shell protocol')
+    outputs = json.loads(client('aqueousctl', 'outputs', '--json'))
+    if not outputs:
+        raise RuntimeError('Aqueous has no outputs')
+    print('Aqueous outputs:', json.dumps(outputs), flush=True)
+    shell = 'pearl' if phase == 'live' else 'pearl-greeter'
+    wait_for(shell, lambda: subprocess.run(
+        ['pgrep', '-u', str(account.pw_uid), '-x', shell],
+        stdout=subprocess.DEVNULL).returncode == 0)
+    if phase == 'live':
+        log = (runtime / 'aqueous-wm.log').read_text()
+        if any(message in log for message in (
+                'VulkanRendererUnavailable', 'RendererCreateFailed',
+                'Could not match drm and vulkan device')):
+            raise RuntimeError('the live compositor logged a Vulkan startup failure')
+        launcher = subprocess.Popen(
+            ['runuser', '-u', account.pw_name, '--', 'env', *environment,
+             '/usr/lib/devario/start-installer'])
+        try:
+            def installer_window():
+                windows = json.loads(client('aqueousctl', 'windows', '--json'))
+                return windows if 'calamares' in json.dumps(windows).lower() else None
+            windows = wait_for('mapped Calamares window', installer_window, seconds=60)
+            print('Mapped installer:', json.dumps(windows), flush=True)
+        finally:
+            subprocess.run(['pkill', '-x', 'calamares'], check=False)
+            try:
+                launcher.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                launcher.terminate()
+                launcher.wait(timeout=5)
+    print(f'DEVARIO_DESKTOP:PASS phase={phase}', flush=True)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception as error:
+        print(f'Desktop acceptance failure: {error}', flush=True)
+        print(run('journalctl', '-b', '-u', 'pearl-greeter.service', '--no-pager',
+                  '-n', '100', check=False), flush=True)
+        for log in Path('/run/user').glob('*/aqueous-wm.log'):
+            print(log.read_text()[-20000:], flush=True)
+        print('DEVARIO_DESKTOP:FAIL', flush=True)
+        status = 1
+    else:
+        status = 0
+    if REQUEST.is_file():
+        # Leave time for the host to save a screenshot before clean shutdown.
+        time.sleep(10)
+        subprocess.run(['systemctl', '--no-block', 'poweroff'], check=False)
+    raise SystemExit(status)
