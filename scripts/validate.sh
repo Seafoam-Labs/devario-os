@@ -1163,6 +1163,7 @@ if ! grep -Fq \
 fi
 
 for required_line in \
+  'User=root' \
   'ExecStart=/usr/bin/shelly keyring init' \
   'ExecStart=/usr/bin/shelly keyring populate devario-core' \
   'ExecStart=/usr/bin/install -Dm644 /dev/null /var/lib/devario/shelly-keyring.ready'; do

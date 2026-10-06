@@ -72,6 +72,11 @@ live session and new installed users. The late ISO overlay supplies
 `~/.config/aqueous/layout.toml` through `/etc/skel`. Rebuild the ISO to include
 these defaults; users can change their layout through Pearl settings.
 
+The first-boot Shelly keyring service explicitly runs as `User=root` so systemd
+supplies the home directory required by Shelly's XDG configuration lookup.
+Initialization and import of the Devario signing keys finish before the service
+writes its completion marker. Rebuild the ISO to include service changes.
+
 Calamares does not invoke a package manager during installation. Its `unpackfs` module copies the prepared live root
 filesystem, and the remaining modules configure that copy for the target machine.
 

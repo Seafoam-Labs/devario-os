@@ -7,6 +7,8 @@ ConditionPathExists=!/var/lib/devario/shelly-keyring.ready
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+# Explicit User= makes systemd supply HOME for Shelly's XDG configuration.
+User=root
 ExecStart=/usr/bin/shelly keyring init
 ExecStart=/usr/bin/shelly keyring populate devario-core
 ExecStart=/usr/bin/install -Dm644 /dev/null /var/lib/devario/shelly-keyring.ready
