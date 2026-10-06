@@ -436,6 +436,7 @@ for required_package in \
   aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous \
   calamares ckbcomp devario-desktop \
   devario-base devario-boot devario-dracut devario-keyring greetd systemd pearl pearl-greeter shelly fastfetch fish \
+  upower power-profiles-daemon \
   linux-devario linux-devario-headers nvidia-open-dkms nvidia-utils \
   vulkan-intel vulkan-radeon vulkan-swrast vulkan-virtio xorg-xwayland; do
   if ! package_is_listed "$required_package"; then
@@ -896,6 +897,17 @@ live_fish_config="$profile_dir/late-airootfs/etc/skel/.config/fish/config.fish"
 fastfetch_config="$profile_dir/late-airootfs/usr/share/devario/fastfetch/config.jsonc"
 live_sysusers="$profile_dir/late-airootfs/usr/lib/sysusers.d/devario-live.conf"
 live_tmpfiles="$profile_dir/late-airootfs/usr/lib/tmpfiles.d/devario-live.conf"
+
+for power_service in upower.service power-profiles-daemon.service; do
+  if ! grep -F 'Wants=' "$live_target" | grep -Fwq "$power_service" \
+    || ! grep -F 'After=' "$live_target" | grep -Fwq "$power_service"; then
+    fail "the live readiness target must start and order $power_service"
+  fi
+  if ! grep -A2 -F "name: $power_service" "$services_systemd" | grep -Fq 'action: enable' \
+    || ! grep -A2 -F "name: $power_service" "$services_systemd" | grep -Fq 'mandatory: true'; then
+    fail "Calamares must enable $power_service as a mandatory installed service"
+  fi
+done
 
 if [[ -e "$profile_dir/airootfs/usr/lib/sysusers.d/devario-live.conf" \
   || -e "$profile_dir/airootfs/usr/lib/tmpfiles.d/devario-live.conf" ]]; then

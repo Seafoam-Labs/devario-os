@@ -548,6 +548,7 @@ playerctl
 polkit
 polkit-qt6
 portaudio
+power-profiles-daemon
 python-cairo
 python-dbus
 python-gobject

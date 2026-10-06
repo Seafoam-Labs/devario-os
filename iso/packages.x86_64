@@ -60,6 +60,7 @@ pipewire-alsa
 pipewire-pulse
 playerctl
 polkit
+power-profiles-daemon
 python
 qt6-imageformats
 rsync

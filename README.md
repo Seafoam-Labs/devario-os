@@ -77,6 +77,12 @@ supplies the home directory required by Shelly's XDG configuration lookup.
 Initialization and import of the Devario signing keys finish before the service
 writes its completion marker. Rebuild the ISO to include service changes.
 
+UPower supplies battery status, and `power-profiles-daemon` supplies Pearl's
+power profiles. Both services start in the live session and are enabled by
+Calamares for installed systems; Pearl does not auto-start them. Build and
+publish `devario-core/power-profiles-daemon` 0.30-1 from the custom PKGBUILDs
+repository before rebuilding the ISO with these power defaults.
+
 Calamares does not invoke a package manager during installation. Its `unpackfs` module copies the prepared live root
 filesystem, and the remaining modules configure that copy for the target machine.
 
