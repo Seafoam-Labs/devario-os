@@ -32,6 +32,7 @@ The installed system does not ship the `pacman` or `pacman-key` executables. It 
   `liveuser` session on the live image
 - Fish as the interactive login shell for the live user and new user accounts
 - NetworkManager, PipeWire, Firefox, and common filesystem tools
+- Matugen for generating theme colors
 - Diagnostic tools: strace, ripgrep, vulkan-tools, mesa-utils, wayland-utils,
   usbutils, lsof, nvme-cli, and OpenBSD netcat (`nc` and `netcat`)
 - Seafoam Labs Devario kernel targeting x86-64-v3 hardware
