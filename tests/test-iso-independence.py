@@ -18,7 +18,6 @@ def module(path, name):
     return result
 
 
-compat = module(PROJECT / "packages/shelly-arch-compat/shelly-arch-compat", "compat")
 audit = module(PROJECT / "scripts/audit-iso-repositories.py", "audit")
 
 
@@ -46,21 +45,6 @@ class IndependenceTests(unittest.TestCase):
                     section = config[repo["name"]]
                     self.assertEqual(section["SigLevel"], "Required")
                     self.assertEqual(section["Server"], core_url if repo["name"] == "devario-core" else repo["server"])
-
-    def test_compatibility_preserves_configuration(self):
-        original = "[options]\n# user configuration\n[devario-core]\nServer = https://example.test/\n"
-        enabled = compat.change(original, True)
-        self.assertTrue(enabled.startswith(original))
-        self.assertEqual(compat.change(enabled, True), enabled)
-        self.assertEqual(compat.change(enabled, False).rstrip(), original.rstrip())
-        self.assertTrue(compat.protected("devario-filesystem"))
-        self.assertTrue(compat.protected("linux-devario"))
-        self.assertTrue(compat.protected("linux-devario-headers"))
-        self.assertFalse(compat.protected("example-application"))
-        with self.assertRaises(ValueError):
-            compat.change(original + "[core]\nServer = https://user.test/\n", True)
-        with self.assertRaises(ValueError):
-            compat.change(original + compat.START, False)
 
     def test_dependency_audit(self):
         packages = [dict(name="devario-filesystem", version="1", repository="devario-core",

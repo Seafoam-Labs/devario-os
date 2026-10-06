@@ -41,7 +41,6 @@ EOF
 
 requested_packages=("$@")
 declare -A known_package_directories=()
-known_package_directories[shelly-arch-compat]=1
 for package_name in "${package_order[@]}"; do
   known_package_directories["$package_name"]=1
 done
@@ -66,10 +65,6 @@ for package_name in "${requested_packages[@]}"; do
   fi
   requested_package_directories["$package_name"]=1
 done
-
-if [[ -n "${requested_package_directories[shelly-arch-compat]:-}" ]]; then
-  package_order+=(shelly-arch-compat)
-fi
 
 selected_package_order=()
 if (( ${#requested_package_directories[@]} == 0 )); then

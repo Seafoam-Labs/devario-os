@@ -460,7 +460,6 @@ declare -A expected_pkgnames=(
   [devario-aqueous-desktop]=devario-aqueous-desktop
   [devario-filesystem]=devario-filesystem
   [seafoam-keyring]=seafoam-keyring
-  [shelly-arch-compat]=shelly-arch-compat
   [devario-base]=devario-base
   [devario-boot]=devario-boot
   [devario-keyring]=devario-keyring
@@ -1256,7 +1255,7 @@ fi
 pacman_reference_is_allowed() {
   local relative_path="$1" text="$2"
   case "$relative_path" in
-    README.md|packages/*/README.md|packages/shelly-arch-compat/*|packages/seafoam-keyring/*|packages/devario-base/shelly-storage-migrate|packages/devario-base/devario-base.install)
+    README.md|packages/*/README.md|packages/seafoam-keyring/*|packages/devario-base/shelly-storage-migrate|packages/devario-base/devario-base.install)
       return 0 ;;
     iso/late-airootfs/usr/share/devario/fastfetch/config.jsonc)
       [[ "$text" == *'"format": "{pacman} (Shelly)"'* ]]; return ;;
@@ -1362,7 +1361,7 @@ if command -v shelly >/dev/null 2>&1 && grep -Eq "^\[devario-core\]" /etc/shelly
       [[ -n "$package_name" && "$package_name" != \#* ]] || continue
       case "$package_name" in
         calamares|ckbcomp|\
-        devario-filesystem|seafoam-keyring|shelly-arch-compat|devario-aqueous-desktop|devario-base|devario-boot|devario-keyring|\
+        devario-filesystem|seafoam-keyring|devario-aqueous-desktop|devario-base|devario-boot|devario-keyring|\
         devario-managed-keyring)
           continue
           ;;
