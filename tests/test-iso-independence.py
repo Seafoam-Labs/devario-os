@@ -26,7 +26,8 @@ class IndependenceTests(unittest.TestCase):
     def test_repository_defaults(self):
         repositories = json.loads((PROJECT / "repositories/defaults.json").read_text())["repositories"]
         names = ["devario-core", "devario-browser", "devario-development",
-                 "devario-entertainment", "devario-gaming", "devario-utilities"]
+                 "devario-entertainment", "devario-gaming", "devario-utilities",
+                 "devario-productivity", "devario-scx"]
         self.assertEqual([r["name"] for r in repositories], names)
         for path in ("packages/devario-base/shelly.conf", "iso/shelly.runtime.conf"):
             with self.subTest(path=path):

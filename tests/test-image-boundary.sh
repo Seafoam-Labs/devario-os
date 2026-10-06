@@ -35,7 +35,7 @@ grep -Fq '"packager":"ZoeyErinBauer <40698010+ZoeyErinBauer@users.noreply.github
   || fail 'canonical inventory omitted exact package attribution'
 
 cp "$image_root/etc/shelly.conf" "$test_root/shelly.conf"
-for repository in devario-browser devario-development devario-entertainment devario-gaming devario-utilities; do
+for repository in devario-browser devario-development devario-entertainment devario-gaming devario-utilities devario-productivity devario-scx; do
   sed "/^\[$repository\]$/,/^$/d" "$test_root/shelly.conf" > "$image_root/etc/shelly.conf"
   expect_rejection "missing $repository configuration"
   sed "/^\[$repository\]$/,/^$/s/SigLevel = Required/SigLevel = Optional/" \

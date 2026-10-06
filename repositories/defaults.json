@@ -36,6 +36,18 @@
       "server": "https://mirrors.seafoam-labs.org/devario-utilities/$arch",
       "activeSigner": "BB62CD2725FD8E25558F900A84F94F672976872C",
       "publicKeyUrl": "https://repo.seafoam-labs.org/repositories/devario-utilities/pubkey.asc"
+    },
+    {
+      "name": "devario-productivity",
+      "server": "https://mirrors.seafoam-labs.org/devario-productivity/$arch",
+      "activeSigner": "BB62CD2725FD8E25558F900A84F94F672976872C",
+      "publicKeyUrl": "https://repo.seafoam-labs.org/repositories/devario-productivity/pubkey.asc"
+    },
+    {
+      "name": "devario-scx",
+      "server": "https://mirrors.seafoam-labs.org/devario-scx/$arch",
+      "activeSigner": "BB62CD2725FD8E25558F900A84F94F672976872C",
+      "publicKeyUrl": "https://repo.seafoam-labs.org/repositories/devario-scx/pubkey.asc"
     }
   ]
 }

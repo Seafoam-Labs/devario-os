@@ -491,6 +491,7 @@ mobile-broadband-provider-info
 mpg123
 mtdev
 nemo
+netcat
 networkmanager
 nftables
 nlohmann-json
@@ -560,6 +561,7 @@ qt6-imageformats
 qt6-svg
 qt6-translations
 rav1e
+ripgrep
 rsync
 rubberband
 sbc

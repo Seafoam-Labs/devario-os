@@ -32,6 +32,8 @@ The installed system does not ship the `pacman` or `pacman-key` executables. It 
   `liveuser` session on the live image
 - Fish as the interactive login shell for the live user and new user accounts
 - NetworkManager, PipeWire, Firefox, and common filesystem tools
+- Diagnostic tools: strace, ripgrep, vulkan-tools, mesa-utils, wayland-utils,
+  usbutils, lsof, nvme-cli, and OpenBSD netcat (`nc` and `netcat`)
 - Seafoam Labs Devario kernel targeting x86-64-v3 hardware
 - NVIDIA open-driver support with PCI detection before the graphical greeter
 - Fastfetch on the first interactive shell in each terminal
@@ -169,7 +171,8 @@ Shelly's native RLPM backend uses `/etc/shelly.conf`, `/etc/shelly.d/gnupg`,
 These are file locations, not configuration aliases or a Pacman executable
 requirement. Live and installed systems enable `devario-core` first, followed by
 `devario-browser`, `devario-development`, `devario-entertainment`, `devario-gaming`,
-and `devario-utilities`. Each repository requires package and database signatures
+`devario-utilities`, `devario-productivity`, and `devario-scx`.
+Each repository requires package and database signatures
 verified through the existing Devario keyring. Calamares copies this configuration
 into the installed system, so configuring these repositories works offline.
 
@@ -178,7 +181,9 @@ not enable the old storage-relocation service. The historical migration utility
 is retained in source for previous installations, but is not installed by the
 current base recipe.
 
-Rebuild `devario-base` 3-13 and the ISO to include all six repository defaults.
+Rebuild `devario-base` 3-14 and the ISO to include all eight repository defaults.
+The `devario-scx` database and public signing key must be published at the
+configured URLs before repository synchronization can succeed.
 
 The desktop comes from `devario-core/devario-desktop`, with stable Aqueous and
 `pearl-greeter`. The ISO profile retains Devario's session, greeter, and GPU

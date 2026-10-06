@@ -11,7 +11,7 @@ write_os_release() { printf 'ID=devario\nVARIANT_ID=%s\n' "$1" > "$root/etc/os-r
 write_core_shelly() {
   local server="${1:-https://packages.devario.example/core/\$arch}" repository
   printf '%s\n' '[options]' 'SigLevel = Never' '[devario-core]' 'SigLevel = Required' "Server = $server" > "$root/etc/shelly.conf"
-  for repository in devario-browser devario-development devario-entertainment devario-gaming devario-utilities; do
+  for repository in devario-browser devario-development devario-entertainment devario-gaming devario-utilities devario-productivity devario-scx; do
     printf '\n[%s]\nSigLevel = Required\nServer = https://mirrors.seafoam-labs.org/%s/$arch\n' \
       "$repository" "$repository" >> "$root/etc/shelly.conf"
   done
@@ -42,7 +42,7 @@ touch "$root/usr/lib/devario/start-installer"
 if "$check" --root "$root" --mode installed --firmware uefi --edition community >/dev/null 2>&1; then echo 'Installed image retained the live installer launcher.' >&2; exit 1; fi
 rm "$root/usr/lib/devario/start-installer"
 
-for repository in devario-browser devario-development devario-entertainment devario-gaming devario-utilities; do
+for repository in devario-browser devario-development devario-entertainment devario-gaming devario-utilities devario-productivity devario-scx; do
   write_core_shelly
   sed -i "/^\[$repository\]$/,/^$/d" "$root/etc/shelly.conf"
   if "$check" --root "$root" --mode installed --firmware uefi --edition community >/dev/null 2>&1; then
