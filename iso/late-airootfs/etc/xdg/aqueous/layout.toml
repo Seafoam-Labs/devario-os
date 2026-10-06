@@ -1,0 +1,3 @@
+# Floating windows are Aqueous's stacking layout.
+[layout]
+default = "stacking"

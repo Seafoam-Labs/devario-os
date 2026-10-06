@@ -66,6 +66,12 @@ takes precedence. Pearl Greeter uses its own `pearl-greeter.service`, the
 in `iso/late-airootfs` after package hooks; installation restores the packaged
 login template without live autologin.
 
+Aqueous defaults to floating windows (`stacking` in its configuration) for the
+live session and new installed users. The late ISO overlay supplies
+`/etc/xdg/aqueous/layout.toml` as the system fallback and seeds an editable
+`~/.config/aqueous/layout.toml` through `/etc/skel`. Rebuild the ISO to include
+these defaults; users can change their layout through Pearl settings.
+
 Calamares does not invoke a package manager during installation. Its `unpackfs` module copies the prepared live root
 filesystem, and the remaining modules configure that copy for the target machine.
 
