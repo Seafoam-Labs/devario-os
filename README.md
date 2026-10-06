@@ -171,7 +171,7 @@ Shelly's native RLPM backend uses `/etc/shelly.conf`, `/etc/shelly.d/gnupg`,
 These are file locations, not configuration aliases or a Pacman executable
 requirement. Live and installed systems enable `devario-core` first, followed by
 `devario-browser`, `devario-development`, `devario-entertainment`, `devario-gaming`,
-`devario-utilities`, `devario-productivity`, and `devario-scx`.
+`devario-utilities`, `devario-productivity`, and `devario-libs`.
 Each repository requires package and database signatures
 verified through the existing Devario keyring. Calamares copies this configuration
 into the installed system, so configuring these repositories works offline.
@@ -181,9 +181,7 @@ not enable the old storage-relocation service. The historical migration utility
 is retained in source for previous installations, but is not installed by the
 current base recipe.
 
-Rebuild `devario-base` 3-14 and the ISO to include all eight repository defaults.
-The `devario-scx` database and public signing key must be published at the
-configured URLs before repository synchronization can succeed.
+Rebuild `devario-base` 3-15 and the ISO to include all eight repository defaults.
 
 The desktop comes from `devario-core/devario-desktop`, with stable Aqueous and
 `pearl-greeter`. The ISO profile retains Devario's session, greeter, and GPU

@@ -44,10 +44,10 @@
       "publicKeyUrl": "https://repo.seafoam-labs.org/repositories/devario-productivity/pubkey.asc"
     },
     {
-      "name": "devario-scx",
-      "server": "https://mirrors.seafoam-labs.org/devario-scx/$arch",
+      "name": "devario-libs",
+      "server": "https://mirrors.seafoam-labs.org/devario-libs/$arch",
       "activeSigner": "BB62CD2725FD8E25558F900A84F94F672976872C",
-      "publicKeyUrl": "https://repo.seafoam-labs.org/repositories/devario-scx/pubkey.asc"
+      "publicKeyUrl": "https://repo.seafoam-labs.org/repositories/devario-libs/pubkey.asc"
     }
   ]
 }

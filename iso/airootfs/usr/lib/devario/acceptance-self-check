@@ -79,7 +79,7 @@ require_repository() {
 if [[ -r "$shelly_conf" ]]; then
   for repository in devario-core devario-browser devario-development \
     devario-entertainment devario-gaming devario-utilities \
-    devario-productivity devario-scx; do
+    devario-productivity devario-libs; do
     require_repository "$repository"
   done
   if [[ "$edition" == managed ]]; then
