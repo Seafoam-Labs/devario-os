@@ -529,7 +529,7 @@ done
 
 desktop_meta="$project_dir/packages/devario-aqueous-desktop/PKGBUILD"
 for desktop_dependency in \
-  aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous pearl pearl-greeter-git greetd \
+  aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous pearl pearl-greeter greetd \
   linux-devario-headers nvidia-open-dkms nvidia-utils; do
   if ! grep -Eq "['\"]${desktop_dependency}([<>=][^'\"]*)?['\"]" "$desktop_meta"; then
     fail "the Devario desktop metapackage must depend on $desktop_dependency"
