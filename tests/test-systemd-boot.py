@@ -3,12 +3,14 @@
 import os
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import tempfile
 import unittest
 import yaml
 
 PROJECT = Path(__file__).resolve().parents[1]
+BOOT_PACKAGE = Path(os.environ.get('DEVARIO_BOOT_PACKAGE', str(PROJECT / 'packages/devario-boot')))
 
 
 class BootDeployment(unittest.TestCase):
@@ -22,20 +24,22 @@ class BootDeployment(unittest.TestCase):
         self.marker = self.root / 'state/systemd-boot-installed'
         self.legacy = self.root / 'state/limine-installed'
         self.bin = self.root / 'bin'
+        self.modules = self.root / 'modules'
         for path in (self.boot, self.efi, self.source, self.bin, self.marker.parent):
             path.mkdir(parents=True)
         (self.efi / 'fw_platform_size').write_text('64\n')
         (self.source / 'systemd-bootx64.efi').write_text('EFI fixture')
-        for name in ('vmlinuz-linux-devario', 'initramfs-linux-devario.img', 'initramfs-linux-devario-fallback.img'):
-            (self.boot / name).write_text(name)
-        helper = (PROJECT / 'packages/devario-boot/systemd-boot-update').read_text()
+        self.add_kernel('linux-devario', '6.19-devario')
+        helper = (BOOT_PACKAGE / 'systemd-boot-update').read_text()
         helper = helper.replace('boot_dir=/boot', 'boot_dir=' + shlex.quote(str(self.boot)))
+        helper = helper.replace('modules_root=/usr/lib/modules', 'modules_root=' + shlex.quote(str(self.modules)))
         helper = helper.replace('/sys/firmware/efi', str(self.efi))
         helper = helper.replace('/usr/lib/systemd/boot/efi', str(self.source))
         helper = helper.replace('/var/lib/devario/systemd-boot-installed', str(self.marker))
         helper = helper.replace('/var/lib/devario/limine-installed', str(self.legacy))
         self.helper = self.bin / 'systemd-boot-update'
         self.executable(self.helper, helper)
+        shutil.copyfile(BOOT_PACKAGE / 'kernel.sh', self.bin / 'kernel.sh')
         self.executable(self.bin / 'kernel-command-line', "#!/bin/sh\necho 'root=UUID=root rw rd.luks.name=1234-abcd=cryptroot rootflags=subvol=/@ resume=UUID=swap'\n")
         self.executable(self.bin / 'findmnt', '''#!/bin/sh
 if [ "$2" = TARGET ]; then
@@ -77,6 +81,103 @@ cp "$EFI_SOURCE/systemd-bootx64.efi" "$BOOT/EFI/systemd/systemd-bootx64.efi"
 
     def run_helper(self, *args, **env):
         return subprocess.run([str(self.helper), *args], env=dict(self.env, **env), capture_output=True, text=True)
+
+    def add_kernel(self, identifier, version, native=True):
+        tree = self.modules / version
+        tree.mkdir(parents=True)
+        if native:
+            (tree / 'devario-kernel').write_text(f'version={version}\nimage=vmlinuz\nid={identifier}\n')
+        else:
+            (tree / 'pkgbase').write_text(identifier + '\n')
+        (tree / 'vmlinuz').write_text(version)
+        for name in (f'vmlinuz-{identifier}', f'initramfs-{identifier}.img', f'initramfs-{identifier}-fallback.img'):
+            (self.boot / name).write_text(version)
+
+    def test_lts_only_install_uses_lts_as_default(self):
+        shutil.rmtree(self.modules / '6.19-devario')
+        self.add_kernel('linux-devario-lts', '6.18-lts')
+        result = self.run_helper('--install')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('default devario-lts.conf', (self.boot / 'loader/loader.conf').read_text())
+        entries = self.boot / 'loader/entries'
+        self.assertFalse((entries / 'devario.conf').exists())
+        self.assertIn('linux /vmlinuz-linux-devario-lts', (entries / 'devario-lts.conf').read_text())
+        self.assertIn('initrd /initramfs-linux-devario-lts-fallback.img', (entries / 'devario-lts-fallback.conf').read_text())
+
+    def test_both_kernels_have_separate_entries_and_recovery(self):
+        self.add_kernel('linux-devario-lts', '6.18-lts', native=False)
+        for identifier in ('linux-devario', 'linux-devario-lts'):
+            recovery = self.boot / 'devario-recovery' / identifier
+            recovery.mkdir(parents=True)
+            for name in (f'vmlinuz-{identifier}', f'initramfs-{identifier}.img'):
+                (recovery / name).write_text('previous ' + identifier)
+        result = self.run_helper('--install')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for entry, identifier in (('devario', 'linux-devario'), ('devario-lts', 'linux-devario-lts')):
+            text = (self.boot / f'loader/entries/{entry}-recovery.conf').read_text()
+            self.assertIn(f'/devario-recovery/{identifier}/vmlinuz-{identifier}', text)
+        self.assertIn('default devario.conf', (self.boot / 'loader/loader.conf').read_text())
+
+    def test_kernel_removal_prunes_only_managed_entries_and_repairs_default(self):
+        self.add_kernel('linux-devario-lts', '6.18-lts')
+        self.assertEqual(self.run_helper('--install').returncode, 0)
+        entries = self.boot / 'loader/entries'
+        other = entries / 'devario-custom.conf'
+        other.write_text('administrator entry')
+        shutil.rmtree(self.modules / '6.19-devario')
+        result = self.run_helper()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((entries / 'devario.conf').exists())
+        self.assertFalse((entries / 'devario-fallback.conf').exists())
+        self.assertTrue((entries / 'devario-lts.conf').exists())
+        self.assertEqual(other.read_text(), 'administrator entry')
+        self.assertIn('default devario-lts.conf', (self.boot / 'loader/loader.conf').read_text())
+        self.add_kernel('linux-devario', '6.20-devario')
+        shutil.rmtree(self.modules / '6.18-lts')
+        result = self.run_helper()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((entries / 'devario-lts.conf').exists())
+        self.assertFalse((entries / 'devario-lts-fallback.conf').exists())
+        self.assertTrue((entries / 'devario.conf').exists())
+        self.assertIn('default devario.conf', (self.boot / 'loader/loader.conf').read_text())
+
+    def test_incomplete_lts_does_not_publish_entries(self):
+        self.assertEqual(self.run_helper('--install').returncode, 0)
+        manifest = self.boot / 'loader/devario-entries.list'
+        original = manifest.read_text()
+        self.add_kernel('linux-devario-lts', '6.18-lts')
+        (self.boot / 'initramfs-linux-devario-lts-fallback.img').unlink()
+        result = self.run_helper()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(manifest.read_text(), original)
+        self.assertFalse((self.boot / 'loader/entries/devario-lts.conf').exists())
+
+    def test_duplicate_kernel_id_is_rejected(self):
+        self.add_kernel('linux-devario', '6.20-devario')
+        result = self.run_helper('--install')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Multiple installed versions', result.stderr)
+        self.assertFalse(self.marker.exists())
+
+    def test_removing_last_kernel_preserves_existing_entries(self):
+        self.assertEqual(self.run_helper('--install').returncode, 0)
+        entry = self.boot / 'loader/entries/devario.conf'
+        original = entry.read_text()
+        shutil.rmtree(self.modules)
+        result = self.run_helper()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(entry.read_text(), original)
+
+    def test_invalid_manifest_cannot_remove_unrelated_files(self):
+        self.assertEqual(self.run_helper('--install').returncode, 0)
+        manifest = self.boot / 'loader/devario-entries.list'
+        manifest.write_text('../../unrelated\n')
+        unrelated = self.boot / 'unrelated'
+        unrelated.write_text('keep')
+        result = self.run_helper()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('invalid managed entry manifest', result.stderr)
+        self.assertEqual(unrelated.read_text(), 'keep')
 
     def test_live_transactions_do_not_deploy(self):
         (self.efi / 'fw_platform_size').unlink()

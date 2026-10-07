@@ -1,11 +1,12 @@
 #!/usr/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Data is parsed, never sourced. Callers may select a version explicitly.
-devario_kernel_select() {
-  local modules_root="$1" wanted_id="$2" wanted_version="${3:-}"
-  local tree key value release image identifier count=0
+# Data is parsed, never sourced. Discovery is shared by generation and entries.
+devario_kernel_discover() {
+  local modules_root="$1" wanted_id="${2:-}" wanted_version="${3:-}"
+  local tree key value release image identifier
   local -A fields=()
-  shopt -s nullglob
+  local -A seen=()
+  DEVARIO_KERNEL_IDS=() DEVARIO_KERNEL_VERSIONS=() DEVARIO_KERNEL_IMAGES=()
   for tree in "$modules_root"/*; do
     [[ -d "$tree" ]] || continue
     [[ -z "$wanted_version" || "${tree##*/}" == "$wanted_version" ]] || continue
@@ -29,15 +30,26 @@ devario_kernel_select() {
     fi
     [[ "$identifier" =~ ^[a-zA-Z0-9][a-zA-Z0-9._+-]*$ \
       && "$release" =~ ^[a-zA-Z0-9][a-zA-Z0-9._+-]*$ ]] || return 1
-    [[ "$identifier" == "$wanted_id" ]] || continue
+    [[ -z "$wanted_id" || "$identifier" == "$wanted_id" ]] || continue
     [[ -s "$tree/$image" ]] || { echo "Missing kernel image: $tree/$image" >&2; return 1; }
-    DEVARIO_KERNEL_VERSION="$release"
-    DEVARIO_KERNEL_IMAGE="$tree/$image"
-    DEVARIO_KERNEL_ID="$identifier"
-    (( count += 1 ))
+    if [[ -n "${seen[$identifier]:-}" ]]; then
+      echo "Multiple installed versions of $identifier; refusing to overwrite the same boot files." >&2
+      return 1
+    fi
+    seen[$identifier]=1
+    DEVARIO_KERNEL_IDS+=("$identifier")
+    DEVARIO_KERNEL_VERSIONS+=("$release")
+    DEVARIO_KERNEL_IMAGES+=("$tree/$image")
   done
-  if (( count != 1 )); then
-    echo "Expected exactly one $wanted_id kernel below $modules_root; found $count." >&2
+  if (( ${#DEVARIO_KERNEL_IDS[@]} == 0 )); then
+    echo "No installed ${wanted_id:-bootable} kernel found below $modules_root." >&2
     return 1
   fi
+}
+
+devario_kernel_select() {
+  devario_kernel_discover "$1" "$2" "${3:-}" || return 1
+  DEVARIO_KERNEL_ID="${DEVARIO_KERNEL_IDS[0]}"
+  DEVARIO_KERNEL_VERSION="${DEVARIO_KERNEL_VERSIONS[0]}"
+  DEVARIO_KERNEL_IMAGE="${DEVARIO_KERNEL_IMAGES[0]}"
 }

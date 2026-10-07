@@ -3,6 +3,7 @@
 set -euo pipefail
 
 boot_dir=/boot
+modules_root=/usr/lib/modules
 installed_marker=/var/lib/devario/systemd-boot-installed
 legacy_marker=/var/lib/devario/limine-installed
 install_mode=false
@@ -44,35 +45,74 @@ unset SYSTEMD_RELAX_ESP_CHECKS SYSTEMD_RELAX_XBOOTLDR_CHECKS
   || fail 'the systemd-boot x86-64 EFI executable is missing'
 [[ "$check_only" == false ]] || exit 0
 
-for file in vmlinuz-linux-devario initramfs-linux-devario.img initramfs-linux-devario-fallback.img; do
-  [[ -s "$boot_dir/$file" ]] || fail "$boot_dir/$file is missing or empty"
-done
 helper_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$helper_dir/kernel.sh"
+devario_kernel_discover "$modules_root"
+for kernel_id in "${DEVARIO_KERNEL_IDS[@]}"; do
+  for file in "vmlinuz-$kernel_id" "initramfs-$kernel_id.img" "initramfs-$kernel_id-fallback.img"; do
+    [[ -s "$boot_dir/$file" ]] || fail "$boot_dir/$file is missing or empty"
+  done
+done
 kernel_cmdline="$("$helper_dir/kernel-command-line")"
 [[ -n "$kernel_cmdline" && "$kernel_cmdline" != *$'\n'* && "$kernel_cmdline" != *$'\r'* ]] \
   || fail 'invalid generated kernel command line'
 install -d -m 0755 "$boot_dir/loader/entries"
 staging="$(mktemp -d "$boot_dir/loader/.devario-entries.XXXXXX")"
 trap 'rm -rf -- "$staging"' EXIT
+declare -a entries=() obsolete=()
+declare -A active_entries=()
 write_entry() {
   local filename="$1" title="$2" kernel="$3" initrd="$4" order="$5"
   printf 'title %s\nsort-key %s\nlinux %s\ninitrd %s\noptions %s\n' \
     "$title" "$order" "$kernel" "$initrd" "$kernel_cmdline" > "$staging/$filename"
   chmod 0644 "$staging/$filename"
+  entries+=("$filename")
+  active_entries[$filename]=1
 }
-write_entry devario.conf 'Devario Linux' /vmlinuz-linux-devario /initramfs-linux-devario.img devario-01
-write_entry devario-fallback.conf 'Devario Linux (fallback initramfs)' \
-  /vmlinuz-linux-devario /initramfs-linux-devario-fallback.img devario-02
-recovery_dir="$boot_dir/devario-recovery/linux-devario"
-if [[ -s "$recovery_dir/vmlinuz-linux-devario" && -s "$recovery_dir/initramfs-linux-devario.img" ]]; then
-  write_entry devario-recovery.conf 'Devario Linux (previous kernel and initramfs)' \
-    /devario-recovery/linux-devario/vmlinuz-linux-devario \
-    /devario-recovery/linux-devario/initramfs-linux-devario.img devario-03
+default_entry=
+for kernel_id in "${DEVARIO_KERNEL_IDS[@]}"; do
+  case "$kernel_id" in
+    linux-devario) entry=devario; title='Devario Linux' ;;
+    linux-devario-lts) entry=devario-lts; title='Devario Linux LTS' ;;
+    *) entry="devario-kernel-$kernel_id"; title="Devario Linux ($kernel_id)" ;;
+  esac
+  if [[ -z "$default_entry" || "$kernel_id" == linux-devario ]]; then
+    default_entry="$entry.conf"
+  fi
+  write_entry "$entry.conf" "$title" "/vmlinuz-$kernel_id" "/initramfs-$kernel_id.img" "$entry-01"
+  write_entry "$entry-fallback.conf" "$title (fallback initramfs)" \
+    "/vmlinuz-$kernel_id" "/initramfs-$kernel_id-fallback.img" "$entry-02"
+  recovery_dir="$boot_dir/devario-recovery/$kernel_id"
+  if [[ -s "$recovery_dir/vmlinuz-$kernel_id" && -s "$recovery_dir/initramfs-$kernel_id.img" ]]; then
+    write_entry "$entry-recovery.conf" "$title (previous kernel and initramfs)" \
+      "/devario-recovery/$kernel_id/vmlinuz-$kernel_id" \
+      "/devario-recovery/$kernel_id/initramfs-$kernel_id.img" "$entry-03"
+  fi
+done
+# Only prune entries we previously generated, including the pre-manifest names.
+manifest="$boot_dir/loader/devario-entries.list"
+previous_entries=(devario.conf devario-fallback.conf devario-recovery.conf)
+if [[ -f "$manifest" ]]; then
+  while IFS= read -r file || [[ -n "$file" ]]; do
+    [[ "$file" =~ ^devario(-[a-zA-Z0-9._+-]+)?\.conf$ ]] || fail 'invalid managed entry manifest'
+    previous_entries+=("$file")
+  done < "$manifest"
 fi
+for file in "${previous_entries[@]}"; do
+  [[ -n "${active_entries[$file]:-}" ]] || obsolete+=("$file")
+done
+printf '%s\n' "${entries[@]}" > "$staging/devario-entries.list"
 # Record this before bootctl, which may create its own default loader.conf.
 if [[ ! -e "$boot_dir/loader/loader.conf" ]]; then
-  printf 'default devario.conf\ntimeout 5\neditor no\n' > "$staging/loader.conf"
-  chmod 0644 "$staging/loader.conf"
+  printf 'default %s\ntimeout 5\neditor no\n' "$default_entry" > "$staging/loader.conf"
+elif (( ${#obsolete[@]} )); then
+  # Preserve user preferences, except an exact default pointing at an entry
+  # being removed. Wildcards, saved defaults and other operating systems survive.
+  awk -v removed="${obsolete[*]}" -v replacement="$default_entry" '
+    BEGIN { n = split(removed, names, " "); for (i = 1; i <= n; i++) stale[names[i]] = 1 }
+    $1 == "default" && $2 in stale { $2 = replacement }
+    { print }
+  ' "$boot_dir/loader/loader.conf" > "$staging/loader.conf"
 fi
 
 # Explicit installation also migrates existing UEFI Limine installations. Updates
@@ -93,15 +133,17 @@ for file in EFI/systemd/systemd-bootx64.efi EFI/BOOT/BOOTX64.EFI; do
 done
 # Leave the administrator's loader preferences and other operating systems alone.
 if [[ -f "$staging/loader.conf" ]]; then
+  chmod 0644 "$staging/loader.conf"
   mv -f -- "$staging/loader.conf" "$boot_dir/loader/loader.conf"
 fi
-for file in devario.conf devario-fallback.conf devario-recovery.conf; do
-  if [[ -f "$staging/$file" ]]; then
-    mv -f -- "$staging/$file" "$boot_dir/loader/entries/$file"
-  elif [[ "$file" == devario-recovery.conf ]]; then
-    rm -f -- "$boot_dir/loader/entries/$file"
-  fi
+for file in "${entries[@]}"; do
+  mv -f -- "$staging/$file" "$boot_dir/loader/entries/$file"
 done
+for file in "${obsolete[@]}"; do
+  rm -f -- "$boot_dir/loader/entries/$file"
+done
+chmod 0644 "$staging/devario-entries.list"
+mv -f -- "$staging/devario-entries.list" "$manifest"
 install -Dm0644 /dev/null "$installed_marker"
 rm -f -- "$legacy_marker"
 note 'systemd-boot and Devario boot entries are up to date'

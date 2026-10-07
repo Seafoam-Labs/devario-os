@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-boot_package="$project_dir/packages/devario-boot"
+boot_package="${DEVARIO_BOOT_PACKAGE:-$project_dir/packages/devario-boot}"
 test_root="$(mktemp -d /tmp/devario-dracut-test.XXXXXX)"
 trap 'rm -rf -- "$test_root"' EXIT
 export TEST_ROOT="$test_root"
@@ -26,11 +26,19 @@ set -euo pipefail
 printf '%s\n' "$*" >> "$TEST_ROOT/dracut.calls"
 if [[ "${FAIL_DRACUT:-}" == yes || ( "${FAIL_DRACUT:-}" == fallback && "${*: -1}" == *fallback.img ) ]]; then exit 1; fi
 echo generated-image > "${*: -1}"
+image="${*: -1}"
+while (( $# )); do
+  if [[ "$1" == --kver ]]; then
+    echo "usr/lib/modules/$2/kernel/driver.ko" >> "$image"
+    break
+  fi
+  shift
+done
 EOF
 cat > "$test_root/bin/lsinitrd" <<'EOF'
 #!/bin/bash
 [[ "${FAIL_INSPECTION:-}" != yes ]] || exit 1
-echo usr/lib/modules/1.2-devario/kernel/driver.ko
+cat "$1"
 if [[ "${TEST_NVIDIA:-}" == yes ]]; then
   for module in nvidia nvidia-modeset nvidia-uvm nvidia-drm; do
     [[ "${OMIT_NVIDIA:-}" != "$module" ]] || continue
@@ -183,6 +191,21 @@ echo 'NVIDIA_EARLY_KMS="invalid"' > "$test_root/automation.conf"
 expect_failure generate --mode installed
 rm "$test_root/automation.conf"
 
+# LTS generation/upgrade must not overwrite the regular kernel or its recovery.
+mkdir -p "$test_root/modules/6.18-lts"
+echo linux-devario-lts > "$test_root/modules/6.18-lts/pkgbase"
+echo lts-kernel > "$test_root/modules/6.18-lts/vmlinuz"
+regular_before="$(sha256sum "$test_root/boot/vmlinuz-linux-devario" "$test_root/boot/initramfs-linux-devario.img")"
+generate --mode installed --kernel-id linux-devario-lts --kver 6.18-lts
+grep -qx lts-kernel "$test_root/boot/vmlinuz-linux-devario-lts" || fail 'LTS image absent'
+grep -q 'lib/modules/6.18-lts/' "$test_root/boot/initramfs-linux-devario-lts.img" || fail 'LTS initramfs has wrong modules'
+mv "$test_root/modules/6.18-lts" "$test_root/modules/6.18.1-lts"
+echo updated-lts-kernel > "$test_root/modules/6.18.1-lts/vmlinuz"
+generate --mode installed --kernel-id linux-devario-lts --kver 6.18.1-lts
+grep -qx lts-kernel "$test_root/boot/devario-recovery/linux-devario-lts/vmlinuz-linux-devario-lts" || fail 'LTS recovery lost'
+grep -q 'lib/modules/6.18.1-lts/' "$test_root/boot/initramfs-linux-devario-lts-fallback.img" || fail 'LTS upgrade fallback has wrong modules'
+[[ "$regular_before" == "$(sha256sum "$test_root/boot/vmlinuz-linux-devario" "$test_root/boot/initramfs-linux-devario.img")" ]] || fail 'LTS update overwrote regular kernel'
+
 # Image signatures are required when verification is requested, including on
 # transports which supply a downloaded file rather than a block device.
 openssl req -x509 -newkey rsa:2048 -nodes -keyout "$test_root/key" \
@@ -196,16 +219,33 @@ expect_failure "$boot_package/verify-live-image" "$test_root/image" "$test_root/
 expect_failure "$boot_package/verify-live-image" "$test_root/image" "$test_root/missing.sig" "$test_root/cert"
 
 # Exercise the real orchestration with failing/succeeding generator executables.
-cp "$boot_package/boot-update" "$test_root/helpers/"
+cp "$boot_package/kernel.sh" "$test_root/helpers/"
+sed -e "s|modules_root=/usr/lib/modules|modules_root=$test_root/modules|" \
+  -e "s|/var/lib/devario/|$test_root/state/|g" "$boot_package/boot-update" > "$test_root/helpers/boot-update"
 printf '#!/bin/sh\nexit 1\n' > "$test_root/helpers/initramfs-update"
 printf '#!/bin/sh\nif [ "$1" = --check ]; then echo check >> "$TEST_ROOT/order"; exit 0; fi\necho systemd-boot >> "$TEST_ROOT/order"\n' > "$test_root/helpers/systemd-boot-update"
 chmod +x "$test_root/helpers/"*
 expect_failure "$test_root/helpers/boot-update" --install
 [[ "$(cat "$test_root/order")" == check ]] || fail 'systemd-boot ran after generator failure'
 rm "$test_root/order"
-printf '#!/bin/sh\necho generated >> "$TEST_ROOT/order"\n' > "$test_root/helpers/initramfs-update"
+printf '#!/bin/sh\necho "generated $*" >> "$TEST_ROOT/order"\n' > "$test_root/helpers/initramfs-update"
 "$test_root/helpers/boot-update" --install
-[[ "$(cat "$test_root/order")" == $'check\ngenerated\nsystemd-boot' ]] || fail 'boot update order'
+[[ "$(cat "$test_root/order")" == $'check\ngenerated --mode installed --kernel-id linux-devario --kver 1.2-devario\ngenerated --mode installed --kernel-id linux-devario-lts --kver 6.18.1-lts\nsystemd-boot' ]] || fail 'boot update order or kernel selection'
+rm "$test_root/order"
+cat > "$test_root/helpers/initramfs-update" <<'EOF'
+#!/bin/bash
+[[ "$*" != *linux-devario-lts* ]] || exit 1
+echo generated >> "$TEST_ROOT/order"
+EOF
+expect_failure "$test_root/helpers/boot-update" --install
+[[ "$(cat "$test_root/order")" == $'check\ngenerated' ]] || fail 'entries published after LTS generation failed'
+rm "$test_root/order"
+"$test_root/helpers/boot-update"
+[[ ! -e "$test_root/order" ]] || fail 'live transaction generated images or deployed entries'
+rm -rf "$test_root/modules/1.2-devario"
+printf '#!/bin/sh\necho "generated $*" >> "$TEST_ROOT/order"\n' > "$test_root/helpers/initramfs-update"
+"$test_root/helpers/boot-update" --install
+[[ "$(cat "$test_root/order")" == $'check\ngenerated --mode installed --kernel-id linux-devario-lts --kver 6.18.1-lts\nsystemd-boot' ]] || fail 'LTS-only orchestration requires regular kernel'
 
 # UUID-root LUKS and Btrfs subvolume must survive command-line generation.
 printf 'UUID=root-filesystem / btrfs defaults,subvol=/@ 0 0\nUUID=swap-device none swap defaults 0 0\n' > "$test_root/fstab"

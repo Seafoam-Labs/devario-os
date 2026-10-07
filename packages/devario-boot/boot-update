@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 set -euo pipefail
 helper_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "$helper_dir/kernel.sh"
+modules_root=/usr/lib/modules
 case "${1:-}" in
   --install) (( $# == 1 )) || exit 64; install_mode=true ;;
   '') install_mode=false ;;
@@ -12,7 +14,11 @@ if [[ "$install_mode" == false && ! -e /var/lib/devario/systemd-boot-installed &
   exit 0
 fi
 "$helper_dir/systemd-boot-update" --check
-"$helper_dir/initramfs-update" --mode installed
+devario_kernel_discover "$modules_root"
+for index in "${!DEVARIO_KERNEL_IDS[@]}"; do
+  "$helper_dir/initramfs-update" --mode installed \
+    --kernel-id "${DEVARIO_KERNEL_IDS[$index]}" --kver "${DEVARIO_KERNEL_VERSIONS[$index]}"
+done
 # A single process owns this sequence: a failed generation never refreshes systemd-boot.
 if [[ "$install_mode" == true ]]; then
   "$helper_dir/systemd-boot-update" --install

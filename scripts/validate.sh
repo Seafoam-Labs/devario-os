@@ -1031,8 +1031,9 @@ if [[ ! -x "$systemd_boot_update" ]]; then
   fail "the installed systemd-boot update helper must be executable"
 fi
 for systemd_boot_helper_text in \
-  '/vmlinuz-linux-devario /initramfs-linux-devario.img' \
-  '/vmlinuz-linux-devario /initramfs-linux-devario-fallback.img' \
+  'devario_kernel_discover "$modules_root"' \
+  '"/vmlinuz-$kernel_id" "/initramfs-$kernel_id.img"' \
+  '"/vmlinuz-$kernel_id" "/initramfs-$kernel_id-fallback.img"' \
   'bootctl --esp-path="$boot_dir" --variables=yes install' \
   'bootctl --esp-path="$boot_dir" --variables=no --graceful update' \
   'installed_marker=/var/lib/devario/systemd-boot-installed' \
