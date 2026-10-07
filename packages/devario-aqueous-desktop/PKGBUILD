@@ -2,19 +2,19 @@
 
 pkgname=devario-aqueous-desktop
 pkgver=1
-pkgrel=8
+pkgrel=9
 pkgdesc="Complete Aqueous and Pearl desktop environment for Devario"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
 license=('GPL-3.0-or-later')
 depends=(
-  'aqueous-core=0.9.1-1'
-  'aqueous-session=0.9.1-1'
-  'xdg-desktop-portal-aqueous=0.9.1-1'
-  'aqueous-integration-pearl=0.9.1-1'
-  'aqueous-shell-pearl=0.9.1-1'
+  'aqueous-core=1.0.2-1'
+  'aqueous-session=1.0.2-1'
+  'xdg-desktop-portal-aqueous=1.0.2-1'
+  'aqueous-integration-pearl=1.0.2-1'
+  'aqueous-shell-pearl=1.0.2-1'
   'pearl'
-  'pearl-greeter-git'
+  'pearl-greeter'
   'greetd'
   'ghostty'
   'nemo'
