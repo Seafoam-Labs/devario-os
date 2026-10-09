@@ -7,6 +7,13 @@ polkit.addRule(function(action, subject) {
             return polkit.Result.YES;
         }
 
+        // Pearl writes persistent system-scope Wi-Fi profiles in the live session,
+        // where no account has an authenticatable password. NetworkManager checks
+        // this action for those writes and for the secret round-trip.
+        if (action.id == "org.freedesktop.NetworkManager.settings.modify.system") {
+            return polkit.Result.YES;
+        }
+
         // The Wayland launcher validates the socket and runs only Calamares.
         if (action.id == "org.freedesktop.policykit.exec" &&
             action.lookup("program") == "/usr/lib/devario/start-installer" &&

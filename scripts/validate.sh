@@ -1154,6 +1154,7 @@ for required_polkit_text in \
   'action.id == "io.calamares.calamares.pkexec.run"' \
   'action.id == "org.freedesktop.policykit.exec"' \
   'action.id == "org.kde.kpmcore.externalcommand.init"' \
+  'action.id == "org.freedesktop.NetworkManager.settings.modify.system"' \
   'action.lookup("program") == "/usr/bin/calamares"' \
   'action.lookup("user") == "root"' \
   'subject.user == "liveuser"' \

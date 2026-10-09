@@ -2,7 +2,7 @@
 
 pkgname=devario-aqueous-desktop
 pkgver=1
-pkgrel=9
+pkgrel=10
 pkgdesc="Complete Aqueous and Pearl desktop environment for Devario"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -20,6 +20,7 @@ depends=(
   'nemo'
   'firefox'
   'networkmanager'
+  'nm-connection-editor'
   'pipewire'
   'pipewire-alsa'
   'pipewire-pulse'
