@@ -69,6 +69,7 @@ python
 qt6-imageformats
 ripgrep
 rsync
+seahorse
 shelly
 shelly-cli
 squashfs-tools

@@ -2,7 +2,7 @@
 
 pkgname=devario-aqueous-desktop
 pkgver=1
-pkgrel=10
+pkgrel=11
 pkgdesc="Complete Aqueous and Pearl desktop environment for Devario"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -27,6 +27,7 @@ depends=(
   'wireplumber'
   'polkit'
   'gnome-keyring'
+  'seahorse'
   'accountsservice'
   'gvfs'
   'udisks2'
