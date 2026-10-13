@@ -75,6 +75,29 @@ live session and new installed users. The late ISO overlay supplies
 `~/.config/aqueous/layout.toml` through `/etc/skel`. Rebuild the ISO to include
 these defaults; users can change their layout through Pearl settings.
 
+Fastfetch uses a persistent system default at `/etc/xdg/fastfetch/config.jsonc`,
+linked to the shared Devario configuration and ASCII fish under
+`/usr/share/devario/fastfetch/`. Both plain `fastfetch` and the Bash/Fish welcome
+display use it. The welcome display tracks the terminal rather than a global
+"already shown" flag, so new terminals display it while nested shells remain
+quiet. These files survive Calamares installation. Rebuild the ISO to deliver
+the defaults to new installations; existing home directories keep their shell
+startup files. A personal `~/.config/fastfetch/config.jsonc` takes precedence.
+
+The package count uses Fastfetch's Devario `{shelly}` detector, which queries
+`shelly list standard --show-hidden --json`. Publish the patched
+`devario-core/fastfetch` 2.69.0-3 package before rebuilding the ISO; an
+unpatched upstream Fastfetch does not support this format field.
+
+All three fish designs are included: striped, compact, and bold (the default).
+Run `python3 scripts/preview-fastfetch.py --sample` for
+illustrative Devario previews, or omit `--sample` to detect this machine's real
+information. See the [color comparison](docs/assets/fastfetch-options.png).
+After installation, an alternate logo can be tried with
+`fastfetch --logo /usr/share/devario/fastfetch/fish-compact.txt` (or `fish-striped.txt`).
+To keep an alternate design, copy `/etc/xdg/fastfetch/config.jsonc` to
+`~/.config/fastfetch/config.jsonc` and set `logo.source` to that logo's full path.
+
 The first-boot Shelly keyring service explicitly runs as `User=root` so systemd
 supplies the home directory required by Shelly's XDG configuration lookup.
 Initialization and import of the Devario signing keys finish before the service

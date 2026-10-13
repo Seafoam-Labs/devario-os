@@ -128,6 +128,7 @@ required_files=(
   "$profile_dir/late-airootfs/etc/xdg/aqueous/layout.toml"
   "$profile_dir/late-airootfs/usr/share/devario/fastfetch/config.jsonc"
   "$profile_dir/late-airootfs/usr/share/devario/fastfetch/devario-fish.txt"
+  "$profile_dir/late-airootfs/etc/xdg/fastfetch/config.jsonc"
   "$profile_dir/late-airootfs/usr/lib/sysusers.d/devario-live.conf"
   "$profile_dir/late-airootfs/usr/lib/tmpfiles.d/devario-live.conf"
   "$project_dir/packages/calamares/PKGBUILD"
@@ -942,12 +943,11 @@ for required_fastfetch_fish_text in \
   'status is-interactive; or return' \
   'isatty stdout' \
   'test "$TERM" != dumb' \
-  'test -z "$DEVARIO_FASTFETCH_SHOWN"' \
-  'set -gx DEVARIO_FASTFETCH_SHOWN 1' \
+  'set -l devario_fastfetch_tty (tty <&1)' \
+  'test "$DEVARIO_FASTFETCH_TTY" != "$devario_fastfetch_tty"' \
+  'set -gx DEVARIO_FASTFETCH_TTY "$devario_fastfetch_tty"' \
   'command -q fastfetch' \
-  'fastfetch \' \
-  '-l /usr/share/devario/fastfetch/devario-fish.txt' \
-  '--config /usr/share/devario/fastfetch/config.jsonc'; do
+  'if fastfetch'; do
   if ! grep -Fq -- "$required_fastfetch_fish_text" "$live_fish_config"; then
     fail "the default interactive shell does not launch Fastfetch safely: $required_fastfetch_fish_text"
   fi
@@ -956,12 +956,19 @@ if grep -Fq -- '--packages-format' "$live_fish_config"; then
   fail "the default interactive shell uses Fastfetch's removed module-option CLI"
 fi
 for required_fastfetch_config_text in \
+  '"source": "/usr/share/devario/fastfetch/devario-fish.txt"' \
   '"type": "packages"' \
-  '"format": "{pacman} (Shelly)"'; do
+  '"format": "{shelly} (Shelly)"'; do
   if ! grep -Fq "$required_fastfetch_config_text" "$fastfetch_config"; then
     fail "the Fastfetch JSON configuration is missing: $required_fastfetch_config_text"
   fi
 done
+if ! cmp -s "$fastfetch_config" "$profile_dir/late-airootfs/etc/xdg/fastfetch/config.jsonc"; then
+  fail "plain Fastfetch must load the shared Devario configuration"
+fi
+if ! python3 "$project_dir/tests/test-fastfetch.py"; then
+  fail "Fastfetch terminal persistence checks failed"
+fi
 
 if [[ -e "$profile_dir/airootfs/etc/calamares/modules/bootloader.conf" \
   || -e "$profile_dir/airootfs/etc/calamares/modules/grubcfg.conf" ]]; then
@@ -1259,8 +1266,6 @@ pacman_reference_is_allowed() {
   case "$relative_path" in
     README.md|packages/*/README.md|packages/seafoam-keyring/*|packages/devario-base/shelly-storage-migrate|packages/devario-base/devario-base.install)
       return 0 ;;
-    iso/late-airootfs/usr/share/devario/fastfetch/config.jsonc)
-      [[ "$text" == *'"format": "{pacman} (Shelly)"'* ]]; return ;;
     scripts/build-packages.sh)
       [[ "$text" == *'PACMAN="$makepkg_adapter"'* ]]; return ;;
     scripts/audit-iso-package-paths.py)
