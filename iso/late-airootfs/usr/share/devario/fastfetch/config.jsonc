@@ -1,35 +1,109 @@
 {
   "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
   "logo": {
-    "type": "file",
-    "source": "/usr/share/devario/fastfetch/devario-fish.txt",
+    "type": "auto",
+    "source": "/usr/share/devario/fastfetch/devario-logo.png",
+    "width": 42,
+    "padding": {
+      "top": 4,
+      "right": 4
+    },
     "color": {
       "1": "#62c6b5",
       "2": "#00a9e8"
-    },
-    "padding": { "top": 1, "right": 3 }
+    }
   },
   "display": {
-    "color": { "keys": "#62c6b5", "title": "#62c6b5" }
+    "separator": " ▸ ",
+    "color": {
+      "keys": "#62c6b5",
+      "title": "#62c6b5"
+    }
   },
   "modules": [
-    "title",
-    "separator",
-    "os",
-    "host",
-    "kernel",
-    "uptime",
+    {
+      "type": "custom",
+      "format": "{#90}┌──────────────────────────────◎──────────────────────────────┐{#}"
+    },
+    {
+      "type": "os",
+      "key": "◎ OS"
+    },
+    {
+      "type": "kernel",
+      "key": "◎ Kernel"
+    },
+    {
+      "type": "de",
+      "key": "◎ WM"
+    },
+    {
+      "type": "wm",
+      "key": "◎ Compositor"
+    },
     {
       "type": "packages",
+      "key": "◎ Packages",
       "format": "{shelly} (Shelly)"
     },
-    "shell",
-    "display",
-    { "type": "wm", "key": "WM" },
-    "terminal",
-    "cpu",
-    "gpu",
-    "memory",
-    "disk"
+    {
+      "type": "custom",
+      "format": "{#90}├─────────────────────────────────────────────────────────────┤{#}"
+    },
+    {
+      "type": "memory",
+      "key": "◎ Ram"
+    },
+    {
+      "type": "cpu",
+      "key": "◎ CPU"
+    },
+    {
+      "type": "gpu",
+      "key": "◎ GPU"
+    },
+    {
+      "type": "swap",
+      "key": "◎ Swap"
+    },
+    {
+      "type": "disk",
+      "key": "◎ Disk"
+    },
+    {
+      "type": "custom",
+      "format": "{#90}├─────────────────────────Dev Tools───────────────────────────┤{#}"
+    },
+    {
+      "type": "command",
+      "key": "◎ Zig",
+      "text": "if command -v zig >/dev/null 2>&1; then zig version; else printf \"not installed\"; fi"
+    },
+    {
+      "type": "command",
+      "key": "◎ dotnet",
+      "text": "if command -v dotnet >/dev/null 2>&1; then DOTNET_NOLOGO=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 dotnet --version; else printf \"not installed\"; fi"
+    },
+    {
+      "type": "custom",
+      "format": "{#90}├─────────────────────────────────────────────────────────────┤{#}"
+    },
+    {
+      "type": "uptime",
+      "key": "◎ Uptime"
+    },
+    {
+      "type": "terminal",
+      "key": "◎ Terminal"
+    },
+    {
+      "type": "custom",
+      "format": "{#90}└──────────────────────────────◎──────────────────────────────┘{#}"
+    },
+    {
+      "type": "colors",
+      "paddingLeft": 24,
+      "symbol": "circle"
+    }
   ]
 }

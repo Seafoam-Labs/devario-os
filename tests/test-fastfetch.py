@@ -88,7 +88,7 @@ class FastfetchTests(unittest.TestCase):
         self.assertEqual(link.resolve(), ASSETS / "config.jsonc")
         config = json.loads(link.read_text())
         default_logo = OVERLAY / config["logo"]["source"].lstrip("/")
-        self.assertEqual(default_logo.read_bytes(), (ASSETS / "fish-bold.txt").read_bytes())
+        self.assertEqual(default_logo.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
         system_dir = Path(self.env["XDG_CONFIG_DIRS"]) / "fastfetch"
         system_dir.mkdir(parents=True)
         paths = subprocess.check_output(["fastfetch", "--list-config-paths"], env=self.env, text=True)
@@ -97,6 +97,7 @@ class FastfetchTests(unittest.TestCase):
         config["modules"] = [{"type": "custom", "key": "OS", "format": "Devario preview"}]
         for logo in ["devario-fish", "fish-striped", "fish-compact", "fish-bold"]:
             with self.subTest(logo=logo):
+                config["logo"]["type"] = "file"
                 config["logo"]["source"] = str(ASSETS / f"{logo}.txt")
                 (system_dir / "config.jsonc").write_text(json.dumps(config))
                 # Load the staged system file explicitly: the developer may have

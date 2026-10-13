@@ -10,6 +10,7 @@ bluez-utils
 brightnessctl
 btrfs-progs
 calamares
+chafa
 ckbcomp
 cryptsetup
 devario-base
@@ -35,6 +36,7 @@ gptfdisk
 greetd
 gvfs
 hwinfo
+imagemagick
 intel-ucode
 linux-devario
 linux-devario-headers

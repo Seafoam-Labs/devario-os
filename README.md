@@ -69,6 +69,13 @@ takes precedence. Pearl Greeter uses its own `pearl-greeter.service`, the
 in `iso/late-airootfs` after package hooks; installation restores the packaged
 login template without live autologin.
 
+GNOME Keyring and Seahorse are included in the core ISO and installed desktop.
+The late ISO overlay starts the packaged GNOME Keyring user service and its
+required socket with the user manager. The greetd PAM hooks unlock the login keyring during
+password login, following the [GNOME PAM integration](https://wiki.gnome.org/Projects/GnomeKeyring/Pam).
+These settings survive Calamares installation; rebuild the ISO to deliver them.
+An existing keyring must use the login password for automatic unlocking.
+
 Aqueous defaults to floating windows (`stacking` in its configuration) for the
 live session and new installed users. The late ISO overlay supplies
 `/etc/xdg/aqueous/layout.toml` as the system fallback and seeds an editable
@@ -76,7 +83,7 @@ live session and new installed users. The late ISO overlay supplies
 these defaults; users can change their layout through Pearl settings.
 
 Fastfetch uses a persistent system default at `/etc/xdg/fastfetch/config.jsonc`,
-linked to the shared Devario configuration and ASCII fish under
+linked to the shared Devario configuration and fish logo under
 `/usr/share/devario/fastfetch/`. Both plain `fastfetch` and the Bash/Fish welcome
 display use it. The welcome display tracks the terminal rather than a global
 "already shown" flag, so new terminals display it while nested shells remain
@@ -86,15 +93,26 @@ startup files. A personal `~/.config/fastfetch/config.jsonc` takes precedence.
 
 The package count uses Fastfetch's Devario `{shelly}` detector, which queries
 `shelly list standard --show-hidden --json`. Publish the patched
-`devario-core/fastfetch` 2.69.0-3 package before rebuilding the ISO; an
+`devario-core/fastfetch` 2.69.0-4 package before rebuilding the ISO; an
 unpatched upstream Fastfetch does not support this format field.
 
-All three fish designs are included: striped, compact, and bold (the default).
-Run `python3 scripts/preview-fastfetch.py --sample` for
-illustrative Devario previews, or omit `--sample` to detect this machine's real
-information. See the [color comparison](docs/assets/fastfetch-options.png).
-After installation, an alternate logo can be tried with
-`fastfetch --logo /usr/share/devario/fastfetch/fish-compact.txt` (or `fish-striped.txt`).
+The default is the seafoam-and-blue fish PNG with the DEVARIO wordmark, beside
+a bordered layout with system, hardware, Dev Tools (Zig and .NET), and session
+sections. Missing developer tools display `not installed`. Fastfetch automatically
+uses the terminal's image support (including Ghostty), or Chafa text rendering
+when available. ImageMagick and Chafa are explicitly included in the ISO and
+required by the Fastfetch package; its build checks enforce both image backends.
+Colors follow the terminal palette, with seafoam labels.
+Run `python3 scripts/preview-fastfetch.py --sample` for an illustrative Devario
+preview, or omit `--sample` to detect this machine's real information.
+See the [rendered example](docs/assets/fastfetch-preview.png). Recreate it with
+`python3 scripts/preview-fastfetch.py --sample --render docs/assets/fastfetch-preview.png`
+(requires Pillow and Noto Sans Mono).
+
+The striped, compact, and bold text fish designs remain available; preview them
+with `python3 scripts/preview-fastfetch.py all --sample`.
+After installation, try one with
+`fastfetch --logo-type file --logo /usr/share/devario/fastfetch/fish-compact.txt`.
 To keep an alternate design, copy `/etc/xdg/fastfetch/config.jsonc` to
 `~/.config/fastfetch/config.jsonc` and set `logo.source` to that logo's full path.
 
