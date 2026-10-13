@@ -98,6 +98,22 @@ After installation, an alternate logo can be tried with
 To keep an alternate design, copy `/etc/xdg/fastfetch/config.jsonc` to
 `~/.config/fastfetch/config.jsonc` and set `logo.source` to that logo's full path.
 
+An optional graphical Fastfetch preset is included with the Devario image logo
+and Hardware, Workspace, and System sections:
+
+```sh
+fastfetch --config /usr/share/devario/fastfetch/desktop.jsonc
+```
+
+This preset uses Sixel, requires a compatible terminal such as Konsole, and is
+intended for a black terminal background. It detects live system information;
+its `{all}` package count includes Shelly's inventory in Devario's patched
+Fastfetch. The existing ASCII default and Bash/Fish welcome display are
+unchanged. To select the graphical preset as a personal default, copy
+`/usr/share/devario/fastfetch/desktop.jsonc` to
+`~/.config/fastfetch/config.jsonc`. The logo uses a system-wide installed path,
+so it does not need to be copied into each home directory.
+
 The first-boot Shelly keyring service explicitly runs as `User=root` so systemd
 supplies the home directory required by Shelly's XDG configuration lookup.
 Initialization and import of the Devario signing keys finish before the service

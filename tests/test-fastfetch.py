@@ -82,6 +82,30 @@ class FastfetchTests(unittest.TestCase):
                 self.assertNotIn("FETCH_CALLED", self.shell_run(shell, source, term="dumb"))
                 self.assertNotIn("FETCH_CALLED", self.shell_run(shell, f"{source}; true", interactive=False))
 
+    def test_optional_desktop_preset_asset(self):
+        config = json.loads((ASSETS / "desktop.jsonc").read_text())
+        logo = OVERLAY / config["logo"]["source"].lstrip("/")
+        self.assertTrue(logo.is_relative_to(ASSETS))
+        self.assertTrue(logo.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
+        self.assertEqual(config["logo"]["type"], "sixel")
+
+    @unittest.skipUnless(shutil.which("fastfetch"), "fastfetch is not installed")
+    def test_desktop_modules_with_live_data(self):
+        if shutil.which("shelly") is None:
+            self.skipTest("the desktop runtime requires Shelly")
+        # Parse the optional preset without needing graphics support in CI.
+        result = subprocess.run(
+            ["fastfetch", "--config", str(ASSETS / "desktop.jsonc"),
+             "--logo", "none", "--pipe", "false", "--show-errors"],
+            env=self.env, capture_output=True, text=True, check=True, timeout=10,
+        )
+        self.assertEqual(result.stderr, "")
+        for section in ("Hardware", "Workspace", "System"):
+            self.assertIn(section, result.stdout)
+        self.assertIn("Processor", result.stdout)
+        self.assertIn("Kernel", result.stdout)
+        self.assertNotIn("Unknown", result.stdout)
+
     @unittest.skipUnless(shutil.which("fastfetch"), "fastfetch is not installed")
     def test_config_paths_logos_and_user_override(self):
         link = OVERLAY / "etc/xdg/fastfetch/config.jsonc"

@@ -127,6 +127,8 @@ required_files=(
   "$profile_dir/late-airootfs/etc/skel/.config/aqueous/layout.toml"
   "$profile_dir/late-airootfs/etc/xdg/aqueous/layout.toml"
   "$profile_dir/late-airootfs/usr/share/devario/fastfetch/config.jsonc"
+  "$profile_dir/late-airootfs/usr/share/devario/fastfetch/desktop.jsonc"
+  "$profile_dir/late-airootfs/usr/share/devario/fastfetch/devario-logo.png"
   "$profile_dir/late-airootfs/usr/share/devario/fastfetch/devario-fish.txt"
   "$profile_dir/late-airootfs/etc/xdg/fastfetch/config.jsonc"
   "$profile_dir/late-airootfs/usr/lib/sysusers.d/devario-live.conf"

@@ -1,0 +1,116 @@
+{
+  "logo": {
+    "type": "sixel",
+    "source": "/usr/share/devario/fastfetch/devario-logo.png",
+    "width": 30,
+    "height": 11,
+    "padding": {
+      "left": 2,
+      "right": 5,
+      "top": 4
+    }
+  },
+  "display": {
+    "separator": "  ",
+    "key": {
+      "width": 12
+    },
+    "color": {
+      "keys": "38;2;156;174;169",
+      "output": "38;2;230;239;236"
+    },
+    "brightColor": false
+  },
+  "modules": [
+    {
+      "type": "custom",
+      "format": "\u001b[1;38;2;137;211;196mDevario\u001b[0m"
+    },
+    {
+      "type": "custom",
+      "format": "\u001b[38;2;156;174;169mSystem overview \u00b7 design preview\u001b[0m"
+    },
+    "break",
+    {
+      "type": "custom",
+      "format": "\u001b[38;2;156;174;169mHardware\u001b[0m"
+    },
+    {
+      "type": "cpu",
+      "key": "Processor",
+      "format": "{name}"
+    },
+    {
+      "type": "cpu",
+      "key": "Cores",
+      "format": "{cores-physical} cores \u00b7 {cores-logical} threads"
+    },
+    {
+      "type": "gpu",
+      "key": "Graphics",
+      "format": "{name}"
+    },
+    {
+      "type": "memory",
+      "key": "Memory",
+      "format": "{total}"
+    },
+    {
+      "type": "disk",
+      "key": "Storage",
+      "folders": "/",
+      "format": "{size-total} \u00b7 {filesystem}"
+    },
+    "break",
+    {
+      "type": "custom",
+      "format": "\u001b[38;2;156;174;169mWorkspace\u001b[0m"
+    },
+    {
+      "type": "de",
+      "key": "Desktop"
+    },
+    {
+      "type": "wm",
+      "key": "Compositor",
+      "format": "{pretty-name} \u00b7 {protocol-name}"
+    },
+    {
+      "type": "display",
+      "key": "Display",
+      "format": "{width} \u00d7 {height} \u00b7 {refresh-rate} Hz"
+    },
+    {
+      "type": "terminal",
+      "key": "Terminal"
+    },
+    "break",
+    {
+      "type": "custom",
+      "format": "\u001b[38;2;156;174;169mSystem\u001b[0m"
+    },
+    {
+      "type": "os",
+      "key": "OS",
+      "format": "{pretty-name} \u00b7 {arch}"
+    },
+    {
+      "type": "kernel",
+      "key": "Kernel"
+    },
+    {
+      "type": "packages",
+      "key": "Packages",
+      "format": "{all} installed"
+    },
+    {
+      "type": "command",
+      "key": "Shelly",
+      "text": "shelly --version"
+    },
+    {
+      "type": "uptime",
+      "key": "Uptime"
+    }
+  ]
+}
