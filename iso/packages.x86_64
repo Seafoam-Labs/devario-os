@@ -44,8 +44,8 @@ man-db
 matugen
 mesa
 mesa-utils
+nano
 nbd
-nemo
 netcat
 networkmanager
 nfs-utils
@@ -65,6 +65,7 @@ pipewire-pulse
 playerctl
 polkit
 power-profiles-daemon
+pwvucontrol
 python
 qt6-imageformats
 ripgrep
