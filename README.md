@@ -123,6 +123,17 @@ as signed packages from the external package build. Their recipes are maintained
 outside this OS repository. The Devario builder transaction also compares its requested package
 list with Shelly's installed inventory and refuses a partial root filesystem.
 
+UFW is included and enabled on both the live ISO and installed system. The
+late image overlay sets `ENABLED=yes`, enables IPv6 filtering, denies incoming
+and forwarded connections by default, and allows outgoing connections, using
+UFW's packaged baseline rules. Calamares preserves these settings and enables
+`ufw.service` for installed boot. This follows
+[CachyOS's firewall defaults](https://github.com/CachyOS/cachyos-calamares/blob/cachyos/src/scripts/enable-ufw).
+No incoming service ports are opened automatically. Use `sudo ufw allow ssh`
+to permit SSH when needed, and `sudo ufw status verbose` to inspect the policy.
+Configuration is staged as files; building or installing the image does not
+run UFW against the build host or live session's firewall.
+
 The live and installed filesystems include `nvidia-open-dkms`, `nvidia-utils`,
 and the Devario kernel headers. The desktop metapackage requires NVIDIA
 **615.71.09** for both driver packages. Before partitioning, Calamares detects
@@ -146,6 +157,17 @@ and records `nvidia`, `partial`, `unavailable`, or `none` in
 `/run/devario/gpu-driver`. The `nvidia-utils` Nouveau blacklist is intentionally
 left intact, so this image supports Turing-and-newer NVIDIA hardware through
 the open kernel module and does not fall back to Nouveau on older GPUs.
+
+The live ISO and installed system use Plymouth with the Devario theme. The
+late image overlay selects `Theme=devario` in `/etc/plymouth/plymouthd.conf`,
+which Calamares carries into the installed filesystem. Both dracut profiles
+include Plymouth, live and installed boot entries use `quiet splash`, and
+Pearl waits for Plymouth to release the display. Plymouth and theme package
+updates regenerate installed initramfs images through the Devario boot hook.
+Publish `devario-boot` 1-10 or newer along with `plymouth` and
+`devario-plymouth-theme` before rebuilding the ISO. Visual splash, greeter
+handoff, and encrypted-root unlock still need BIOS/UEFI and installed boot
+acceptance testing.
 
 The live account declarations are added only after ISO package hooks finish.
 They remain available for systemd to create `liveuser` in the writable live

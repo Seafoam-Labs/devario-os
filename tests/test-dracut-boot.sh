@@ -251,6 +251,7 @@ printf '#!/bin/sh\necho "generated $*" >> "$TEST_ROOT/order"\n' > "$test_root/he
 printf 'UUID=root-filesystem / btrfs defaults,subvol=/@ 0 0\nUUID=swap-device none swap defaults 0 0\n' > "$test_root/fstab"
 printf 'cryptroot UUID=1234-abcd none luks\n' > "$test_root/crypttab"
 cmdline="$("$boot_package/kernel-command-line" "$test_root/fstab" "$test_root/crypttab")"
+[[ " $cmdline " == *' quiet splash '* ]] || fail 'installed boot must enable the Plymouth splash'
 [[ "$cmdline" == *'root=UUID=root-filesystem'* && "$cmdline" == *'rd.luks.name=1234-abcd=cryptroot'* \
   && "$cmdline" == *'rootflags=subvol=/@'* && "$cmdline" == *'resume=UUID=swap-device'* ]] || fail 'encrypted root/subvolume/resume arguments'
 

@@ -4,8 +4,12 @@ import importlib.machinery
 import importlib.util
 import json
 from pathlib import Path
+import shutil
+import subprocess
+import tempfile
 import unittest
 from unittest.mock import patch
+import yaml
 
 PROJECT = Path(__file__).resolve().parents[1]
 
@@ -64,6 +68,58 @@ class IndependenceTests(unittest.TestCase):
             self.assertNotIn("archiso_", path.read_text())
         self.assertFalse((PROJECT / "iso/profiledef.sh").exists())
         self.assertEqual(json.loads((PROJECT / "iso/profile.json").read_text())["schemaVersion"], 1)
+
+    def test_plymouth_live_and_installed_defaults(self):
+        packages = set((PROJECT / "iso/packages.x86_64").read_text().splitlines())
+        self.assertTrue({"plymouth", "devario-plymouth-theme"} <= packages)
+        config = configparser.ConfigParser()
+        config.read(PROJECT / "iso/late-airootfs/etc/plymouth/plymouthd.conf")
+        self.assertEqual(config["Daemon"]["Theme"], "devario")
+        # Cover BIOS, UEFI, loopback and network boot command lines.
+        paths = [*(PROJECT / "iso/syslinux").glob("*.cfg"),
+                 *(PROJECT / "iso/grub").glob("*.cfg"),
+                 *(PROJECT / "iso/efiboot/loader/entries").glob("*.conf")]
+        commands = [line.split() for path in paths for line in path.read_text().splitlines()
+                    if line.lstrip().startswith(("APPEND ", "linux ", "options "))
+                    and "root=live:" in line]
+        self.assertGreaterEqual(len(commands), 7)
+        for command in commands:
+            self.assertIn("quiet", command)
+            self.assertIn("splash", command)
+        # Both profiles bypass /etc/dracut.conf.d, so must request Plymouth directly.
+        for mode in ("live", "installed"):
+            profile = (PROJECT / f"packages/devario-boot/{mode}.conf").read_text()
+            modules = next(line for line in profile.splitlines() if line.startswith("add_dracutmodules"))
+            self.assertIn("plymouth", modules.split())
+
+    def test_ufw_live_and_installed_defaults(self):
+        for name in ("iso/packages.x86_64", "repository-packages.x86_64"):
+            self.assertIn("ufw", (PROJECT / name).read_text().splitlines())
+        services = yaml.safe_load((PROJECT / "iso/airootfs/etc/calamares/modules/services-systemd.conf").read_text())
+        self.assertIn(dict(name="ufw.service", action="enable", mandatory=True), services["units"])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "live"
+            # Model package defaults followed by the late image overlay.
+            (root / "etc/ufw").mkdir(parents=True)
+            (root / "etc/ufw/ufw.conf").write_text("ENABLED=no\n")
+            unit = root / "usr/lib/systemd/system/ufw.service"
+            unit.parent.mkdir(parents=True)
+            unit.write_text("[Unit]\nDescription=UFW fixture\n[Service]\nType=oneshot\nExecStart=/usr/lib/ufw/ufw-init start\n[Install]\nWantedBy=multi-user.target\n")
+            shutil.copytree(PROJECT / "iso/late-airootfs", root, symlinks=True, dirs_exist_ok=True)
+            # Calamares unpacks the pristine image into the installation target.
+            installed = Path(directory) / "installed"
+            shutil.copytree(root, installed, symlinks=True)
+            for target in (root, installed):
+                with self.subTest(target=target.name):
+                    state = subprocess.check_output([
+                        "systemctl", "--root", str(target), "is-enabled", "ufw.service"
+                    ], text=True).strip()
+                    self.assertEqual(state, "enabled")
+                    values = subprocess.check_output([
+                        "bash", "-c", 'source "$1"; source "$2"; printf "%s\\n" "$ENABLED" "$LOGLEVEL" "$IPV6" "$DEFAULT_INPUT_POLICY" "$DEFAULT_OUTPUT_POLICY" "$DEFAULT_FORWARD_POLICY" "$DEFAULT_APPLICATION_POLICY"',
+                        "test", str(target / "etc/ufw/ufw.conf"), str(target / "etc/default/ufw")
+                    ], text=True).splitlines()
+                    self.assertEqual(values, ["yes", "low", "yes", "DROP", "ACCEPT", "DROP", "SKIP"])
 
     def test_version_comparison_without_vercmp(self):
         # Ubuntu CI installs the ALPM library without makepkg/vercmp. Exercise

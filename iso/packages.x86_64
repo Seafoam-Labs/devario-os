@@ -18,6 +18,7 @@ devario-desktop
 devario-dracut
 devario-filesystem
 devario-keyring
+devario-plymouth-theme
 dmidecode
 dosfstools
 e2fsprogs
@@ -63,6 +64,7 @@ pipewire
 pipewire-alsa
 pipewire-pulse
 playerctl
+plymouth
 polkit
 power-profiles-daemon
 pwvucontrol
@@ -81,6 +83,7 @@ systemd
 terminus-font
 ttf-dejavu
 udisks2
+ufw
 upower
 usbutils
 vulkan-intel

@@ -6,7 +6,7 @@ crypttab="${2:-/etc/crypttab}"
 root_spec="$(awk '$1 !~ /^#/ && $2 == "/" { print $1; exit }' "$fstab")"
 root_options="$(awk '$1 !~ /^#/ && $2 == "/" { print $4; exit }' "$fstab")"
 case "$root_spec" in UUID=*|PARTUUID=*|LABEL=*|/dev/*) ;; *) echo 'Missing or invalid root in fstab.' >&2; exit 1 ;; esac
-args=("root=$root_spec" rw quiet)
+args=("root=$root_spec" rw quiet splash)
 # Read crypttab even when fstab names the decrypted filesystem by UUID.
 if [[ -f "$crypttab" ]]; then
   while read -r name device key options rest; do

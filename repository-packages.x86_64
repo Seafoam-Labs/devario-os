@@ -21,6 +21,7 @@ devario-boot
 devario-dracut
 devario-filesystem
 devario-keyring
+devario-plymouth-theme
 linux-devario
 linux-devario-headers
 pearl
@@ -547,6 +548,7 @@ pipewire-audio
 pipewire-pulse
 pixman
 playerctl
+plymouth
 polkit
 polkit-qt6
 portaudio
@@ -594,6 +596,7 @@ tomlplusplus
 tslib
 ttf-dejavu
 udisks2
+ufw
 upower
 uwsm
 v4l-utils
