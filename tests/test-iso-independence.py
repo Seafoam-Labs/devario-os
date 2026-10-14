@@ -97,7 +97,14 @@ class IndependenceTests(unittest.TestCase):
             self.assertIn("ufw", (PROJECT / name).read_text().splitlines())
         services = yaml.safe_load((PROJECT / "iso/airootfs/etc/calamares/modules/services-systemd.conf").read_text())
         self.assertIn(dict(name="ufw.service", action="enable", mandatory=True), services["units"])
+        source_link = PROJECT / "iso/late-airootfs/etc/systemd/system/multi-user.target.wants/ufw.service"
+        self.assertFalse(source_link.is_symlink(), "package-provided targets must not be linked in the source archive")
         with tempfile.TemporaryDirectory() as directory:
+            profile = Path(directory) / "profile"
+            shutil.copytree(PROJECT / "iso/late-airootfs", profile / "late-airootfs", symlinks=True)
+            subprocess.run(["bash", str(PROJECT / "scripts/stage-image-links.sh"), str(profile)], check=True)
+            self.assertEqual((profile / "airootfs/etc/calamares/qml").readlink(), Path("/usr/share/calamares/qml"))
+            self.assertEqual((profile / "airootfs/etc/localtime").readlink(), Path("../usr/share/zoneinfo/UTC"))
             root = Path(directory) / "live"
             # Model package defaults followed by the late image overlay.
             (root / "etc/ufw").mkdir(parents=True)
@@ -105,7 +112,7 @@ class IndependenceTests(unittest.TestCase):
             unit = root / "usr/lib/systemd/system/ufw.service"
             unit.parent.mkdir(parents=True)
             unit.write_text("[Unit]\nDescription=UFW fixture\n[Service]\nType=oneshot\nExecStart=/usr/lib/ufw/ufw-init start\n[Install]\nWantedBy=multi-user.target\n")
-            shutil.copytree(PROJECT / "iso/late-airootfs", root, symlinks=True, dirs_exist_ok=True)
+            shutil.copytree(profile / "late-airootfs", root, symlinks=True, dirs_exist_ok=True)
             # Calamares unpacks the pristine image into the installation target.
             installed = Path(directory) / "installed"
             shutil.copytree(root, installed, symlinks=True)

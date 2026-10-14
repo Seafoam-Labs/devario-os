@@ -139,15 +139,9 @@ find "$staged_core_repo" -type f -exec chmod 444 {} +
 
 devario_compose_profile \
   "$profile_dir" "$edition_dir" "$staged_profile" "$project_dir"
-# This link targets files installed inside the image, not on the build host.
-# Keep it out of the source archive consumed by GitHub's action downloader.
-ln -sT -- /usr/share/calamares/qml "$staged_profile/airootfs/etc/calamares/qml"
-
-# Package-provided targets do not exist in a source checkout. Create the UTC
-# default only in image staging, alongside the other image-only links.
-if [[ ! -e "$staged_profile/airootfs/etc/localtime" && ! -L "$staged_profile/airootfs/etc/localtime" ]]; then
-  ln -sT -- ../usr/share/zoneinfo/UTC "$staged_profile/airootfs/etc/localtime"
-fi
+# Package-provided targets exist in the image, not in the source archive
+# consumed by GitHub's action downloader.
+bash "$script_dir/stage-image-links.sh" "$staged_profile"
 echo "Building Devario $DEVARIO_EDITION_VARIANT edition ($DEVARIO_EDITION_ID)."
 
 if (( release_build )); then

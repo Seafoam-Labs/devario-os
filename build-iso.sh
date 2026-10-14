@@ -13,6 +13,7 @@ jobs=6
 install_dependencies=1
 dry_run=0
 step=preflight
+sudo_keepalive_pid=
 
 usage() {
   cat <<'EOF'
@@ -20,10 +21,10 @@ Usage: ./build-iso.sh [OPTIONS]
 
 Run as your normal user on an x86_64 Arch/Devario build host with Shelly
 configured. Uses Shelly's RLPM backend for package operations. Local packages
-build in a fresh container using only devario-core tools and dependencies.
+build in a fresh container using verified Devario tools and dependencies.
 
   --os-dir DIRECTORY        Override this checkout (also DEVARIO_OS_DIR)
-  --repo-dir DIRECTORY      Copy an existing core snapshot instead of downloading
+  --repo-dir DIRECTORY      Copy an existing combined snapshot instead of downloading
   --repo-url URL            HTTPS download and installed-system repository URL
   --installer-dir DIRECTORY Use six prebuilt local installer archives
   --run-dir DIRECTORY       New, nonexistent directory for all build results
@@ -34,10 +35,11 @@ build in a fresh container using only devario-core tools and dependencies.
   -h, --help                Show this help
 
 Default: install host tools through Shelly, prepare Python validation, validate
-sources, download/verify devario-core, build the six local installer packages,
+sources, resolve/verify all configured repositories, build the six local installer packages,
 audit the completed repository, assemble the ISO, and verify its SHA-256.
 Kernel, desktop, Shelly, and other runtime packages come from signed binaries.
 Local recipes are built from devario-os/packages, not devario-installer copies.
+Sudo authenticates once before host setup; credentials are refreshed until exit.
 
 Results: devario-os/work/iso-runs/<unique-run>/out/*.iso, with checksums,
 assembler reports, build.log, and retained package/image work for diagnostics.
@@ -79,7 +81,7 @@ done
 
 [[ -n "$os_dir" && -d "$os_dir" ]] || die 'Cannot locate devario-os; pass --os-dir DIRECTORY.'
 os_dir="$(realpath -e -- "$os_dir")"
-for helper in build-iso.sh build-packages-core.py stage-core-repository.py stage-installer-packages.sh \
+for helper in build-iso.sh build-packages-core.py stage-iso-repositories.py stage-installer-packages.sh \
   validate.sh with-validation-env.sh prepare-validation-env.py audit-iso-repositories.py \
   audit-iso-package-paths.py lib/repository.sh; do
   [[ -r "$os_dir/scripts/$helper" ]] || die "Missing devario-os helper: scripts/$helper"
@@ -111,13 +113,37 @@ run() {
   if (( ! dry_run )); then "$@"; fi
 }
 phase() { step="$1"; printf '\n==> %s\n' "$step"; }
-failed() {
+finish() {
   local status=$?
-  (( status != 0 )) || return 0
   trap - EXIT
-  printf '\nBuild failed during %s (exit %s).\nLog: %s/build.log\nRetained run: %s\n' \
-    "$step" "$status" "$run_dir" "$run_dir" >&2
+  if [[ -n "$sudo_keepalive_pid" ]]; then
+    kill "$sudo_keepalive_pid" 2>/dev/null || true
+    wait "$sudo_keepalive_pid" 2>/dev/null || true
+  fi
+  if (( status != 0 )); then
+    printf '\nBuild failed during %s (exit %s).\nLog: %s/build.log\nRetained run: %s\n' \
+      "$step" "$status" "$run_dir" "$run_dir" >&2
+  fi
   exit "$status"
+}
+
+keep_sudo_alive() {
+  # $$ remains the orchestrator PID in this background subshell. Reap the
+  # timer too, so it cannot retain build.log's pipe after the build exits.
+  timer_pid=
+  trap 'if [[ -n "$timer_pid" ]]; then kill "$timer_pid" 2>/dev/null || true; wait "$timer_pid" 2>/dev/null || true; fi' EXIT
+  trap 'exit 0' INT TERM
+  while kill -0 "$$" 2>/dev/null; do
+    if ! sudo -n -v; then
+      printf '\nSudo credential refresh failed; stopping the build without another password prompt.\n' >&2
+      kill -TERM "$$" 2>/dev/null || true
+      exit 1
+    fi
+    sleep 30 &
+    timer_pid=$!
+    wait "$timer_pid" || exit
+    timer_pid=
+  done
 }
 
 if (( ! dry_run )); then
@@ -126,7 +152,7 @@ if (( ! dry_run )); then
   mkdir -p -- "$(dirname -- "$run_dir")"
   mkdir -- "$run_dir"
   exec > >(tee "$run_dir/build.log") 2>&1
-  trap failed EXIT
+  trap finish EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
 fi
@@ -159,13 +185,23 @@ if (( ! dry_run )); then
 #!/usr/bin/env bash
 set -euo pipefail
 run_dir="$(dirname -- "$(realpath -e -- "${BASH_SOURCE[0]}")")"
-exec sudo -- env XDG_CONFIG_HOME="$run_dir/shelly-config" "$@"
+exec sudo -n -- env XDG_CONFIG_HOME="$run_dir/shelly-config" "$@"
 EOF
   chmod 755 "$run_dir/rlpm-elevate"
 else
   printf '+ create %s/rlpm-elevate to preserve the RLPM configuration through sudo\n' "$run_dir"
 fi
 export SHELLY_ELEVATOR="$run_dir/rlpm-elevate"
+
+phase 'Authenticate administrator access'
+run sudo -v
+if (( ! dry_run )); then
+  keep_sudo_alive &
+  sudo_keepalive_pid=$!
+else
+  printf '+ keep sudo credentials valid every 30 seconds until the build exits\n'
+fi
+export DEVARIO_SUDO_NONINTERACTIVE=1
 
 phase 'Prepare host tools'
 if (( install_dependencies )); then
@@ -181,8 +217,6 @@ if (( ! dry_run )); then
     command -v systemd-nspawn >/dev/null || die 'systemd-nspawn is required to build installer packages.'
   fi
 fi
-run sudo -v
-
 phase 'Prepare pinned Python validation tools and validate sources'
 run python3 "$os_dir/scripts/prepare-validation-env.py"
 run bash "$os_dir/scripts/validate.sh"
@@ -196,7 +230,7 @@ verify_repository() {
     iso-repository "$os_dir/scripts/lib/repository.sh" "$1" "$keyring_dir" "$2" "$3"
 }
 
-phase 'Stage and verify the core repository'
+phase 'Stage and verify the ISO repositories'
 if [[ -n "$repo_source" ]]; then
   run cp -a --reflink=auto -- "$repo_source" "$repo_dir"
   verify_repository "$repo_dir" development local-installer
@@ -206,18 +240,11 @@ else
     exec {download_lock}>"$download_cache/.iso-download.lock"
     flock -n "$download_lock" || die "Another ISO download is using $download_cache."
   fi
-  # The downloader publishes only after signature/closure verification, but its
-  # subsequent audits may fail until our local installer packages are built.
-  # Never ignore a transfer/trust failure: require the published snapshot and
-  # independently verify it again before continuing. Both audits run below.
-  stage_status=0
-  run python3 "$os_dir/scripts/stage-core-repository.py" --url "$repo_url" \
-    --output "$repo_dir" --cache "$download_cache" --keyring "$keyring_dir" --jobs "$jobs" || stage_status=$?
-  if (( stage_status != 0 )); then
-    [[ "$stage_status" == 1 && -d "$repo_dir" ]] || exit "$stage_status"
-    printf 'Initial repository audits failed; verifying the snapshot before adding local packages.\n'
-  fi
-  verify_repository "$repo_dir" production strict
+  # Resolve ISO and local build requirements before compiling. The combined
+  # local index retains individually verified, production-signed packages.
+  run python3 "$os_dir/scripts/stage-iso-repositories.py" --url "$repo_url" \
+    --output "$repo_dir" --cache "$download_cache" --keyring "$keyring_dir" --jobs "$jobs"
+  verify_repository "$repo_dir" development local-installer
   if (( ! dry_run )); then exec {download_lock}>&-; fi
 fi
 
@@ -250,7 +277,7 @@ for variable in DEVARIO_VALIDATION_OFFLINE DEVARIO_VALIDATION_WHEELHOUSE \
   DEVARIO_LIVE_SIGNING_CERT DEVARIO_LIVE_SIGNING_KEY SOURCE_DATE_EPOCH; do
   if [[ -v "$variable" ]]; then iso_env+=("$variable=${!variable}"); fi
 done
-run sudo -- env "${iso_env[@]}" bash "$os_dir/scripts/build-iso.sh"
+run sudo -n -- env "${iso_env[@]}" bash "$os_dir/scripts/build-iso.sh"
 
 phase 'Verify the completed ISO checksum'
 if (( dry_run )); then

@@ -13,23 +13,36 @@ SCRIPT = Path(__file__).resolve().parents[1] / "build-iso.sh"
 # Subordinate build tools are replaced with observable, fallible fixtures. Real
 # Bash, env, cp, flock, and sha256sum still exercise orchestration and quoting.
 MOCK = r'''
-import hashlib, json, os, pathlib, subprocess, sys
+import hashlib, json, os, pathlib, subprocess, sys, time
 name, args = pathlib.Path(sys.argv[0]).name, sys.argv[1:]
 if name == "python3":
     name, args = pathlib.Path(args[0]).name, args[1:]
 with open(os.environ["CALL_LOG"], "a") as log:
-    log.write(json.dumps({"name": name, "args": args, "uid": os.geteuid(),
+    log.write(json.dumps({"name": name, "args": args, "uid": os.geteuid(), "pid": os.getpid(), "ppid": os.getppid(),
                          "env": {k: v for k, v in os.environ.items()
                                  if k.startswith("DEVARIO_") or k in ("XDG_CONFIG_HOME", "SHELLY_ELEVATOR")}}) + "\n")
 if os.environ.get("FAIL_AT") == name:
     sys.exit(17)
 if name == "sudo":
     if args == ["-v"]:
+        if os.environ.get("SUDO_AUTH_FAILED"):
+            sys.exit(1)
         sys.exit(0)
+    if args == ["-n", "-v"]:
+        sys.exit(1 if os.environ.get("SUDO_REFRESH_FAILED") else 0)
+    assert args[0] == "-n", "later sudo calls must not prompt"
+    args = args[1:]
     assert args[0] == "--"
     # Model sudo filtering: the wrapper must pass build configuration explicitly.
     env = {k: v for k, v in os.environ.items() if not k.startswith(("DEVARIO_", "XDG_"))}
     sys.exit(subprocess.call(args[1:], env=env))
+if name == "sleep":
+    time.sleep(0.02 if os.environ.get("FAST_KEEPALIVE") else 30)
+if name == "validate.sh" and os.environ.get("SLOW_VALIDATION"):
+    time.sleep(0.3)
+if name == "validate.sh" and os.environ.get("INTERRUPT_BUILD"):
+    import signal
+    os.kill(os.getppid(), signal.SIGTERM)
 if name == "shelly":
     config_path = pathlib.Path(os.environ["XDG_CONFIG_HOME"]) / "shelly/config.json"
     if args[:2] == ["config", "set"]:
@@ -45,13 +58,13 @@ if name == "shelly":
         # Exercise the real generated elevator, with sudo filtering XDG settings.
         code = "import json, os, pathlib; p = pathlib.Path(os.environ['XDG_CONFIG_HOME']) / 'shelly/config.json'; assert json.loads(p.read_text())['NativePackageBackend'] == 'rlpm'"
         subprocess.run([os.environ["SHELLY_ELEVATOR"], sys.executable, "-c", code], check=True)
-if name == "stage-core-repository.py":
+if name == "stage-iso-repositories.py":
     if os.environ.get("DOWNLOAD_FAILED"):
         sys.exit(1)
     dest = pathlib.Path(args[args.index("--output") + 1])
     dest.mkdir()
     (dest / "verified-snapshot").touch()
-    sys.exit(int(os.environ.get("INITIAL_AUDIT_FAILURE", "0")))
+    sys.exit(int(os.environ.get("STAGING_FAILED_AFTER_OUTPUT", "0")))
 if name == "verify":
     assert (pathlib.Path(args[0]) / "verified-snapshot").exists()
 if name == "build-packages-core.py":
@@ -91,14 +104,14 @@ class BuildISOTests(unittest.TestCase):
         mock = self.bin / "mock"
         mock.write_text(f"#!{sys.executable}\n" + MOCK)
         mock.chmod(0o755)
-        for name in ("python3", "sudo", "shelly", "verify", "url"):
+        for name in ("python3", "sudo", "shelly", "verify", "url", "sleep"):
             (self.bin / name).symlink_to(mock)
         # These are checked for presence but run only inside the real helpers.
         for name in ("bsdtar", "repo-add", "gpg", "gpgv", "git", "patch", "xorriso",
                      "mkfs.fat", "mcopy", "mksquashfs", "openssl", "unshare",
                      "mount", "umount", "chroot", "readelf", "systemd-nspawn"):
             (self.bin / name).symlink_to("/usr/bin/true")
-        for name in ("prepare-validation-env.py", "stage-core-repository.py", "build-packages-core.py",
+        for name in ("prepare-validation-env.py", "stage-iso-repositories.py", "build-packages-core.py",
                      "audit-iso-repositories.py", "audit-iso-package-paths.py"):
             (self.scripts / name).touch()
         for name in ("build-iso.sh", "stage-installer-packages.sh", "validate.sh"):
@@ -130,11 +143,19 @@ class BuildISOTests(unittest.TestCase):
     def names(self):
         return [call["name"] for call in self.calls()]
 
+    def assert_keepalive_stopped(self):
+        pids = {call['ppid'] for call in self.calls() if call['name'] == 'sudo' and call['args'] == ['-n', '-v']}
+        pids.update(call['pid'] for call in self.calls() if call['name'] == 'sleep')
+        self.assertTrue(pids, 'keepalive was never exercised')
+        for pid in pids:
+            with self.subTest(pid=pid), self.assertRaises(ProcessLookupError):
+                os.kill(pid, 0)
+
     def test_complete_workflow_and_explicit_sudo_environment(self):
         result = self.invoke(DEVARIO_BUILDER_PREPARE="1", DEVARIO_SIGNING_KEY="ambient-key",
                              DEVARIO_VALIDATION_OFFLINE="1")
         self.assertEqual(result.returncode, 0, result.stdout)
-        phases = ["shelly", "prepare-validation-env.py", "validate.sh", "stage-core-repository.py",
+        phases = ["shelly", "prepare-validation-env.py", "validate.sh", "stage-iso-repositories.py",
                   "build-packages-core.py", "stage-installer-packages.sh", "audit-iso-repositories.py", "audit-iso-package-paths.py", "build-iso.sh"]
         # Backend configuration happens before the Shelly package transaction.
         operations = [call["name"] for call in self.calls() if call["name"] in phases
@@ -154,6 +175,39 @@ class BuildISOTests(unittest.TestCase):
         staged = next(call for call in self.calls() if call["name"] == "stage-installer-packages.sh")
         self.assertEqual(staged["args"], [str(self.run_dir / "packages/artifacts")])
         self.assertIn("ISO ready:", result.stdout)
+        self.assertEqual(sum(c['name'] == 'sudo' and c['args'] == ['-v'] for c in self.calls()), 1)
+        self.assertLess(self.names().index('sudo'), self.calls().index(host_install))
+        package_build = next(c for c in self.calls() if c['name'] == 'build-packages-core.py')
+        self.assertEqual(package_build['env']['DEVARIO_SUDO_NONINTERACTIVE'], '1')
+        self.assert_keepalive_stopped()
+
+    def test_refreshes_during_long_work_and_stops_after_success(self):
+        result = self.invoke(FAST_KEEPALIVE='1', SLOW_VALIDATION='1')
+        self.assertEqual(result.returncode, 0, result.stdout)
+        refreshes = [c for c in self.calls() if c['name'] == 'sudo' and c['args'] == ['-n', '-v']]
+        self.assertGreater(len(refreshes), 1)
+        self.assert_keepalive_stopped()
+
+    def test_initial_authentication_failure_stops_before_host_transactions(self):
+        result = self.invoke(SUDO_AUTH_FAILED='1')
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertNotIn('validate.sh', self.names())
+        self.assertFalse(any(c['name'] == 'shelly' and c['args'][0] == 'install' for c in self.calls()))
+        self.assertFalse(any(c['name'] == 'sudo' and c['args'] == ['-n', '-v'] for c in self.calls()))
+
+    def test_refresh_failure_stops_without_another_prompt(self):
+        result = self.invoke(SUDO_REFRESH_FAILED='1')
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(sum(c['name'] == 'sudo' and c['args'] == ['-v'] for c in self.calls()), 1)
+        self.assertIn('Sudo credential refresh failed', result.stdout)
+        self.assertNotIn('build-iso.sh', self.names())
+        self.assert_keepalive_stopped()
+
+    def test_interruption_stops_keepalive(self):
+        result = self.invoke(INTERRUPT_BUILD='1')
+        self.assertEqual(result.returncode, 143, result.stdout)
+        self.assertNotIn('stage-iso-repositories.py', self.names())
+        self.assert_keepalive_stopped()
 
     def test_backend_selection_failure_stops_before_package_transactions(self):
         for failure in ("BACKEND_UNAVAILABLE", "BACKEND_IGNORED"):
@@ -168,12 +222,11 @@ class BuildISOTests(unittest.TestCase):
                                      for call in self.calls()))
                 self.assertEqual(json.loads(self.config.read_text())["NativePackageBackend"], "libalpm")
 
-    def test_initial_audits_are_deferred_until_local_packages_exist(self):
-        result = self.invoke(INITIAL_AUDIT_FAILURE="1")
-        self.assertEqual(result.returncode, 0, result.stdout)
-        verify = next(call for call in self.calls() if call["name"] == "verify")
-        self.assertEqual(verify["args"][-2:], ["production", "strict"])
-        self.assertIn("audit-iso-package-paths.py", self.names())
+    def test_incomplete_staging_stops_before_local_compilation(self):
+        result = self.invoke(STAGING_FAILED_AFTER_OUTPUT="1")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertNotIn("build-packages-core.py", self.names())
+        self.assertNotIn("build-iso.sh", self.names())
 
     def test_download_failure_cannot_be_mistaken_for_audit_failure(self):
         result = self.invoke(DOWNLOAD_FAILED="1")
@@ -191,6 +244,7 @@ class BuildISOTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 17, result.stdout)
                 self.assertNotIn("build-iso.sh", self.names())
                 self.assertIn("Build failed during", result.stdout)
+                self.assert_keepalive_stopped()
 
     def test_existing_snapshot_and_prebuilt_packages_preserve_inputs(self):
         source, artifacts = self.root / "signed snapshot", self.root / "installer archives"
@@ -201,7 +255,7 @@ class BuildISOTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertEqual((source / "verified-snapshot").read_text(), "original")
         self.assertEqual(list(source.iterdir()), [source / "verified-snapshot"])
-        self.assertNotIn("stage-core-repository.py", self.names())
+        self.assertNotIn("stage-iso-repositories.py", self.names())
         self.assertNotIn("build-packages-core.py", self.names())
         self.assertFalse(any(call["name"] == "shelly" and call["args"][0] == "install"
                              for call in self.calls()))

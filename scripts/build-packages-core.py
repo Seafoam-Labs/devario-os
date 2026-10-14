@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build local ISO packages in a fresh root populated only from devario-core."""
+"""Build local ISO packages in a fresh root populated from the verified snapshot."""
 import argparse
 import hashlib
 import importlib.util
@@ -125,16 +125,17 @@ def prepare(args):
     }, indent=2) + "\n")
     if missing:
         details = "; ".join(f"{name} (required by {', '.join(parents)})" for name, parents in missing.items())
-        raise ValueError("Missing build dependencies in devario-core: " + details +
-                         ". Publish them to devario-core and stage a fresh snapshot before retrying.")
+        raise ValueError("Missing build dependencies in the staged snapshot: " + details +
+                         ". Publish them to a configured repository and stage a fresh snapshot before retrying.")
     plan = {"packages": sorted(selected.values(), key=lambda item: item["name"]),
             "uid": os.getuid(), "gid": os.getgid()}
     write(args.work / "build-inputs.json", json.dumps(plan, indent=2) + "\n")
     (args.work / "artifacts").mkdir()
-    print(f"Resolved {len(selected)} build packages exclusively from devario-core", flush=True)
+    print(f"Resolved {len(selected)} build packages from the verified snapshot", flush=True)
     for name in ("gcc", "glibc", "binutils", "cmake"):
         print(f"  {name}: {selected[name]['version']}", flush=True)
-    command = ["sudo", "--", "env", f"XDG_CONFIG_HOME={config_home}", "unshare", "--mount",
+    sudo_options = ["-n"] if os.environ.get("DEVARIO_SUDO_NONINTERACTIVE") == "1" else []
+    command = ["sudo", *sudo_options, "--", "env", f"XDG_CONFIG_HOME={config_home}", "unshare", "--mount",
                "--propagation", "private", sys.executable, str(Path(__file__).resolve()),
                "--privileged", "--repo", str(args.repo), "--work", str(args.work), "--keyring", str(args.keyring)]
     if args.prepare_only:

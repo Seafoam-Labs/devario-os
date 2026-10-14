@@ -50,11 +50,30 @@ class CoreBuilderTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, r"litehtml \(required by qt6-tools\)"):
                 builder.prepare(self.args)
         self.assertFalse(any(call.args[0] == "sudo" for call in run.call_args_list))
-        self.assertFalse((self.args.work / "root").exists())
         report = json.loads((self.args.work / "dependency-audit.json").read_text())
         self.assertEqual(report["missing"], {"litehtml": ["qt6-tools"]})
         self.assertFalse(report["complete"])
+        self.assertFalse((self.args.work / "root").exists())
 
+    def test_orchestrated_build_uses_noninteractive_sudo(self):
+        self.args.repo.mkdir()
+        (self.args.repo / "shelly-cli-1-1-x86_64.pkg.tar.zst").touch()
+        selected = {name: dict(name=name, version="1-1") for name in ("gcc", "glibc", "binutils", "cmake")}
+        audit = argparse.Namespace(records=lambda *a: [], resolve=lambda *a: (selected, {}))
+        for noninteractive in ("0", "1"):
+            with self.subTest(noninteractive=noninteractive):
+                self.args.work = self.directory / ("work-" + noninteractive)
+                with patch.dict(os.environ, DEVARIO_SUDO_NONINTERACTIVE=noninteractive), \
+                        patch.object(builder.os, "geteuid", return_value=1000), \
+                        patch.object(builder.shutil, "which", return_value="/usr/bin/fixture"), \
+                        patch.object(builder, "verify_repository"), \
+                        patch.object(builder, "verify_artifacts"), \
+                        patch.object(builder, "module_from", return_value=audit), \
+                        patch.object(builder, "run", return_value=subprocess.CompletedProcess([], 0, stdout="")) as run:
+                    builder.prepare(self.args)
+                elevation = next(call.args for call in run.call_args_list if call.args[0] == "sudo")
+                self.assertEqual(elevation[:3] if noninteractive == "1" else elevation[:2],
+                                 ("sudo", "-n", "--") if noninteractive == "1" else ("sudo", "--"))
     def provision(self, inventory=None):
         self.args.work.mkdir()
         builder.write(self.args.work / "build-inputs.json", json.dumps({

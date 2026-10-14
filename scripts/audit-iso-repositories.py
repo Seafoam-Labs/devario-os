@@ -112,6 +112,8 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     print(f"Selected {len(selected)} packages; {len(missing)} unresolved requirements. Report: {args.output}")
+    for requirement, parents in missing.items():
+        print(f"Missing {requirement} (required by {', '.join(parents)})")
     raise SystemExit(bool(missing))
 
 

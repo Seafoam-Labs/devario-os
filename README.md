@@ -373,12 +373,21 @@ To create a local Community ISO from start to finish, run
 
 The script installs/upgrades host tools through Shelly, prepares the pinned
 Python validation environment, validates the OS sources, downloads and verifies
-the signed core repository, builds the six local installer packages in an isolated
-root populated exclusively from `devario-core`, audits the
+the signed metadata from every repository in `repositories/defaults.json`, resolves
+ISO and installer build dependencies in repository order, and downloads the
+required signed packages. It builds the six local installer packages in an isolated
+root populated from that verified snapshot, audits the
 resulting package set, assembles the ISO with sudo, and verifies its SHA-256
 checksum. A configured Shelly installation, sudo access, and the build host
 described above are prerequisites. It uses its own checkout regardless of the
 current working directory; `--os-dir` or `DEVARIO_OS_DIR` selects another checkout.
+
+The wrapper requests sudo authentication once before host setup and refreshes
+the cached credentials every 30 seconds during the build. The refresh process
+stops on success, failure, or interruption. Subsequent privileged steps run
+noninteractively; if credentials cannot be refreshed, the build stops instead
+of requesting another password. Run from an interactive terminal with sudo
+credential caching enabled; no password is stored by the script.
 
 The wrapper explicitly selects Shelly's **RLPM** backend in a private copy of
 the caller's settings at `work/iso-runs/<run>/shelly-config/`. That selection
@@ -397,9 +406,23 @@ constructs the root directly from package archives; no separate bootstrap image
 is required. `scripts/build-packages.sh` remains the native/controlled makepkg
 entry point for separately managed builders.
 
-Missing build dependencies stop the run before provisioning and are listed with
-their requiring packages in `packages/dependency-audit.json`. Publish the missing
-packages to `devario-core`, then rerun with a fresh repository snapshot.
+The local snapshot retains the `devario-core` name for compatibility with the
+assembler, with core packages taking precedence over duplicate names in other
+repositories. It contains the full core snapshot plus runtime and build dependencies
+selected from the other repositories. Original signed metadata and package origins
+are retained in `core-sources/`; package signatures remain mandatory. The combined
+local database is regenerated, just as when adding the six local installer packages.
+Controlled release tooling continues to use its explicitly locked inputs.
+
+Missing runtime or build dependencies stop the run before compilation and are listed
+with their requiring packages in `core-preflight.json`. Publish missing packages
+to a configured repository, then rerun with a fresh snapshot. To check metadata
+without downloading packages, run `python3 scripts/stage-iso-repositories.py --check
+--output /tmp/devario-repository-check` with a fresh output path.
+
+Completed installer packages from a failed run can be reused with
+`./build-iso.sh --installer-dir work/iso-runs/<previous-run>/packages/artifacts`.
+This still fetches current repository metadata and verifies the resulting package set.
 
 Each run retains its ISO, checksum, and assembler reports under
 `work/iso-runs/<run>/out/`, with `build.log` beside that directory. Package and

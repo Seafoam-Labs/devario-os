@@ -78,6 +78,8 @@ note() {
 }
 
 required_files=(
+  "$project_dir/scripts/stage-image-links.sh"
+  "$project_dir/scripts/stage-iso-repositories.py"
   "$profile_dir/profile.json"
   "$profile_dir/packages.x86_64"
   "$profile_dir/shelly.build.conf"
@@ -309,6 +311,9 @@ if ! DEVARIO_PROFILE_DIR="$profile_dir" python3 "$project_dir/tests/test-systemd
 fi
 if ! python3 "$project_dir/tests/test-stage-core-repository.py"; then
   fail "Repository staging and provider selection tests failed"
+fi
+if ! python3 "$project_dir/tests/test-stage-iso-repositories.py"; then
+  fail "Multi-repository ISO staging tests failed"
 fi
 if ! python3 "$project_dir/tests/test-pearl-desktop.py"; then
   fail "Pearl desktop and live login integration tests failed"
