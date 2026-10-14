@@ -1,0 +1,132 @@
+{
+  "version": 1,
+  "notifications": {
+    "filters_enabled": true,
+    "rules": []
+  },
+  "night_light": {
+    "enabled": false,
+    "temperature_kelvin": 4500,
+    "schedule": "manual",
+    "start_minute": 1200,
+    "end_minute": 420
+  },
+  "plugins": {
+    "entries": []
+  },
+  "idle": {
+    "ac": {
+      "lock_seconds": 0,
+      "suspend_seconds": 0
+    },
+    "battery": {
+      "lock_seconds": 0,
+      "suspend_seconds": 0
+    }
+  },
+  "theme": {
+    "mode": "dynamic",
+    "package_id": "",
+    "palette_id": "",
+    "style_id": "",
+    "catalog_revision": "",
+    "snapshot_digest": "",
+    "variant": "dark",
+    "seed": "#6750a4",
+    "source": "wallpaper",
+    "gtk_name": "",
+    "sync_borders": true
+  },
+  "qt": {
+    "enabled": false,
+    "style": "darkly",
+    "targets": {
+      "qt5": true,
+      "qt6": true
+    },
+    "palette": "follow_pearl",
+    "sync_font": true,
+    "icon_theme": "",
+    "darkly": {
+      "corner_radius": null,
+      "sync_reduced_motion": true,
+      "sync_density": false,
+      "sync_kde_colors": true
+    }
+  },
+  "matugen": {
+    "enabled": false,
+    "defaults_revision": 0,
+    "colors": {
+      "source": "follow_pearl",
+      "seed": "#6750a4"
+    },
+    "applications": {},
+    "snapshot_digest": "",
+    "catalog_revision": ""
+  },
+  "wallpaper": {
+    "mode": "cover",
+    "path": "/usr/share/backgrounds/devario-backgrounds/chel_scuba.png",
+    "color": "#141218",
+    "crops": [],
+    "slideshow": {
+      "enabled": false,
+      "folder": "",
+      "interval_seconds": 900,
+      "order": "sequential",
+      "transition": "fade",
+      "transition_ms": 420
+    }
+  },
+  "font": "",
+  "font_size": 14,
+  "density": "normal",
+  "reduced_motion": false,
+  "bar": {
+    "clocks": [],
+    "mode": "always",
+    "background_opacity": {
+      "mode": "automatic",
+      "percent": 86
+    },
+    "launcher_icon": {
+      "kind": "default",
+      "value": ""
+    },
+    "workspace_mode": "large",
+    "running_apps_per_window": false,
+    "resource_mode": "icon",
+    "resource_series": {
+      "cpu": true,
+      "gpu": true,
+      "memory": true,
+      "network": true
+    },
+    "islands": false,
+    "edge": "top",
+    "size": 46,
+    "groups": {
+      "left": "launcher,workspaces,title",
+      "center": "clock",
+      "right": "media,tray,audio,network,battery,notifications,clipboard,keyboard,control"
+    }
+  },
+  "dock": {
+    "enabled": true,
+    "edge": "bottom",
+    "mode": "always",
+    "icon_size": 36,
+    "margin": 10
+  },
+  "pinned_apps": [],
+  "application_launchers": [],
+  "outputs": [],
+  "popup": {
+    "dismiss_outside": true,
+    "placement": "anchored",
+    "max_width": 720,
+    "max_height": 800
+  },
+  "exports": []
+}

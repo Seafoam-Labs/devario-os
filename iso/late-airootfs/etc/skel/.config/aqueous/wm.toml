@@ -1,0 +1,573 @@
+# =============================================================================
+# Aqueous WM
+# Path: ~/.config/aqueous/wm.toml
+# Aqueous reads a small TOML-compatible subset: sections, repeated tables,
+# key/value assignments, arrays used by bindings/positions, and # comments.
+# Unknown keys and malformed values are ignored individually; valid recognized
+# values elsewhere in the same file still apply.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Output management
+# -----------------------------------------------------------------------------
+# Legacy-compatible fallback: physical display settings in outputs.toml are
+# checked first, and values omitted there continue to come from this section.
+# New configurations should place [display], physical [[output]] fields, and
+# display profiles in ~/.config/aqueous/outputs.toml. Per-output `layout`
+# mappings remain valid here and in layout.toml.
+[display]
+# Apply [[output]] display fields when Aqueous starts and when this file reloads.
+apply_on_start  = true
+apply_on_reload = true
+
+# If a normal output transaction is rejected, try this named profile. Empty
+# means no fallback. Profile blocks are demonstrated below.
+fallback_profile = ""
+
+# Compatibility fields retained from the former output daemon. They parse but
+# currently do not affect matching or rollback behavior; EDID/name matching is
+# selected directly by each [[output]] block.
+identify_by = "edid"
+rollback_seconds = 0
+
+# Repeat [[output]] for each monitor. `name` accepts connector-name globs.
+# `edid` may be used instead of name and has the form `sha256:<hex digest>` of
+# the output's make/model/serial identity, as reported by the output service.
+# scale is validated in the 0.5..3.0 range.
+# transform: normal | 90 | 180 | 270 | flipped | flipped-90 | flipped-180 |
+#            flipped-270
+# Position is in logical output-layout coordinates. Omit it to let Aqueous
+# arrange unconfigured monitors in a non-overlapping horizontal row.
+# `primary` selects the initial/fallback target for actions on empty outputs.
+#
+# [[output]]
+# name = "DP-1"
+# edid = "optional-edid-identifier"
+# enabled = true
+# mode = "2560x1440@144"
+# scale = 1.0
+# transform = "normal"
+# position = [0, 0]
+# adaptive_sync = true
+# hdr = true # HDR10 profile: 10-bit BT.2020 with PQ; capable DRM outputs only
+# hdr_level = "auto" # mastering peak preset: 100, 400, 1000 cd/m², or "auto" from EDID (default 1000)
+# sdr_white_level = 200 # SDR diffuse white on the HDR output in cd/m² (80–1000, default 200)
+# auto_hdr = false # expand SDR highlights toward the HDR peak (fullscreen windows by default; hdr_expand rule overrides)
+# auto_hdr_boost = 0.5 # Auto HDR expansion strength, 0.0–1.0
+# primary = true
+# layout = "scrolling" # optional default WM layout for this output
+
+# Screen mirroring: one SDR source and one destination on the same GPU/backend.
+# `mirror_of` names an exact source connector; self references and chains are
+# rejected. Both outputs must use normal orientation. The destination uses
+# fixed refresh; the source can retain its own adaptive-sync setting.
+# Choose advertised modes from `aqueousctl outputs --json`. For example, keep
+# the desktop at 240 Hz while mirroring to a 60 Hz projector or capture card:
+#
+# [[output]]
+# name = "DP-1"
+# enabled = true
+# mode = "2560x1440@240"
+# transform = "normal"
+# hdr = false
+# mirror_of = ""
+#
+# [[output]]
+# name = "HDMI-A-1"
+# enabled = true
+# mode = "1920x1080@60"
+# transform = "normal"
+# adaptive_sync = false
+# hdr = false
+# mirror_of = "DP-1"
+#
+# The image is fitted with black bars; source clients keep their size and scale.
+# A mirror has no independent workspace or pointer area. Its position and scale
+# settings are retained for extended mode. A missing source or locked session
+# leaves the mirror black. Mirroring adds composition/copy work and temporarily
+# disables source direct scanout, overlay promotion, and hardware cursors.
+#
+# Alternative: return the destination to an extended desktop. An empty string
+# explicitly clears an inherited mirror; omitting mirror_of inherits policy.
+# If outputs.toml sets mirror_of, clear it there because it takes precedence.
+#
+# [[output]]
+# name = "HDMI-A-1"
+# mirror_of = ""
+# position = [2560, 0] # logical coordinates; adjust for the source's scale
+#
+# These fields also work in [[display.profile.output]] blocks below.
+# See docs/screen-mirroring.md for usage, supported configurations and testing.
+
+# Layout-only output matching additionally accepts make/model/serial metadata.
+# These metadata fields do not configure the physical display mode.
+#
+# [[output]]
+# make = "Example Vendor"
+# model = "Example Display"
+# serial = "1234"
+# layout = "grid"
+
+# Named output profiles contain the same display fields accepted by [[output]].
+# Profiles can be activated through the embedded output-service JSON API and
+# may be referenced by fallback_profile above.
+#
+# [[display.profile]]
+# name = "docked"
+#
+# [[display.profile.output]]
+# name = "eDP-1"
+# enabled = false
+# primary = false
+#
+# [[display.profile.output]]
+# name = "DP-1"
+# enabled = true
+# mode = "2560x1440@144"
+# scale = 1.0
+# transform = "normal"
+# position = [0, 0]
+# adaptive_sync = true
+# hdr = true
+# primary = true
+
+# Optional sidecar selectors. Leave these commented to use normal XDG
+# discovery. Relative layout paths resolve next to wm.toml; ~ is expanded.
+#
+# [layout]
+# path = "~/.config/aqueous/layout.toml"
+# force_ssd = false
+#
+# [input]
+# path = "~/.config/aqueous/input.toml"
+# focus_follows_mouse = false
+# Move into newly focused windows, including keyboard and wheel bindings.
+# Hover and click focus do not move the pointer.
+# Output navigation still moves the pointer when this is disabled.
+# mouse_follows_focus = false
+# focus_new_windows = false
+# raise_on_focus = true
+# raise_on_focus_delay_ms = 0
+# pointer_acceleration = false
+# pointer_acceleration_factor = 0.0
+# num_lock_state = true  # default: false; input.toml can override with true or false
+# repeat_rate = 40       # characters per second; 0 disables repeat
+# repeat_delay = 400     # milliseconds before repeating begins
+# xkb_layout = "us"
+# xkb_variant = ""
+# xkb_options = ""
+#
+# [input.touchpad]
+# accel_profile = "adaptive"
+# accel_speed = 0.0
+# natural_scroll = true
+# tap = true
+# dwt = true
+# click_method = "clickfinger"
+# scroll_method = "two-finger"
+#
+# [gestures]
+# swipe_3_left = "builtin:focus_workspace_down"
+# swipe_3_right = "builtin:focus_workspace_up"
+# pinch_4_in = "builtin:toggle_start_menu"
+#
+
+# DRM overlay-plane promotion is opt-in and startup-only. It is backend-neutral
+# across AMD and NVIDIA KMS drivers; rules select individual windows below.
+[render]
+overlay_planes = false
+# Experimental DRM hardware color conversion: "auto" (default) or "off".
+# "auto" disables this on NVIDIA and tries supported pipelines on other GPUs.
+# Startup-only: restart Aqueous after changing this. An explicit
+# AQUEOUS_DRM_COLOR_PIPELINE environment variable overrides this setting.
+color_pipeline = "auto"
+
+# -----------------------------------------------------------------------------
+# Per-workspace layout overrides. Each [[workspace]] block forces one workspace
+# to a given layout id. Identify the workspace by its 1-based number:
+#   workspace = 1   # workspace 1, 2, 3, …
+# An optional `output` connector name scopes the override to one monitor; a
+# block without `output` applies to that workspace on every monitor. Precedence
+# at resolution time: a per-keybinding set_layout_* override (per workspace) >
+# an output+workspace block > a workspace-only block > [[output]] > [layout].default.
+# If multiple mappings could apply, the most specifically scoped workspace mapping wins.
+# -----------------------------------------------------------------------------
+#[[workspace]]
+#workspace = 1
+#layout    = "tile"
+#
+#[[workspace]]
+#output    = "DP-1"
+#workspace = 2
+#layout    = "monocle"
+
+# Reserve additional fixed space after layer-shell exclusive zones are applied.
+[struts]
+top    = 32   # Bar height; adjust to match yours
+bottom = 0
+left   = 0
+right  = 0
+
+# -----------------------------------------------------------------------------
+# Backdrop blur (available in the default Vulkan-effects build). Applied behind
+# window and layer-shell content with masks controlled by rules.toml.
+# -----------------------------------------------------------------------------
+[blur]
+enabled            = true  # set true to enable compositor backdrop blur
+radius             = 10    # blur radius in pixels
+passes             = 8     # number of blur passes (higher = blurrier, costlier)
+noise              = 0.0   # stable screen-space noise, 0.0–1.0
+contrast           = 1.0   # backdrop contrast, 0.0–2.0; 1.0 is neutral
+brightness         = 1.0   # backdrop brightness, 0.0–2.0; 1.0 is neutral
+vibrancy           = 0.0   # saturation boost, 0.0–1.0
+vibrancy_darkness  = 0.0   # vibrancy applied to dark colors, 0.0–1.0
+
+# Default window-content opacity (requires Aqueous with opacity support).
+# Per-window overrides live in rules.toml as `opacity = 0.85`.
+#[opacity]
+#enabled         = false   # set true to apply opacity to window content
+#value           = 1.0   # stable opacity when focus_sensitive = false
+#focus_sensitive = false  # true = use focused/unfocused below per window focus
+#focused         = 1.0    # focused-window opacity when focus_sensitive = true
+#unfocused       = 1.0    # unfocused-window opacity when focus_sensitive = true
+
+# Client buffer scaling. `native` advertises the exact fractional output scale
+# and is the default. `integer-ceil` asks fractional-aware clients for the next
+# integer-sized backing buffer while retaining fractional logical geometry;
+# this can sharpen some toolkit text at increased GPU/memory cost. Prefer a
+# per-window `buffer_scale_policy` rule for selective testing.
+[scaling]
+buffer_policy = "native" # native | integer-ceil
+
+# Workspace slide animation. `rate = 0` selects the compiled default rate;
+# larger positive values settle more quickly. Animations can also be compiled
+# out entirely with -Danimations=false.
+[workspace_transition]
+enabled = true
+rate = 0.0
+
+
+# -----------------------------------------------------------------------------
+# Actions definitions.
+# This is where you set actions that are attached to a keybind
+# -----------------------------------------------------------------------------
+[actions]
+toggle_start_menu = "aqueous-shell-action launcher"
+screenshot = "aqueous-shell-action screenshot"
+lock_screen = "aqueous-shell-action lock"
+spawn_terminal = "ghostty"
+
+# -----------------------------------------------------------------------------
+# Keybindings.
+#
+# Each built-in action maps to either:
+#   - a single chord string:   action = "Super+H"
+#   - a list of chords:        action = ["Super+H", "Alt+Left"]
+#   - an empty list to unbind: action = []
+#
+# Chord grammar: tokens joined by '+', case-insensitive.
+#   Modifiers: Super (configured primary) | Ctrl | Alt (Mod1) | Shift
+#              Meta always names physical Super, including with AQUEOUS_MOD=Alt.
+#   Keys:      single letters (A–Z), digits (0–9), F1–F24,
+#              named keys (Return, Space, Tab, Comma, Period, Escape, CapsLock,
+#              Left, Right, Up, Down, Home, End, PageUp, PageDown,
+#              Print/PrintScreen, ...)
+#   Wheel:     WheelUp, WheelDown, WheelLeft, WheelRight (also touchpad scroll)
+#
+# Omit any line to keep the compiled-in default (shown in the comment).
+# -----------------------------------------------------------------------------
+[keybinds]
+# --- Window / session ---
+toggle_start_menu     = "Super+Space"      # default
+spawn_terminal        = "Super+Return"     # default
+screenshot            = "Print"            # default; select a region and copy it
+close_focused         = "Super+Q"          # default
+toggle_overview       = "Super+W"          # default; active-workspace window overview
+cycle_focus           = "Super+Tab"        # default
+lock_screen           = "Super+Ctrl+L"     # default; runs [actions].lock_screen
+
+# --- Directional focus (scrolling: left/right columns, up/down column members) ---
+focus_left            = "Super+H"          # default
+focus_right           = "Super+L"          # default
+focus_up              = "Super+K"          # default
+focus_down            = "Super+J"          # default
+
+# --- Scrolling-layout viewport, stacking, and column movement ---
+scroll_viewport_left        = "Super+Comma"   # legacy alias
+scroll_viewport_right       = "Super+Period"  # legacy alias
+scroll_viewport_left_arrow  = "Super+Left"    # default
+scroll_viewport_right_arrow = "Super+Right"   # default
+scroll_viewport_up          = "Super+Up"      # scroll the focused column without changing focus
+scroll_viewport_down        = "Super+Down"    # scroll the focused column without changing focus
+# Wheel navigation defaults; replace a chord or set [] to disable that action.
+# In horizontal scrolling layouts, wheel_scroll_left does the same viewport
+# pan as scroll_viewport_left_arrow (Super+Left); wheel_scroll_right does the
+# same as scroll_viewport_right_arrow (Super+Right). Super+WheelUp/Down are
+# the mouse-wheel equivalents of those arrow shortcuts.
+# The wheel actions swap axes for portrait scrolling layouts; the arrow
+# actions above always use their named direction. Custom wheel chords can run
+# other actions via [keybinds.custom]. Wheel input cannot hold untrap_pointer.
+# wheel_scroll_left  = "Super+WheelUp"
+# wheel_scroll_right = "Super+WheelDown"
+# wheel_scroll_up    = "Alt+Meta+WheelUp"
+# wheel_scroll_down  = "Alt+Meta+WheelDown"
+# Leaving these commented keeps Super+scroll and Super+Alt+scroll working.
+# Meta means physical Super, so Alt+Meta also works with AQUEOUS_MOD=Alt.
+#
+# Example: replace Super with Ctrl for horizontal viewport navigation.
+# wheel_scroll_left  = "Ctrl+WheelUp"
+# wheel_scroll_right = "Ctrl+WheelDown"
+#
+# Example: keep Super+scroll and add a physical horizontal wheel/tilt chord.
+# wheel_scroll_left  = ["Super+WheelUp", "Super+WheelLeft"]
+# wheel_scroll_right = ["Super+WheelDown", "Super+WheelRight"]
+#
+# Example: disable only the Super+Alt+scroll navigation actions.
+# wheel_scroll_up    = []
+# wheel_scroll_down  = []
+# Choose one assignment per action when uncommenting examples.
+move_column_left      = "Super+Shift+H"    # default
+move_column_right     = "Super+Shift+L"    # default
+toggle_scrolling_full_width = "Super+Shift+Z" # expand only the focused column; press again to restore
+consume_window_into_column  = "Super+Ctrl+J"   # pull the first window from the right into this column
+expel_window_from_column    = "Super+Ctrl+K"   # move the focused stacked window into a new column
+
+# --- Opt-in actions (no default chord) ---
+reload_config         = "Super+R"          # immediately reload all TOML snapshots
+# reload_rules        = "Super+Shift+R"    # reload only rules.toml
+
+
+# Per-engine semantics:
+#   tile/grid/dwindle/reverse-dwindle → swap with neighbour at (row±1, col)/(row, col±1)
+#   scrolling         → join the adjacent column (L/R) or reorder within the column (U/D)
+#   monocle           → reorder in z-stack
+#   game-mode         → delegate to the active remainder engine; a scrolling
+#                       remainder joins columns like scrolling (anchor immovable)
+#   composable        → delegate to the focused window's configured child;
+#                       cross-region drops exchange region membership
+#   float/stacking    → use the nudge/resize/snap actions documented below
+move_window_left      = "Super+Shift+Left"   # default
+move_window_right     = "Super+Shift+Right"  # default
+move_window_up        = "Super+Shift+Up"     # default
+move_window_down      = "Super+Shift+Down"   # default
+
+
+# Layout-switch sugar: resolves through [layout.slots] above.
+set_layout_primary    = "Super+T"          # → tile
+set_layout_secondary  = "Super+F"          # → scrolling
+set_layout_tertiary   = "Super+M"          # → monocle
+set_layout_quaternary = "Super+G"          # → grid
+
+# --- Workspaces (ext-workspace-v1) ---
+# Workspaces are exclusive: a window lives on exactly one workspace and exactly
+# one workspace is active per output. Indices are 1-based positions in the
+# per-output ordered workspace list.
+#
+# Focus / switch the active workspace.
+focus_workspace_1        = "Super+1"
+focus_workspace_2        = "Super+2"
+focus_workspace_3        = "Super+3"
+focus_workspace_4        = "Super+4"
+focus_workspace_5        = "Super+5"
+focus_workspace_6        = "Super+6"
+focus_workspace_7        = "Super+7"
+focus_workspace_8        = "Super+8"
+focus_workspace_9        = "Super+9"
+
+# Send the focused window to a workspace.
+move_to_workspace_1      = "Super+Shift+1"
+move_to_workspace_2      = "Super+Shift+2"
+move_to_workspace_3      = "Super+Shift+3"
+move_to_workspace_4      = "Super+Shift+4"
+move_to_workspace_5      = "Super+Shift+5"
+move_to_workspace_6      = "Super+Shift+6"
+move_to_workspace_7      = "Super+Shift+7"
+move_to_workspace_8      = "Super+Shift+8"
+move_to_workspace_9      = "Super+Shift+9"
+
+# Directional switching / moving + back-and-forth.
+focus_workspace_up       = "Super+Bracketleft"        # previous workspace in the list
+focus_workspace_down     = "Super+Bracketright"       # next workspace in the list
+focus_previous_workspace = "Super+BackSpace"               # back-and-forth
+move_to_workspace_up     = "Super+Shift+Bracketleft"
+move_to_workspace_down   = "Super+Shift+Bracketright"
+
+# Per-output focus / move (relative to the selected output, no wrap).
+# Also moves the pointer to the destination output's center, even when empty.
+focus_output_left        = "Super+Ctrl+Comma"
+focus_output_right       = "Super+Ctrl+Period"
+move_to_output_left      = "Super+Shift+Comma"
+move_to_output_right     = "Super+Shift+Period"
+rotate_output_clockwise  = "Super+Ctrl+R"       # rotate the output beneath the mouse by 90°
+# The following chords are FREE in the exclusive workspace model. Bind them to
+# anything you like, e.g. under [keybinds.custom]:
+#   Super+0, Super+Shift+0
+#   Super+Ctrl+1..9
+#   Super+Shift+Ctrl+1..9
+
+# --- Window state ops (Phase B1e) ---
+# Fullscreen / Maximize / Floating / Minimize. Each toggle remembers the prior
+# state so a second press round-trips. Only ONE
+# fullscreen window per output is allowed (toggling another auto-restores
+# the prior). Minimized windows are excluded from layout + focus cycle.
+toggle_fullscreen     = "Super+Shift+F"        # default
+toggle_maximize       = "Super+Shift+M"        # default
+toggle_floating       = "Super+Shift+Space"    # default
+toggle_minimize       = "Super+N"              # default — hide from layout
+unminimize_last       = "Super+Shift+N"        # default — restore most-recent minimized
+
+# Stacking/freeform actions are opt-in so existing chords remain unchanged:
+# raise_window = "Super+PageUp"
+# lower_window = "Super+PageDown"
+# toggle_always_above = "Super+Shift+A"
+# toggle_always_below = "Super+Shift+B"
+# nudge_floating_left/right/up/down
+# nudge_floating_coarse_left/right/up/down
+# resize_floating_left/right/up/down and shrink_floating_left/right/up/down
+# snap_left/right/up/down, snap_up_left/up_right/down_left/down_right, unsnap
+# toggle_maximize_horizontal, toggle_maximize_vertical
+# fit_floating_to_output, move_floating_to_edge_<direction>,
+# grow_floating_to_edge_<direction>
+# Named stacking zones use `builtin:snap_zone:<layout>/<zone>`,
+# `builtin:set_snap_layout:<layout>`, `builtin:cycle_snap_layout`, and
+# `builtin:cycle_snap_layout_reverse`. Legacy `builtin:snap_zone:a` and
+# `builtin:cycle_snap_zone` remain available.
+
+# --- Pointer ---
+# Hold-to-untrap: while this chord is held down any active pointer constraint
+# (mouse "trap" from games etc.) is released; on release the trap re-engages.
+untrap_pointer        = "Super+grave"          # default; reserved for pointer untrap
+
+# Examples of the array form and explicit unbind:
+#   cycle_focus = ["Super+Tab", "Alt+Tab"]
+#   close_focused = []                      # disables Super+Q entirely
+
+
+# -----------------------------------------------------------------------------
+# Free-form custom chords. Key = chord string, value = action verb.
+# A bound CapsLock is fully consumed by Aqueous and does not toggle the XKB
+# lock state. With no matching binding, CapsLock retains its normal behavior.
+#
+# Action verbs:
+#   spawn:<command>         — run through /bin/sh -c as a detached child
+#   launch:<profile>        — launch a typed [[application]] profile directly,
+#                             without shell parsing
+#   set_layout:<id-or-slot> — switch layout; IDs are tile, monocle, grid, rows,
+#                             dwindle, reverse-dwindle, scrolling, float/floating/stack/stacking, game-mode,
+#                             composable;
+#                             slots are primary..quaternary
+#   builtin:<action_name>   — invoke any canonical [keybinds] action name
+#   builtin:focus_composable:<a-d>   — focus the last-focused member of a region
+#   builtin:move_to_composable:<a-d> — move the focused tiled window to a region
+#                                      (1-4 are aliases for a-d)
+# -----------------------------------------------------------------------------
+[keybinds.custom]
+"Super+E"            = "spawn:phyto"
+"Super+Shift+S"      = "spawn:aqueous-shell-action screenshot"
+"Super+B"            = "spawn:firefox"
+"XF86AudioRaiseVolume"  = "spawn:wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+"
+"XF86AudioLowerVolume"  = "spawn:wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"
+"XF86AudioMute"         = "spawn:wpctl set-mute   @DEFAULT_AUDIO_SINK@ toggle"
+"XF86AudioMicMute"      = "spawn:wpctl set-mute   @DEFAULT_AUDIO_SOURCE@ toggle"
+"XF86MonBrightnessUp"   = "spawn:brightnessctl set +5%"
+"XF86MonBrightnessDown" = "spawn:brightnessctl set 5%-"
+"XF86AudioPlay"         = "spawn:playerctl play-pause"
+"XF86AudioNext"         = "spawn:playerctl next"
+"XF86AudioPrev"         = "spawn:playerctl previous"
+
+# Wheel action examples (also accept touchpad scrolling).
+# Add Ctrl to switch workspaces while keeping the default Super+scroll panning.
+# "Super+Ctrl+WheelUp"   = "builtin:focus_workspace_up"
+# "Super+Ctrl+WheelDown" = "builtin:focus_workspace_down"
+#
+# To replace Super+scroll panning with workspace switching instead:
+# "Super+WheelUp"        = "builtin:focus_workspace_up"
+# "Super+WheelDown"      = "builtin:focus_workspace_down"
+#
+# Run commands with a wheel chord, just like a keyboard shortcut.
+# "Super+Shift+WheelUp"   = "spawn:wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+"
+# "Super+Shift+WheelDown" = "spawn:wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"
+
+# Direct layout switches (bypassing slots).
+# NOTE: Super+1..9 are reserved by the workspace bindings above (focus_workspace_1..9).
+# Use the [layout.slots]-based set_layout_primary/secondary/... built-ins
+# (Super+T/F/M/G) instead, or pick non-conflicting chords. Examples:
+# "Super+Alt+T"        = "set_layout:tile"
+# "Super+Alt+S"        = "set_layout:scrolling"
+# "Super+Alt+M"        = "set_layout:monocle"
+# "Super+Alt+G"        = "set_layout:grid"
+# "Super+Alt+F"        = "set_layout:float"
+# "Super+Alt+R"        = "set_layout:rows"
+# "Super+Alt+D"        = "set_layout:dwindle"
+# "Super+Alt+Shift+D"  = "set_layout:reverse-dwindle"
+# "Super+Alt+V"        = "set_layout:game-mode"
+# "Super+Alt+C"        = "set_layout:composable"
+# "Super+Alt+1"        = "builtin:focus_composable:a"
+# "Super+Alt+Shift+1"  = "builtin:move_to_composable:a"
+
+# Re-route a built-in onto an extra chord:
+"Alt+F4"             = "builtin:close_focused"
+
+# -----------------------------------------------------------------------------
+# Shell-free application launch profiles
+# -----------------------------------------------------------------------------
+# Use these for application-specific Wayland/decorations flags. `command` must
+# be an absolute executable path. `args` and `env` are passed as distinct argv
+# and environment entries, so shell quoting and expansion do not apply.
+# `desktop_id` is optional metadata for matching a desktop launcher override.
+# Bind a profile with, for example:
+#   "Super+Shift+V" = "launch:vesktop-ssd"
+#
+# [[application]]
+# name = "vesktop-ssd"
+# desktop_id = "vesktop.desktop"
+# command = "/usr/bin/vesktop"
+# args = ["--enable-features=WaylandWindowDecorations"]
+# env = { ELECTRON_OZONE_PLATFORM_HINT = "auto" }
+
+# -----------------------------------------------------------------------------
+# Managed startup/reload commands
+# -----------------------------------------------------------------------------
+# Repeat [[exec]] for commands Aqueous should supervise. Both name and command
+# are required. `when` accepts startup, reload, or always (unknown values become
+# startup). `once` prevents duplicate starts, `restart` retries a child after a
+# nonzero exit until it succeeds, `log` appends stdout/stderr to a file, and
+# `env` exports an inline string map before running the command.
+#
+# [[exec]]
+# name = "wallpaper"
+# command = "swaybg -i ~/.config/aqueous/wallpaper.png -m fill"
+# when = "startup" # startup | reload | always
+# once = true
+# restart = false
+# log = "/tmp/aqueous-wallpaper.log"
+# env = { XDG_CURRENT_DESKTOP = "Aqueous" }
+
+# -----------------------------------------------------------------------------
+# Window-state behavior
+# Controls fullscreen, maximize, floating, and minimize semantics.
+# -----------------------------------------------------------------------------
+[state]
+# When toggling fullscreen, also hide layer-shell layers above 'bottom'
+# (the bar / notifications). This compatibility flag is parsed, but the
+# layer-shell hide path is not currently implemented.
+fullscreen_hides_bar = true
+
+# Maximize ignores layer-shell exclusive zones (i.e. covers the bar).
+# false → cover usable_area only (the conventional behaviour).
+maximize_full_output = false
+
+[rules]
+# Optional. Absolute or ~-prefixed path. $AQUEOUS_RULES still has precedence.
+path = "~/.config/aqueous/rules.toml"
+
+# System bell: visual | sound | both | off. Visual feedback is the default.
+# Custom sounds use pw-play and the default PipeWire sink. Paths are literal,
+# absolute or relative to this wm.toml (no ~ or environment expansion).
+# PCM WAV is supported; Ogg support depends on the installed libsndfile.
+# Empty sound_file disables audio. Playback is capped at 2 seconds, with one
+# sound at a time and a shared 500 ms cooldown. Locking cancels both components.
+[bell]
+mode = "visual"
+sound_file = ""
+volume = 0.5 # 0.0 through 1.0; changes only the bell stream, not system volume

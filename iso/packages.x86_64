@@ -14,6 +14,7 @@ chafa
 ckbcomp
 cryptsetup
 devario-base
+devario-backgrounds
 devario-boot
 devario-desktop
 devario-dracut
@@ -68,6 +69,7 @@ pipewire-pulse
 playerctl
 plymouth
 polkit
+pori
 power-profiles-daemon
 pwvucontrol
 python
