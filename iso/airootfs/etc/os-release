@@ -1,5 +1,5 @@
-NAME="Devario Community"
-PRETTY_NAME="Devario Community (Development)"
+NAME="Devario"
+PRETTY_NAME="Devario"
 ID=devario
 BUILD_ID=rolling
 VARIANT="Community"

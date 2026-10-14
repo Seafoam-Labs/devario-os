@@ -2,22 +2,21 @@
 
 pkgname=devario-aqueous-desktop
 pkgver=1
-pkgrel=11
+pkgrel=13
 pkgdesc="Complete Aqueous and Pearl desktop environment for Devario"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
 license=('GPL-3.0-or-later')
 depends=(
-  'aqueous-core=1.0.2-1'
-  'aqueous-session=1.0.2-1'
-  'xdg-desktop-portal-aqueous=1.0.2-1'
-  'aqueous-integration-pearl=1.0.2-1'
-  'aqueous-shell-pearl=1.0.2-1'
+  'aqueous-core>=1.0.2'
+  'aqueous-session>=1.0.2'
+  'xdg-desktop-portal-aqueous>=1.0.2'
+  'aqueous-integration-pearl>=1.0.2'
+  'aqueous-shell-pearl>=1.0.2'
   'pearl'
   'pearl-greeter'
   'greetd'
   'ghostty'
-  'nemo'
   'firefox'
   'networkmanager'
   'nm-connection-editor'
@@ -35,6 +34,10 @@ depends=(
   'brightnessctl'
   'playerctl'
   'bluez-utils'
+  'bolt'
+  'boltctl'
+  'python'
+  'python-pyudev'
   'xdg-user-dirs'
   'xdg-utils'
   'noto-fonts'
@@ -59,18 +62,37 @@ source=(
   'greetd-gpu-driver.conf'
   'graphics-session'
   '61-devario-virtio.sh'
+  'gpu-hotplug'
+  'devario-gpu-run'
+  'devario-gpu-hotplug.service'
+  '20-devario-gpu.conf'
+  'devario-egpu.conf'
+  '60-devario-gpu.sh'
 )
 sha256sums=(
   '2cecdd6b68deaedc81997669b26ddfb705c458c8de9d8fdd465aaae35eba845b'
   'ef1c8b33c7a25969f2268588ca6f100c4905f46b238ff2998ef26f91fdfb1386'
-  '533cfa381f0d7eb1ef1e5da15037992fd5f59c539cfe6d4a8f14e6d6d3aeb99f'
+  '455389932d08ed61668fdf010debf46ff7a282e54142019a7a52c171ee672d34'
   'ec8e672fb2e7a451bd97ca9ccbc4ade0a91a7f0e097a5e3a6ce99ec144871807'
-  'a997663d00e362e780c6d29989bcb9dfdb50d5b00142322bee207d68be8c3801'
-  'e6bc412c7b9cd8b4eca018bffc83e06d01bd30336ae03f6fa16aed56c87d7eeb'
+  '271e59b1fe07474aa8626ff739832b255827f5302fbde690d0ed8fd1a5d94bb7'
+  '79f25aad3be3af1214c3453c18dced5b8a0cc90087374752f59ba6d7d95eb02e'
   '4670c72c1612df9e7a0b9ccb5e61cb9d224d7e33a30b8029ad8a6853b249442e'
+  '6d91c86fc41465665fb01ae6669ec03b03e3aabf948db7a63af1f92a9244ef6d'
+  '1c5de17c681bc35622e0ad1a7c20e40e2e8c37f672c83194f5ad3836b1162723'
+  '84543e1657e7e36205ffabbaaad0575a6c895b1c6f7b464724c0d94b5bb55bf6'
+  '0051ed83f1263fdbd1728a5137c2b0264e8841d2d5ffe5eb19c3677de5769b80'
+  'a445b985551fa6ec6f26379726f6780690ecc08491fd6deacaa26fd307ea72ec'
+  '5256d83bdff4938902d57f1518330eea82c9d62b497ecb864cc2e17ce7b06a26'
 )
 
 package() {
+  install -Dm755 "$srcdir/gpu-hotplug" "$pkgdir/usr/lib/devario/gpu-hotplug"
+  install -Dm755 "$srcdir/devario-gpu-run" "$pkgdir/usr/bin/devario-gpu-run"
+  install -Dm644 "$srcdir/devario-gpu-hotplug.service" "$pkgdir/usr/lib/systemd/system/devario-gpu-hotplug.service"
+  install -Dm644 "$srcdir/20-devario-gpu.conf" "$pkgdir/usr/lib/systemd/user/wayland-wm@aqueous\x2dwm.service.d/20-devario-gpu.conf"
+  install -Dm644 "$srcdir/devario-egpu.conf" "$pkgdir/usr/lib/modprobe.d/devario-egpu.conf"
+  install -Dm644 "$srcdir/60-devario-gpu.sh" "$pkgdir/etc/xdg/uwsm/env.d/60-devario-gpu.sh"
+
   install -Dm755 "$srcdir/graphics-session" "$pkgdir/usr/lib/devario/graphics-session"
   install -Dm644 "$srcdir/61-devario-virtio.sh" "$pkgdir/etc/xdg/uwsm/env.d/61-devario-virtio.sh"
   install -Dm644 "$srcdir/session.toml" "$pkgdir/etc/xdg/aqueous/session.toml"

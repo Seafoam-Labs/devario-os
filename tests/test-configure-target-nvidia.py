@@ -179,7 +179,7 @@ class NvidiaTests(unittest.TestCase):
                     self.assertEqual(events[0], ["dkms", "autoinstall", "-k", KERNEL])
                 self.assertFalse(any("modprobe" in e for e in events))
 
-    def test_preflight_dispatch_and_no_gpu_skips(self):
+    def test_preflight_dispatch_also_checks_disconnected_egpu_payload(self):
         with patch.object(nvidia.sys, "argv", [str(HELPER), "--preflight"]), \
                 patch.object(nvidia, "detect", return_value=[DEVICE]), \
                 patch.object(nvidia, "preflight") as preflight:
@@ -191,8 +191,22 @@ class NvidiaTests(unittest.TestCase):
                     patch.object(nvidia, "configure") as configure, \
                     patch.object(nvidia, "preflight") as preflight:
                 nvidia.main()
-                configure.assert_not_called()
-                preflight.assert_not_called()
+                if mode == '--configure':
+                    configure.assert_called_once_with([])
+                    preflight.assert_not_called()
+                else:
+                    preflight.assert_called_once_with([])
+                    configure.assert_not_called()
+
+    def test_disconnected_egpu_builds_modules_without_enabling_early_kms(self):
+        with patch.object(nvidia, 'check_payload', return_value=(KERNEL, VERSION)), \
+                patch.object(nvidia, 'modules_ready', side_effect=[False, True]), \
+                patch.object(nvidia.subprocess, 'run') as run, \
+                patch.object(nvidia, 'enable_kms') as enable:
+            nvidia.configure([])
+            self.assertEqual([call.args[0] for call in run.call_args_list],
+                             [['dkms', 'autoinstall', '-k', KERNEL], ['depmod', '-a', KERNEL]])
+            enable.assert_not_called()
 
     def test_calamares_order_and_package_contract(self):
         import yaml

@@ -12,3 +12,5 @@ if [[ ! -e "$profile_dir/airootfs/etc/localtime" && ! -L "$profile_dir/airootfs/
 fi
 ln -sT -- ../../../../usr/lib/systemd/system/ufw.service \
   "$profile_dir/late-airootfs/etc/systemd/system/multi-user.target.wants/ufw.service"
+ln -sT -- ../../../../usr/lib/systemd/system/devario-gpu-hotplug.service \
+  "$profile_dir/late-airootfs/etc/systemd/system/multi-user.target.wants/devario-gpu-hotplug.service"

@@ -161,8 +161,11 @@ def configure(devices):
     subprocess.run(["depmod", "-a", kernel], check=True)
     if not modules_ready(kernel, version):
         raise RuntimeError(f"NVIDIA {version} modules are incomplete or incompatible with {kernel}")
-    enable_kms()
-    log(f"enabled NVIDIA_EARLY_KMS for {version} / {kernel}")
+    if devices:
+        enable_kms()
+        log(f"enabled NVIDIA_EARLY_KMS for {version} / {kernel}")
+    else:
+        log(f"NVIDIA {version} modules ready for a future eGPU / {kernel}; early KMS unchanged")
 
 
 def preflight(devices):
@@ -196,9 +199,6 @@ def main():
         check_payload(json.load(sys.stdin))
         return
     devices = detect()
-    if not devices:
-        log("no NVIDIA display controllers; early KMS remains disabled")
-        return
     if mode == "preflight":
         preflight(devices)
     else:

@@ -1,8 +1,9 @@
 #!/usr/bin/python3 -I
-"""Keep GBM buffers on Venus for virtio-only graphical sessions."""
+"""Apply startup graphics workarounds only to the launched process tree."""
 import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 
 
@@ -23,17 +24,28 @@ def virtio_only(root=Path('/sys/class/drm')):
     return bool(drivers) and all(driver in ('virtio_gpu', 'virtio-pci') for driver in drivers)
 
 
+def startup_environment(environment):
+    environment = dict(environment)
+    mesa = '/usr/share/glvnd/egl_vendor.d/50_mesa.json'
+    if Path(mesa).is_file():
+        detected = subprocess.run(['/usr/lib/devario/gpu-driver-setup', '--detect'],
+                                  stdout=subprocess.DEVNULL, check=False)
+        # 1 means successful enumeration with no NVIDIA display controller;
+        # a failed probe must never hide a potentially usable driver.
+        if detected.returncode == 1:
+            environment.setdefault('__EGL_VENDOR_LIBRARY_FILENAMES', mesa)
+            environment.setdefault('VK_LOADER_DRIVERS_DISABLE', '*nvidia*')
+    if virtio_only():
+        environment.setdefault('MESA_LOADER_DRIVER_OVERRIDE', 'zink')
+    return environment
+
+
 def main(args):
     if args == ['--detect-virtio']:
         return 0 if virtio_only() else 1
     if not args:
         raise SystemExit('Usage: graphics-session --detect-virtio | COMMAND [ARG ...]')
-    environment = dict(os.environ)
-    if virtio_only():
-        # Aqueous uses Vulkan. VirGL GBM buffers cannot be exported into the
-        # Venus renderer with QEMU's external EGL context; Zink allocates them
-        # through Vulkan instead. Preserve an explicit user driver override.
-        environment.setdefault('MESA_LOADER_DRIVER_OVERRIDE', 'zink')
+    environment = startup_environment(os.environ)
     os.execvpe(args[0], args, environment)
 
 

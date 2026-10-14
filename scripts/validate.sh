@@ -330,6 +330,9 @@ fi
 if ! python3 "$project_dir/tests/test-devario-report.py"; then
   fail "Devario report behavior and packaging tests failed"
 fi
+if ! python3 "$project_dir/tests/test-egpu.py"; then
+  fail "eGPU session, hot-plug and packaging tests failed"
+fi
 if ! bash "$project_dir/tests/test-gpu-driver-setup.sh"; then
   fail "GPU driver setup behavior tests failed"
 fi
@@ -443,7 +446,7 @@ for required_package in \
   aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous \
   calamares ckbcomp devario-desktop \
   devario-base devario-boot devario-dracut devario-keyring greetd systemd pearl pearl-greeter shelly fastfetch fish \
-  chafa imagemagick ghostty gnome-keyring seahorse upower power-profiles-daemon papirus-icon-theme \
+  chafa imagemagick ghostty gnome-keyring seahorse upower power-profiles-daemon papirus-icon-theme vimix-cursors \
   strace ripgrep vulkan-tools mesa-utils wayland-utils usbutils lsof nvme-cli netcat matugen \
   linux-devario linux-devario-headers nvidia-open-dkms nvidia-utils \
   vulkan-intel vulkan-radeon vulkan-swrast vulkan-virtio xorg-xwayland; do
@@ -512,12 +515,12 @@ if ! grep -Fq "'0001-devario-wayland-runtime.patch'" "$calamares_pkgbuild" \
 fi
 
 declare -A pinned_desktop_sources=(
-  ["packages/devario-aqueous-desktop/graphics-session"]='e6bc412c7b9cd8b4eca018bffc83e06d01bd30336ae03f6fa16aed56c87d7eeb'
+  ["packages/devario-aqueous-desktop/graphics-session"]='79f25aad3be3af1214c3453c18dced5b8a0cc90087374752f59ba6d7d95eb02e'
   ["packages/devario-aqueous-desktop/61-devario-virtio.sh"]='4670c72c1612df9e7a0b9ccb5e61cb9d224d7e33a30b8029ad8a6853b249442e'
   ["packages/devario-aqueous-desktop/devario-gpu-driver.service"]='ec8e672fb2e7a451bd97ca9ccbc4ade0a91a7f0e097a5e3a6ce99ec144871807'
-  ["packages/devario-aqueous-desktop/gpu-driver-setup"]='533cfa381f0d7eb1ef1e5da15037992fd5f59c539cfe6d4a8f14e6d6d3aeb99f'
+  ["packages/devario-aqueous-desktop/gpu-driver-setup"]='455389932d08ed61668fdf010debf46ff7a282e54142019a7a52c171ee672d34'
   ["packages/devario-aqueous-desktop/greetd-config.toml"]='ef1c8b33c7a25969f2268588ca6f100c4905f46b238ff2998ef26f91fdfb1386'
-  ["packages/devario-aqueous-desktop/greetd-gpu-driver.conf"]='a997663d00e362e780c6d29989bcb9dfdb50d5b00142322bee207d68be8c3801'
+  ["packages/devario-aqueous-desktop/greetd-gpu-driver.conf"]='271e59b1fe07474aa8626ff739832b255827f5302fbde690d0ed8fd1a5d94bb7'
 )
 for pinned_path in "${!pinned_desktop_sources[@]}"; do
   actual_sha256="$(sha256sum "$project_dir/$pinned_path")"
@@ -537,7 +540,7 @@ done
 desktop_meta="$project_dir/packages/devario-aqueous-desktop/PKGBUILD"
 for desktop_dependency in \
   aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous pearl pearl-greeter greetd \
-  linux-devario-headers nvidia-open-dkms nvidia-utils; do
+  linux-devario-headers nvidia-open-dkms nvidia-utils bolt boltctl python-pyudev; do
   if ! grep -Eq "['\"]${desktop_dependency}([<>=][^'\"]*)?['\"]" "$desktop_meta"; then
     fail "the Devario desktop metapackage must depend on $desktop_dependency"
   fi

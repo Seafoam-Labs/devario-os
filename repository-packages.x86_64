@@ -228,6 +228,8 @@ atkmm
 avahi
 bluez-libs
 bluez-utils
+bolt
+boltctl
 brightnessctl
 bubblewrap
 cairo
@@ -557,6 +559,7 @@ power-profiles-daemon
 python-cairo
 python-dbus
 python-gobject
+python-pyudev
 python-pyxdg
 python-setproctitle
 qt6-base
@@ -603,6 +606,7 @@ uwsm
 v4l-utils
 vapoursynth
 vid.stab
+vimix-cursors
 vmaf
 volume_key
 vulkan-icd-loader

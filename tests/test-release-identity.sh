@@ -9,11 +9,17 @@ trap cleanup EXIT
 fail() { echo "Release-identity test failed: $*" >&2; exit 1; }
 
 cp "$project_dir/iso/airootfs/etc/os-release" "$test_root/os-release"
+for expected in 'NAME="Devario"' 'PRETTY_NAME="Devario"' 'BUILD_ID=rolling'; do
+  grep -Fxq "$expected" "$test_root/os-release" || fail "source identity lacks: $expected"
+done
 "$project_dir/scripts/render-release-os-release.py" \
   --file "$test_root/os-release" --edition community --variant Community \
   --release-version 2026.08.14
 for expected in \
-  'PRETTY_NAME="Devario Community 2026.08.14"' \
+  'NAME="Devario"' \
+  'PRETTY_NAME="Devario"' \
+  'VARIANT="Community"' \
+  'VARIANT_ID=community' \
   'VERSION="2026.08.14"' \
   'VERSION_ID="2026.08.14"' \
   'BUILD_ID="2026.08.14"'; do

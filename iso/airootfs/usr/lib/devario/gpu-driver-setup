@@ -15,7 +15,9 @@ log() {
 
 write_state() {
     /usr/bin/install -d -m 0755 "$(/usr/bin/dirname -- "$state_file")"
-    printf '%s\n' "$1" > "$state_file"
+    printf '%s\n' "$1" > "$state_file.tmp"
+    /usr/bin/chmod 0644 "$state_file.tmp"
+    /usr/bin/mv -f -- "$state_file.tmp" "$state_file"
 }
 
 find_nvidia_display_devices() {
@@ -103,6 +105,15 @@ setup_driver() {
     fi
 
     "$udevadm_command" settle --timeout=10 >/dev/null 2>&1 || true
+    # The enclosure may have disappeared while modprobe/udev was running.
+    if ! find_nvidia_display_devices; then
+        write_state unavailable
+        return 0
+    fi
+    if (( ${#nvidia_devices[@]} == 0 )); then
+        write_state none
+        return 0
+    fi
     state="$(driver_state)"
     write_state "$state"
 
@@ -124,6 +135,11 @@ case "${1:---setup}" in
         detect_only
         ;;
     --setup)
+        # The boot service and hot-plug monitor can overlap. Serialize scans
+        # and publish state atomically so readers never see partial contents.
+        /usr/bin/install -d -m 0755 "$(/usr/bin/dirname -- "$state_file")"
+        exec 9>"$state_file.lock"
+        /usr/bin/flock -x 9
         setup_driver
         ;;
     *)

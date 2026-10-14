@@ -1,0 +1,80 @@
+#!/usr/bin/python3 -I
+"""Launch an application with a GPU selected from current PCI hardware."""
+import argparse
+import os
+from pathlib import Path
+import re
+import sys
+
+
+def devices(root=Path('/sys/bus/pci/devices')):
+    result = []
+    for device in sorted(root.iterdir()):
+        try:
+            if not device.joinpath('class').read_text().strip().startswith('0x03'):
+                continue
+            vendor = device.joinpath('vendor').read_text().strip().lower()
+            driver = device.joinpath('driver').resolve(strict=True).name
+        except (FileNotFoundError, PermissionError):
+            continue
+        result.append((device.name, vendor, driver))
+    return result
+
+
+def launch_environment(selection, available, inherited):
+    environment = dict(inherited)
+    # An explicit app selection supersedes inherited driver filters, including
+    # those in terminals launched directly by the compositor or an older login.
+    for name in ('__EGL_VENDOR_LIBRARY_FILENAMES', '__EGL_VENDOR_LIBRARY_DIRS',
+                 'VK_LOADER_DRIVERS_DISABLE', 'VK_LOADER_DRIVERS_SELECT',
+                 'VK_LOADER_DRIVERS_ENABLE', 'VK_DRIVER_FILES', 'VK_ICD_FILENAMES',
+                 'VK_ADD_DRIVER_FILES', 'MESA_LOADER_DRIVER_OVERRIDE',
+                 'MESA_VK_DEVICE_SELECT', 'DRI_PRIME', '__NV_PRIME_RENDER_OFFLOAD',
+                 '__NV_PRIME_RENDER_OFFLOAD_PROVIDER', '__GLX_VENDOR_LIBRARY_NAME',
+                 '__VK_LAYER_NV_optimus'):
+        environment.pop(name, None)
+    if selection == 'auto':
+        return environment
+    if selection == 'nvidia':
+        if not any(vendor == '0x10de' and driver == 'nvidia'
+                   for _, vendor, driver in available):
+            raise ValueError('No NVIDIA display controller is bound to the NVIDIA driver')
+        environment.update(__NV_PRIME_RENDER_OFFLOAD='1',
+                           __GLX_VENDOR_LIBRARY_NAME='nvidia',
+                           __VK_LAYER_NV_optimus='NVIDIA_only')
+    else:
+        if not re.fullmatch(r'[0-9a-fA-F]{4}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-7]', selection):
+            raise ValueError('Choose auto, nvidia, or a Mesa GPU PCI address from --list')
+        selected = next((item for item in available if item[0] == selection.lower()), None)
+        if selected is None or selected[2] not in ('amdgpu', 'radeon', 'i915', 'xe', 'nouveau'):
+            raise ValueError('Selected PCI address is not a bound Mesa display controller')
+        environment['DRI_PRIME'] = 'pci-' + selection.lower().replace(':', '_').replace('.', '_')
+    return environment
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--list', action='store_true', help='list bound display controllers')
+    parser.add_argument('gpu', nargs='?', help='auto, nvidia, or a Mesa GPU PCI address')
+    parser.add_argument('command', nargs=argparse.REMAINDER)
+    args = parser.parse_args()
+    available = devices()
+    if args.list:
+        for address, vendor, driver in available:
+            print(f'{address}  vendor={vendor}  driver={driver}')
+        return
+    command = args.command
+    if command[:1] == ['--']:
+        command = command[1:]
+    if not args.gpu or not command:
+        parser.error('usage: devario-gpu-run GPU -- COMMAND [ARG ...]')
+    try:
+        environment = launch_environment(args.gpu, available, os.environ)
+        os.execvpe(command[0], command, environment)
+    except (ValueError, OSError) as error:
+        print(f'devario-gpu-run: {error}', file=sys.stderr)
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -1,0 +1,36 @@
+#!/usr/bin/python3 -I
+"""Refresh GPU setup after udev has processed PCI add/remove/bind events."""
+import subprocess
+
+
+def refresh():
+    subprocess.run(['/usr/lib/devario/gpu-driver-setup', '--setup'],
+                   check=True, timeout=30)
+
+
+def watch(monitor, update=refresh):
+    # Subscribe before the initial scan so devices appearing during startup
+    # cannot fall between enumeration and subscription.
+    monitor.start()
+    update()
+    while True:
+        monitor.poll()
+        # Coalesce a bridge/GPU/audio event burst, with a bounded batch so a
+        # busy PCI bus cannot indefinitely postpone the scan.
+        for _ in range(100):
+            if monitor.poll(timeout=0.2) is None:
+                break
+        update()
+
+
+def main():
+    import pyudev
+    monitor = pyudev.Monitor.from_netlink(pyudev.Context(), source='udev')
+    # Removal events need not retain vendor/class attributes. Scan on any PCI
+    # change, including devices enumerated after Bolt authorizes an enclosure.
+    monitor.filter_by(subsystem='pci')
+    watch(monitor)
+
+
+if __name__ == '__main__':
+    main()

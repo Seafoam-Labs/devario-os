@@ -1,0 +1,4 @@
+# Staged before package installation so the schema hook compiles this default.
+[org.gnome.desktop.interface]
+cursor-theme='Vimix'
+cursor-size=24

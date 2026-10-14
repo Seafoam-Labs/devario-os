@@ -332,8 +332,10 @@ for number,line in enumerate(os_release.read_text(encoding="utf-8").splitlines()
  except ValueError as error: raise SystemExit(f"invalid os-release value at line {number}: {error}")
  if len(parsed)!=1: raise SystemExit(f"invalid os-release value at line {number}")
  identity[key]=parsed[0]
-version=lock["releaseVersion"]; expected_name="Devario "+os.environ["EDITION"].title()
-expected_identity={"NAME":expected_name,"PRETTY_NAME":expected_name+" "+version,"VERSION":version,"VERSION_ID":version,"BUILD_ID":version,"VARIANT_ID":os.environ["EDITION"]}
+version=lock["releaseVersion"]; community=os.environ["EDITION"]=="community"
+expected_name="Devario" if community else "Devario "+os.environ["EDITION"].title()
+expected_pretty_name=expected_name if community else expected_name+" "+version
+expected_identity={"NAME":expected_name,"PRETTY_NAME":expected_pretty_name,"VERSION":version,"VERSION_ID":version,"BUILD_ID":version,"VARIANT_ID":os.environ["EDITION"]}
 for key,value in expected_identity.items():
  if identity.get(key)!=value: raise SystemExit(f"installed os-release {key} differs from locked release identity")
 if "development" in identity["PRETTY_NAME"].lower(): raise SystemExit("release image still identifies as Development")

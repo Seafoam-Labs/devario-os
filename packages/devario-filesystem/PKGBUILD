@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 pkgname=devario-filesystem
 pkgver=1
-pkgrel=1
+pkgrel=2
 pkgdesc="Devario filesystem hierarchy and distribution identity"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -35,7 +35,7 @@ package() {
   ln -s ../run/lock "$pkgdir/var/lock"
   ln -s spool/mail "$pkgdir/var/mail"
   ln -s /proc/self/mounts "$pkgdir/etc/mtab"
-  printf '%s\n' 'NAME="Devario Community"' 'PRETTY_NAME="Devario Community (Development)"' \
+  printf '%s\n' 'NAME="Devario"' 'PRETTY_NAME="Devario"' \
     'ID=devario' 'BUILD_ID=rolling' 'VARIANT="Community"' 'VARIANT_ID=community' \
     > "$pkgdir/etc/os-release"
   # Edition identity survives package upgrades through the backed-up /etc file.

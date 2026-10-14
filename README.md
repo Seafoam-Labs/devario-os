@@ -82,6 +82,12 @@ live session and new installed users. The late ISO overlay supplies
 `~/.config/aqueous/layout.toml` through `/etc/skel`. Rebuild the ISO to include
 these defaults; users can change their layout through Pearl settings.
 
+Vimix is the default cursor for the live session, login screen, and new
+installations. Build and publish `devario-core/vimix-cursors` before rebuilding
+the ISO. UWSM, GTK, and GSettings defaults select the `Vimix` theme at size 24;
+new users also receive editable Aqueous cursor settings. Personal cursor
+choices take precedence over the session and toolkit defaults.
+
 Fastfetch uses a persistent system default at `/etc/xdg/fastfetch/config.jsonc`,
 linked to the shared Devario configuration and fish logo under
 `/usr/share/devario/fastfetch/`. Both plain `fastfetch` and the Bash/Fish welcome
@@ -165,8 +171,10 @@ the target kernel and enables `NVIDIA_EARLY_KMS="true"` in the target's
 `/etc/devario-dracut.conf`. The active Devario boot builder includes and requests
 early loading of all four NVIDIA modules in both normal and fallback images,
 with firmware and modesetting configuration checked before publication.
-Non-NVIDIA installations retain the disabled default; the copied image still
-includes driver packages. See [the implementation plan](docs/CALAMARES-NVIDIA-PLAN.md)
+Installations without a connected NVIDIA GPU also verify the pristine payload
+and verify or build the target's NVIDIA modules, so a later eGPU connection
+does not need a compiler or network download. They retain the disabled early-KMS
+default. See [the implementation plan](docs/CALAMARES-NVIDIA-PLAN.md)
 for scope, verification, and the future network-install integration.
 
 A boot service also detects NVIDIA PCI display
@@ -175,6 +183,44 @@ and records `nvidia`, `partial`, `unavailable`, or `none` in
 `/run/devario/gpu-driver`. The `nvidia-utils` Nouveau blacklist is intentionally
 left intact, so this image supports Turing-and-newer NVIDIA hardware through
 the open kernel module and does not fall back to Nouveau on older GPUs.
+
+The live and installed desktop include `bolt` and `boltctl`, built as two
+packages from the Bolt source release. Upstream udev rules and D-Bus activation
+start `bolt.service` when needed; it is a static service and does not need
+`systemctl enable`. Use `boltctl list` to inspect an enclosure, then
+`boltctl authorize UUID` for a connection or `boltctl enroll --policy auto UUID`
+to remember a trusted enclosure. Authorization uses Bolt's upstream Polkit
+policy. There is no blanket authorization rule or Pearl authorization UI.
+Trust enrolled in the live system is not copied into the installed system's
+pristine payload; enroll the enclosure again after installation.
+
+`devario-gpu-hotplug.service` listens for processed PCI events and refreshes
+`/run/devario/gpu-driver`, including after enclosure authorization, removal, and
+reconnection. It loads NVIDIA DRM with modesetting when needed without
+restarting the desktop or unloading drivers. A packaged modprobe setting also
+enables modesetting when udev loads NVIDIA first.
+
+GPU detection no longer disables NVIDIA in UWSM's shared application
+environment. `graphics-session` applies the no-NVIDIA startup workaround only
+to the greeter and the Aqueous compositor process tree. Applications started
+directly by that process tree can inherit its startup restrictions; use the
+included launcher to select from current hardware and override inherited GPU
+filters:
+
+```sh
+devario-gpu-run --list
+devario-gpu-run nvidia -- application arguments
+devario-gpu-run 0000:05:00.0 -- application arguments
+devario-gpu-run auto -- application arguments
+```
+
+Use a PCI address from `--list` for an AMD/Intel Mesa GPU. `nvidia` requests
+NVIDIA render offload; `auto` restores normal driver discovery. Selection
+applies to the newly launched process, not an already-running application or
+compositor. Physical hot-plug, external-monitor, suspend/resume, and removal
+acceptance testing is still required before claiming seamless eGPU support.
+Build and publish `bolt`, `boltctl`, `python-pyudev`, and
+`devario-aqueous-desktop` 1-13 or newer before rebuilding the ISO.
 
 The live ISO and installed system use Plymouth with the Devario theme. The
 late image overlay selects `Theme=devario` in `/etc/plymouth/plymouthd.conf`,
@@ -627,6 +673,9 @@ The release version must match
 `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`. It is bound in the signed input lock and
 attestation, embedded in the image build-source record, and rendered into
 `/etc/os-release`; candidate metadata cannot supply a different version later.
+Community images use `NAME="Devario"` and `PRETTY_NAME="Devario"` in both
+development and release builds. Edition information stays in `VARIANT` and
+`VARIANT_ID`; release versions stay in `VERSION`, `VERSION_ID`, and `BUILD_ID`.
 The closed output also retains `CORE-INPUT-LOCK.json`,
 `CONTROLLED-BUILDER.json` and its signature, and
 `BUILDER-ATTESTATION.json` and its signature.

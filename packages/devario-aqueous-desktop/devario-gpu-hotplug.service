@@ -1,0 +1,13 @@
+[Unit]
+Description=Refresh GPU driver status when PCI devices change
+After=devario-gpu-driver.service
+Wants=devario-gpu-driver.service
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/devario/gpu-hotplug
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

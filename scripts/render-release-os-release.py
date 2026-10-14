@@ -55,11 +55,16 @@ def render(path: Path, edition: str, variant: str, release_version: str) -> None
         raise ValueError("composed os-release lacks required identity fields")
     if parsed["VARIANT_ID"] != edition or parsed["VARIANT"] != variant:
         raise ValueError("composed os-release identity differs from edition metadata")
-    if "Development" not in parsed["PRETTY_NAME"]:
+    # Build metadata distinguishes an unstamped source from a release; the
+    # public OS name need not contain a development marker.
+    if parsed["BUILD_ID"] != "rolling" or {"VERSION", "VERSION_ID"} & parsed.keys():
         raise ValueError("release renderer expected an unmodified development identity")
 
     result: list[str] = []
     inserted = False
+    pretty_name = parsed["NAME"]
+    if edition != "community":
+        pretty_name += " " + release_version
     replaced = {"PRETTY_NAME", "VERSION", "VERSION_ID", "BUILD_ID"}
     for key, raw in entries:
         if key in replaced:
@@ -68,7 +73,7 @@ def render(path: Path, edition: str, variant: str, release_version: str) -> None
         if key == "NAME":
             result.extend(
                 (
-                    f"PRETTY_NAME={quote(parsed['NAME'] + ' ' + release_version)}",
+                    f"PRETTY_NAME={quote(pretty_name)}",
                     f"VERSION={quote(release_version)}",
                     f"VERSION_ID={quote(release_version)}",
                     f"BUILD_ID={quote(release_version)}",

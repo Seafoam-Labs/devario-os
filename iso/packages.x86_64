@@ -7,6 +7,8 @@ aqueous-session
 aqueous-shell-pearl
 bluez
 bluez-utils
+bolt
+boltctl
 brightnessctl
 btrfs-progs
 calamares
@@ -74,6 +76,7 @@ pori
 power-profiles-daemon
 pwvucontrol
 python
+python-pyudev
 qt6-imageformats
 ripgrep
 rsync
@@ -91,6 +94,7 @@ udisks2
 ufw
 upower
 usbutils
+vimix-cursors
 vulkan-intel
 vulkan-radeon
 vulkan-swrast

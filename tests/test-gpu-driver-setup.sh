@@ -76,6 +76,15 @@ run_setup nvidia "$test_root/pci/0000:01:00.0"
 grep -Fqx 'nvidia_drm modeset=1' "$test_root/modprobe.log" \
     || fail "the NVIDIA DRM module was not loaded with modesetting"
 
+# Unplug and reconnect without restarting the desktop or booting again.
+rm -rf -- "$test_root/pci/0000:01:00.0" "$test_root/pci/0000:01:00.1"
+run_setup unavailable "$test_root/pci/0000:01:00.0"
+[[ "$(<"$test_root/state/gpu-driver")" == none ]] || fail "unplug left stale GPU state"
+[[ ! -s "$test_root/modprobe.log" ]] || fail "unplug tried to load a driver"
+create_pci_device 0000:01:00.0 0x10de 0x030000
+run_setup nvidia "$test_root/pci/0000:01:00.0"
+[[ "$(<"$test_root/state/gpu-driver")" == nvidia ]] || fail "reconnect did not bind NVIDIA"
+
 rm -f -- "$test_root/pci/0000:01:00.0/driver"
 run_setup unavailable "$test_root/pci/0000:01:00.0"
 [[ "$(<"$test_root/state/gpu-driver")" == unavailable ]] \

@@ -35,7 +35,7 @@ class PearlDesktopTests(unittest.TestCase):
                     (device / 'driver').symlink_to(target)
                 self.assertEqual(graphics.virtio_only(root), expected)
 
-    def test_session_driver_filter_follows_pci_hardware(self):
+    def test_session_does_not_freeze_driver_availability_at_login(self):
         source = (PROFILE / 'airootfs/etc/xdg/uwsm/env.d/60-devario-gpu.sh').read_text()
         # Run the real detector and sourced session script against fixture paths.
         cases = [
@@ -75,7 +75,7 @@ class PearlDesktopTests(unittest.TestCase):
                     ['sh', '-c', '. "$1"; printf "%s\\n" "$__EGL_VENDOR_LIBRARY_FILENAMES" "$VK_LOADER_DRIVERS_DISABLE"',
                      'gpu-env-test', str(script)], env=env, check=True, capture_output=True, text=True)
                 self.assertEqual(result.stdout.splitlines(),
-                                 [str(mesa), '*other*,*nvidia*'] if filtered else ['existing-egl', '*other*'])
+                                 ['existing-egl', '*other*'])
 
     def test_gpu_service_helper_is_executable_in_image(self):
         with tempfile.TemporaryDirectory(prefix='devario-gpu-permissions-') as temporary:
