@@ -174,8 +174,11 @@ with firmware and modesetting configuration checked before publication.
 Installations without a connected NVIDIA GPU also verify the pristine payload
 and verify or build the target's NVIDIA modules, so a later eGPU connection
 does not need a compiler or network download. They retain the disabled early-KMS
-default. See [the implementation plan](docs/CALAMARES-NVIDIA-PLAN.md)
-for scope, verification, and the future network-install integration.
+default. After the installation upgrade, Calamares verifies the resulting
+driver version against the compatible-GPU table in the signed DKMS package's
+`/usr/src/nvidia-<version>/README.md`, checks the matching utilities, headers,
+sources and firmware, and verifies or rebuilds the target modules again.
+The initial payload checks continue to use the ISO's reviewed support table.
 
 A boot service also detects NVIDIA PCI display
 controllers through sysfs, loads `nvidia_drm` with modesetting before greetd,
@@ -284,7 +287,32 @@ requirement. Live and installed systems enable `devario-core` first, followed by
 `devario-utilities`, `devario-productivity`, and `devario-libs`.
 Each repository requires package and database signatures
 verified through the existing Devario keyring. Calamares copies this configuration
-into the installed system, so configuring these repositories works offline.
+into the installed system and requires network access to finish installation.
+
+After user, network, NVIDIA, bootloader and service configuration, the last
+installation phase initializes the target keyring, runs
+`shelly sync standard --no-confirm`, then
+`shelly upgrade standard --no-confirm`. These commands run inside the installed
+target with the native RLPM backend; the live session's package state is not
+updated. Before partitioning, the installer checks access to every configured
+repository, including any edition repositories. Package and database signature
+verification remains governed by the signed runtime repository configuration.
+
+The update wrapper temporarily supplies the live system's resolved DNS
+configuration and restores the target's original file or symlink afterward,
+including on failure. It retries repository synchronization up to three times
+but never automatically retries a package upgrade. Unavailable repositories,
+signature failures, failed transactions, and failed driver or boot verification
+stop installation; there is no silent offline fallback. An interrupted resolver
+backup is retained for recovery rather than overwritten by a later attempt.
+
+After the upgrade, Calamares verifies NVIDIA modules against the installed
+driver and kernel and regenerates the boot images and systemd-boot entries.
+Only then does it unmount the target and report success. Update diagnostics,
+before/after package inventories, and `result.json` with completion status and
+repository database hashes are stored in `/var/log/devario-installer-update/`.
+The image's original package inventory remains the record of the ISO contents;
+the installed system may contain newer packages.
 
 `devario-base` supplies this configuration and storage layout. New images do
 not enable the old storage-relocation service. The historical migration utility
@@ -854,7 +882,12 @@ Before publishing an image, verify that:
    packaged UWSM session.
 8. `command -v shelly` succeeds, while `command -v pacman` and `command -v pacman-key` fail.
 9. Shelly comes from `devario-core`, uses its native RLPM backend, and runs without `devario-alpm-runtime`.
-10. Keyring initialization and a signed full system upgrade succeed.
+10. The installer completes its required final Shelly synchronization and full
+    upgrade; `/var/log/devario-installer-update/result.json` records `complete`.
+    Exercise both an image with available updates and one already current.
+    Disconnected networking is rejected before partitioning; a download,
+    signature, disk-space, driver verification or boot-hook failure during the
+    final update must prevent the installer from reporting success.
 11. Package install, local-package install, removal, provider resolution, and ALPM hooks work.
 12. A kernel, dracut, DKMS, microcode, or systemd upgrade runs Devario's ordered
     dracut generation and boot update, refreshes

@@ -153,6 +153,37 @@ class NvidiaTests(unittest.TestCase):
         with patch.object(nvidia, "output", side_effect=subprocess.CalledProcessError(1, "modinfo")):
             self.assertFalse(nvidia.modules_ready(KERNEL, VERSION))
 
+    def test_updated_driver_uses_signed_dkms_source_support_table(self):
+        self.payload()
+        version = "616.10.01"
+        self.packages.update({"nvidia-open-dkms": f"{version}-1", "nvidia-utils": f"{version}-2"})
+        readme = f"NVIDIA open kernel modules, version {version}.\n## Compatible GPUs\n" \
+                 "| GPU | PCI ID |\n| Example | 1E04 |\n| Restricted | 1E78 10DE 13D8 |\n\n## Other\n"
+        self.write(f"usr/src/nvidia-{version}/README.md", readme)
+        self.write(f"usr/src/nvidia-{version}/dkms.conf", "source")
+        for firmware in nvidia.FIRMWARE:
+            self.write(f"usr/lib/firmware/nvidia/{version}/{firmware}.zst", "firmware")
+        with patch.object(nvidia, "output", side_effect=self.payload_output):
+            self.assertEqual(nvidia.check_payload([DEVICE], self.root, updated=True), (KERNEL, version))
+            with self.assertRaisesRegex(RuntimeError, "must be 615"):
+                nvidia.check_payload([DEVICE], self.root)
+            self.packages["nvidia-utils"] = f"{VERSION}-1"
+            with self.assertRaisesRegex(RuntimeError, "must be 616"):
+                nvidia.check_payload([DEVICE], self.root, updated=True)
+            self.packages["nvidia-utils"] = f"{version}-1"
+            for bad in (readme.replace(version, VERSION), readme.replace("1E04", "FFFF"),
+                        readme.replace("## Compatible GPUs", "## Missing table")):
+                self.write(f"usr/src/nvidia-{version}/README.md", bad)
+                with self.assertRaises(RuntimeError):
+                    nvidia.check_payload([DEVICE], self.root, updated=True)
+
+    def test_updated_configuration_dispatch(self):
+        with patch.object(nvidia.sys, "argv", [str(HELPER), "--configure-updated"]), \
+                patch.object(nvidia, "detect", return_value=[DEVICE]), \
+                patch.object(nvidia, "configure") as configure:
+            nvidia.main()
+            configure.assert_called_once_with([DEVICE], updated=True)
+
     def test_dkms_order_and_failure_do_not_enable_kms(self):
         for states, failure in (([True, True], False), ([False, True], False),
                                 ([False], True), ([False, False], False)):

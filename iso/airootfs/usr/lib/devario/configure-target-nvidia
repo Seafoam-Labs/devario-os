@@ -60,11 +60,16 @@ def check_support(devices, support):
         log(f"supported GPU {device['address']} ({' '.join(ids)})")
 
 
-def check_packages(version):
+def installed_packages():
     inventory = json.loads(output("shelly", "list", "standard", "--show-hidden", "--json"))
     if not isinstance(inventory, list):
         raise RuntimeError("Shelly did not return an installed package list")
-    packages = {p["Name"]: p["Version"] for p in inventory}
+    return {p["Name"]: p["Version"] for p in inventory}
+
+
+def check_packages(version, packages=None):
+    if packages is None:
+        packages = installed_packages()
     for name in ("nvidia-open-dkms", "nvidia-utils", "dkms", "gcc", "make", "patch"):
         if name not in packages:
             raise RuntimeError(f"Offline installation payload is missing {name}")
@@ -76,11 +81,37 @@ def check_packages(version):
     return packages
 
 
-def check_payload(devices, root=Path("/")):
-    support = json.loads((root / SUPPORT.relative_to("/")).read_text())
+def updated_support(root, packages):
+    # The signed nvidia-open-dkms package carries the upstream support table
+    # with its source. Never apply the ISO's older table to a newer driver.
+    version = packages.get("nvidia-open-dkms", "").split(":")[-1].rsplit("-", 1)[0]
+    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+        raise RuntimeError("Missing or invalid installed NVIDIA driver version")
+    readme = (root / f"usr/src/nvidia-{version}/README.md").read_text()
+    if not re.search(r"\bversion\s+" + re.escape(version) + r"\.", readme):
+        raise RuntimeError("Installed NVIDIA support table does not match the driver version")
+    if "## Compatible GPUs\n" not in readme:
+        raise RuntimeError("Installed NVIDIA sources have no compatible GPU table")
+    section = readme.split("## Compatible GPUs\n", 1)[1].split("\n## ", 1)[0]
+    devices = set()
+    for line in section.splitlines():
+        fields = line.split("|")
+        if len(fields) == 4:
+            value = fields[2].strip()
+            if re.fullmatch(r"[0-9A-Fa-f]{4}(?: [0-9A-Fa-f]{4} [0-9A-Fa-f]{4})?", value):
+                devices.add(value.lower())
+    if not devices:
+        raise RuntimeError("Installed NVIDIA compatible GPU table is empty")
+    return {"driverVersion": version, "pciIds": sorted(devices)}
+
+
+def check_payload(devices, root=Path("/"), updated=False):
+    packages = installed_packages() if updated else None
+    support = (updated_support(root, packages) if updated else
+               json.loads((root / SUPPORT.relative_to("/")).read_text()))
     version = support["driverVersion"]
     check_support(devices, support)
-    packages = check_packages(version)
+    packages = check_packages(version, packages)
     # Use exactly the same kernel selection contract as prepare-target-kernel
     # and boot-update. No uname or assumptions about the running live kernel.
     kernel = output("bash", "-eu", "-c",
@@ -103,7 +134,7 @@ def check_payload(devices, root=Path("/")):
         base = root / f"usr/lib/firmware/nvidia/{version}/{firmware}"
         if not any(Path(str(base) + suffix).is_file() for suffix in ("", ".zst", ".xz")):
             raise RuntimeError(f"Missing NVIDIA firmware {base}")
-    log(f"verified offline payload for target kernel {kernel}")
+    log(f"verified {'updated' if updated else 'offline'} payload for target kernel {kernel}")
     return kernel, version
 
 
@@ -153,8 +184,8 @@ def enable_kms(config=Path("/etc/devario-dracut.conf"),
     atomic_write(config, text)
 
 
-def configure(devices):
-    kernel, version = check_payload(devices)
+def configure(devices, updated=False):
+    kernel, version = check_payload(devices, updated=True) if updated else check_payload(devices)
     if not modules_ready(kernel, version):
         log(f"building NVIDIA {version} modules for {kernel}; DKMS logs are in /var/lib/dkms")
         subprocess.run(["dkms", "autoinstall", "-k", kernel], check=True)
@@ -192,7 +223,7 @@ exec env -i HOME=/root PATH=/usr/bin:/bin LC_ALL=C \\
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_mutually_exclusive_group()
-    for name in ("preflight", "check-payload", "configure"):
+    for name in ("preflight", "check-payload", "configure", "configure-updated"):
         modes.add_argument(f"--{name}", action="store_const", const=name, dest="mode")
     mode = parser.parse_args().mode or "configure"
     if mode == "check-payload":
@@ -201,6 +232,8 @@ def main():
     devices = detect()
     if mode == "preflight":
         preflight(devices)
+    elif mode == "configure-updated":
+        configure(devices, updated=True)
     else:
         configure(devices)
 

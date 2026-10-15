@@ -1,0 +1,260 @@
+#!/usr/bin/python3 -I
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Check installer connectivity, then update only the mounted installation target."""
+import argparse
+from contextlib import contextmanager
+import glob
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+HELPER = "/usr/lib/devario/update-target-packages"
+PAYLOAD = Path("/run/devario/install-root")
+RUNTIME = Path("/run/devario-installer-update")
+EVIDENCE = Path("/var/log/devario-installer-update")
+BOOT_MARKER = Path("/var/lib/devario/systemd-boot-installed")
+
+
+def log(message):
+    print(f"Devario installer: {message}", flush=True)
+
+
+def repository_servers(root):
+    """Read Server/Include in repository order, including edition repositories."""
+    repositories = {}
+    active = set()
+    architecture = platform.machine()
+
+    def read(path, section="options"):
+        nonlocal architecture
+        path = path.resolve(strict=True)
+        if not path.is_relative_to(root.resolve()):
+            raise RuntimeError("Repository configuration escapes the installation payload")
+        if path in active:
+            raise RuntimeError("Recursive repository configuration Include")
+        active.add(path)
+        for raw in path.read_text().splitlines():
+            line = raw.split("#", 1)[0].strip()
+            if not line:
+                continue
+            if line.startswith("[") and line.endswith("]"):
+                section = line[1:-1]
+                if section != "options":
+                    repositories.setdefault(section, [])
+                continue
+            key, separator, value = line.partition("=")
+            key, value = key.strip(), value.strip()
+            if not separator:
+                continue
+            if key == "Include":
+                pattern = root / value.lstrip("/") if value.startswith("/") else path.parent / value
+                matches = sorted(glob.glob(str(pattern)))
+                if not matches:
+                    raise RuntimeError(f"Repository Include is missing: {value}")
+                for included in matches:
+                    section = read(Path(included), section)
+            elif section == "options" and key == "Architecture" and value != "auto":
+                architecture = value
+            elif section != "options" and key == "Server":
+                repositories[section].append(value)
+        active.remove(path)
+        return section
+
+    read(root / "etc/shelly.conf")
+    if not repositories:
+        raise RuntimeError("No installation repositories are configured")
+    return {name: [server.replace("$repo", name).replace("$arch", architecture)
+                   for server in servers] for name, servers in repositories.items()}
+
+
+def check_connectivity(root=PAYLOAD):
+    # A clock older than the image is almost certainly unset. TLS below also
+    # checks certificate validity, including clocks set too far into the future.
+    if time.time() + 86400 < (root / "etc/shelly.conf").stat().st_mtime:
+        raise RuntimeError("System clock predates this image; correct the time before installing")
+    for name, servers in repository_servers(root).items():
+        errors = []
+        for server in servers:
+            parsed = urllib.parse.urlsplit(server)
+            if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+                raise RuntimeError(f"Repository {name} needs an HTTPS server without embedded credentials")
+            url = server.rstrip("/") + "/" + name + ".db"
+            for attempt in range(3):
+                try:
+                    request = urllib.request.Request(url, headers={"Range": "bytes=0-0"})
+                    with urllib.request.urlopen(request, timeout=15) as response:
+                        if urllib.parse.urlsplit(response.url).scheme != "https":
+                            raise RuntimeError(f"Repository {name} redirected away from HTTPS")
+                        if not response.read(1):
+                            raise RuntimeError(f"Repository {name} returned an empty database")
+                    break
+                except (OSError, urllib.error.URLError) as error:
+                    if attempt == 2:
+                        errors.append(str(error))
+                    else:
+                        time.sleep(attempt + 1)
+            else:
+                continue
+            log(f"Repository {name} is reachable")
+            break
+        else:
+            raise RuntimeError(f"Cannot reach repository {name}; check the network and clock: {'; '.join(errors)}")
+
+
+@contextmanager
+def target_resolver(root, source=Path("/etc/resolv.conf")):
+    """Do not follow an absolute target symlink into the live filesystem."""
+    resolver = source.read_bytes()
+    if not resolver.strip():
+        raise RuntimeError("The live system has no DNS resolver configuration")
+    destination = root / "etc/resolv.conf"
+    backup = root / "etc/resolv.conf.devario-installer-backup"
+    if backup.exists() or backup.is_symlink():
+        raise RuntimeError("An interrupted installer left a resolver backup; restore it before retrying")
+    existed = destination.exists() or destination.is_symlink()
+    if existed:
+        destination.rename(backup)
+    try:
+        destination.write_bytes(resolver)
+        destination.chmod(0o644)
+        yield
+    finally:
+        destination.unlink(missing_ok=True)
+        if existed:
+            backup.rename(destination)
+
+
+def run_target(root):
+    root = root.resolve(strict=True)
+    if root == Path("/") or root == PAYLOAD.resolve() or not (root / BOOT_MARKER.relative_to("/")).is_file():
+        raise RuntimeError("Updates require an installed target with its bootloader configured")
+    subprocess.run(["findmnt", "--mountpoint", str(root)], check=True,
+                   stdout=subprocess.DEVNULL)
+    runtime = root / RUNTIME.relative_to("/")
+    runtime.mkdir(mode=0o700, parents=True, exist_ok=True)
+    (runtime / "active").touch(mode=0o600)
+    try:
+        with target_resolver(root):
+            # Calamares runs this wrapper on the live system solely to supply
+            # DNS. All package operations and hooks execute inside the target.
+            subprocess.run(["chroot", str(root), "/usr/bin/env", "-i",
+                            "HOME=/root", "USER=root", "LOGNAME=root",
+                            "PATH=/usr/bin:/usr/sbin", "LC_ALL=C.UTF-8",
+                            f"XDG_CONFIG_HOME={RUNTIME}/config",
+                            f"XDG_CACHE_HOME={RUNTIME}/cache",
+                            f"XDG_DATA_HOME={RUNTIME}/data",
+                            f"XDG_STATE_HOME={RUNTIME}/state",
+                            f"XDG_RUNTIME_DIR={RUNTIME}",
+                            HELPER, "--run-target"], check=True)
+    finally:
+        (runtime / "active").unlink(missing_ok=True)
+
+
+def update_target():
+    if not (RUNTIME / "active").is_file() or not BOOT_MARKER.is_file():
+        raise RuntimeError("This operation must be started by Calamares for a mounted target")
+    config = RUNTIME / "config/shelly/config.json"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text('{"NativePackageBackend":"rlpm"}\n')
+    EVIDENCE.mkdir(parents=True, exist_ok=True, mode=0o700)
+    status = EVIDENCE / "result.json"
+    status.write_text(json.dumps({"status": "in-progress"}) + "\n")
+    for name in ("packages-before.json", "packages-after.json"):
+        (EVIDENCE / name).unlink(missing_ok=True)
+    phase = "Initializing package trust"
+    with (EVIDENCE / "update.log").open("a", buffering=1) as transcript:
+        def run(args, capture=False):
+            transcript.write("\n$ " + " ".join(args) + "\n")
+            result = subprocess.run(args, stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.PIPE if capture else transcript,
+                                    stderr=transcript, text=True, check=True)
+            return result.stdout
+
+        def inventory(filename):
+            packages = json.loads(run(["shelly", "list", "standard", "--show-hidden", "--json"], True))
+            if not isinstance(packages, list) or not packages or any(
+                    not isinstance(p, dict) or not p.get("Name") or not p.get("Version") for p in packages):
+                raise RuntimeError("Shelly returned an invalid installed package inventory")
+            (EVIDENCE / filename).write_text(json.dumps(packages, sort_keys=True, indent=2) + "\n")
+
+        try:
+            log(phase)
+            run(["shelly", "keyring", "init"])
+            run(["shelly", "keyring", "populate", "devario-core"])
+            inventory("packages-before.json")
+            phase = "Synchronizing Shelly repositories"
+            log(phase)
+            # Retry only synchronization, never a package transaction.
+            for attempt in range(3):
+                try:
+                    run(["shelly", "sync", "standard", "--no-confirm"])
+                    break
+                except subprocess.CalledProcessError:
+                    if attempt == 2:
+                        raise
+                    time.sleep(attempt + 1)
+            phase = "Updating installed packages"
+            log(phase)
+            run(["shelly", "upgrade", "standard", "--no-confirm"])
+            inventory("packages-after.json")
+            phase = "Verifying updated drivers and rebuilding boot files"
+            log(phase)
+            run(["/usr/lib/devario/configure-target-nvidia", "--configure-updated"])
+            run(["/usr/lib/devario/boot-update"])
+            # Repopulate after an upgrade that may have delivered newer keys.
+            run(["shelly", "keyring", "populate", "devario-core"])
+            databases = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                         for p in sorted(Path("/var/lib/shelly/sync").glob("*.db"))}
+            if not databases:
+                raise RuntimeError("No synchronized Shelly repository databases were found")
+            phase = "Stopping target keyring agents before unmounting"
+            run(["gpgconf", "--homedir", "/etc/shelly.d/gnupg", "--kill", "all"])
+            status.write_text(json.dumps({"status": "complete", "completedAt": int(time.time()),
+                                          "databases": databases}, sort_keys=True, indent=2) + "\n")
+            log(f"System updates and boot verification completed; logs: {EVIDENCE}")
+        except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
+            # A daemon left in the chroot can keep its mounts busy. Clean up on
+            # failed transactions too, retaining the original failure reason.
+            try:
+                run(["gpgconf", "--homedir", "/etc/shelly.d/gnupg", "--kill", "all"])
+            except (OSError, subprocess.CalledProcessError) as cleanup_error:
+                transcript.write(f"Could not stop target keyring agents: {cleanup_error}\n")
+            status.write_text(json.dumps({"status": "failed", "phase": phase, "error": str(error)}) + "\n")
+            transcript.flush()
+            with (EVIDENCE / "update.log").open("rb") as reader:
+                reader.seek(max(0, reader.seek(0, 2) - 8192))
+                print(reader.read().decode(errors="replace"), file=sys.stderr)
+            raise RuntimeError(f"{phase} failed. Installation is incomplete. Logs: {EVIDENCE}") from error
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--preflight", action="store_true")
+    mode.add_argument("--target", type=Path)
+    mode.add_argument("--run-target", action="store_true")
+    args = parser.parse_args()
+    if os.geteuid() != 0:
+        raise RuntimeError("The installer update helper requires root")
+    if args.preflight:
+        check_connectivity()
+    elif args.target is not None:
+        run_target(args.target)
+    else:
+        update_target()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
+        print(f"Devario installation update failed: {error}", file=sys.stderr)
+        sys.exit(1)
