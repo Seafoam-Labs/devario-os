@@ -6,6 +6,37 @@ from pathlib import Path
 import re
 import sys
 
+# Variables that pick *which GPU* is used. Always cleared, so a stale value
+# inherited from the compositor or an older login cannot override the choice.
+SELECTION_VARIABLES = (
+    'DRI_PRIME', 'MESA_VK_DEVICE_SELECT', 'MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE',
+    '__NV_PRIME_RENDER_OFFLOAD', '__NV_PRIME_RENDER_OFFLOAD_PROVIDER',
+    '__GLX_VENDOR_LIBRARY_NAME', '__VK_LAYER_NV_optimus',
+)
+
+# Variables that pick *which driver files* are loaded. Cleared only when an
+# explicit GPU is selected and this script sets its own driver filter; in
+# "auto" mode they are left alone (users set them on purpose, e.g. to prefer
+# RADV over AMDVLK).
+DRIVER_FILTER_VARIABLES = (
+    '__EGL_VENDOR_LIBRARY_FILENAMES', '__EGL_VENDOR_LIBRARY_DIRS',
+    'VK_LOADER_DRIVERS_DISABLE', 'VK_LOADER_DRIVERS_SELECT',
+    'VK_LOADER_DRIVERS_ENABLE', 'VK_DRIVER_FILES', 'VK_ICD_FILENAMES',
+    'VK_ADD_DRIVER_FILES', 'MESA_LOADER_DRIVER_OVERRIDE',
+)
+
+# Kernel driver -> Mesa Vulkan ICD manifest glob (None: no Vulkan driver).
+MESA_DRIVERS = {
+    'amdgpu': '*radeon_icd*',      # RADV, never AMDVLK
+    'radeon': None,                # GCN1/2 on radeon.ko: OpenGL only
+    'i915': '*intel*_icd*',        # ANV and HASVK
+    'xe': '*intel_icd*',
+    'nouveau': '*nouveau_icd*',    # NVK
+}
+
+DEVICE_SELECT_LAYER = 'VkLayer_MESA_device_select.json'
+LAYER_DIRS = ('/usr/share/vulkan/implicit_layer.d', '/etc/vulkan/implicit_layer.d')
+
 
 def devices(root=Path('/sys/bus/pci/devices')):
     result = []
@@ -14,62 +45,97 @@ def devices(root=Path('/sys/bus/pci/devices')):
             if not device.joinpath('class').read_text().strip().startswith('0x03'):
                 continue
             vendor = device.joinpath('vendor').read_text().strip().lower()
+            device_id = device.joinpath('device').read_text().strip().lower()
             driver = device.joinpath('driver').resolve(strict=True).name
         except (FileNotFoundError, PermissionError):
             continue
-        result.append((device.name, vendor, driver))
+        result.append((device.name, vendor, device_id, driver))
     return result
 
 
-def launch_environment(selection, available, inherited):
+def warn(message):
+    print(f'devario-gpu-run: warning: {message}', file=sys.stderr)
+
+
+def has_device_select_layer(layer_dirs=LAYER_DIRS):
+    return any(Path(directory, DEVICE_SELECT_LAYER).is_file() for directory in layer_dirs)
+
+
+def launch_environment(selection, available, inherited, layer_dirs=LAYER_DIRS):
     environment = dict(inherited)
-    # An explicit app selection supersedes inherited driver filters, including
-    # those in terminals launched directly by the compositor or an older login.
-    for name in ('__EGL_VENDOR_LIBRARY_FILENAMES', '__EGL_VENDOR_LIBRARY_DIRS',
-                 'VK_LOADER_DRIVERS_DISABLE', 'VK_LOADER_DRIVERS_SELECT',
-                 'VK_LOADER_DRIVERS_ENABLE', 'VK_DRIVER_FILES', 'VK_ICD_FILENAMES',
-                 'VK_ADD_DRIVER_FILES', 'MESA_LOADER_DRIVER_OVERRIDE',
-                 'MESA_VK_DEVICE_SELECT', 'DRI_PRIME', '__NV_PRIME_RENDER_OFFLOAD',
-                 '__NV_PRIME_RENDER_OFFLOAD_PROVIDER', '__GLX_VENDOR_LIBRARY_NAME',
-                 '__VK_LAYER_NV_optimus'):
+    for name in SELECTION_VARIABLES:
         environment.pop(name, None)
     if selection == 'auto':
         return environment
+    for name in DRIVER_FILTER_VARIABLES:
+        environment.pop(name, None)
+
     if selection == 'nvidia':
         if not any(vendor == '0x10de' and driver == 'nvidia'
-                   for _, vendor, driver in available):
+                   for _, vendor, _, driver in available):
             raise ValueError('No NVIDIA display controller is bound to the NVIDIA driver')
         environment.update(__NV_PRIME_RENDER_OFFLOAD='1',
                            __GLX_VENDOR_LIBRARY_NAME='nvidia',
                            __VK_LAYER_NV_optimus='NVIDIA_only')
-    else:
-        if not re.fullmatch(r'[0-9a-fA-F]{4}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-7]', selection):
-            raise ValueError('Choose auto, nvidia, or a Mesa GPU PCI address from --list')
-        selected = next((item for item in available if item[0] == selection.lower()), None)
-        if selected is None or selected[2] not in ('amdgpu', 'radeon', 'i915', 'xe', 'nouveau'):
-            raise ValueError('Selected PCI address is not a bound Mesa display controller')
-        environment['DRI_PRIME'] = 'pci-' + selection.lower().replace(':', '_').replace('.', '_')
+        return environment
+
+    if not re.fullmatch(r'[0-9a-fA-F]{4}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-7]', selection):
+        raise ValueError('Choose auto, nvidia, or a Mesa GPU PCI address from --list')
+    address = selection.lower()
+    selected = next((item for item in available if item[0] == address), None)
+    if selected is None or selected[3] not in MESA_DRIVERS:
+        raise ValueError('Selected PCI address is not a bound Mesa display controller')
+    _, vendor, device_id, driver = selected
+
+    # OpenGL/EGL (and the Vulkan device_select layer) honour DRI_PRIME.
+    environment['DRI_PRIME'] = 'pci-' + address.replace(':', '_').replace('.', '_')
+
+    icd = MESA_DRIVERS[driver]
+    if icd is None:
+        warn(f'{address} uses the {driver} kernel driver, which has no Vulkan support; '
+             'Vulkan/Proton games will fail or run on another GPU '
+             '(amdgpu.si_support=1 / amdgpu.cik_support=1 moves the card to amdgpu)')
+        return environment
+
+    # Vulkan: load only the Mesa driver for this GPU (no AMDVLK duplicates) and
+    # make the selected device the only default, not just the first in the list.
+    environment['VK_LOADER_DRIVERS_SELECT'] = icd
+    pci_id = f'{vendor[2:]}:{device_id[2:]}'
+    if sum(1 for _, v, d, _ in available if (v, d) == (vendor, device_id)) == 1:
+        environment['MESA_VK_DEVICE_SELECT'] = pci_id
+    environment['MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE'] = '1'
+    if not has_device_select_layer(layer_dirs):
+        warn('Mesa device_select Vulkan layer is not installed (vulkan-mesa-layers); '
+             'Vulkan applications may ignore the selected GPU')
     return environment
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--list', action='store_true', help='list bound display controllers')
+    parser.add_argument('--no-dcc', action='store_true',
+                        help='disable AMD delta colour compression (diagnoses rendering corruption)')
     parser.add_argument('gpu', nargs='?', help='auto, nvidia, or a Mesa GPU PCI address')
     parser.add_argument('command', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     available = devices()
     if args.list:
-        for address, vendor, driver in available:
-            print(f'{address}  vendor={vendor}  driver={driver}')
-        return
+        for address, vendor, device_id, driver in available:
+            print(f'{address}  id={vendor[2:]}:{device_id[2:]}  driver={driver}')
+        return 0
     command = args.command
     if command[:1] == ['--']:
         command = command[1:]
     if not args.gpu or not command:
-        parser.error('usage: devario-gpu-run GPU -- COMMAND [ARG ...]')
+        parser.error('usage: devario-gpu-run [--no-dcc] GPU -- COMMAND [ARG ...]')
     try:
         environment = launch_environment(args.gpu, available, os.environ)
+        if args.no_dcc:
+            for name in ('AMD_DEBUG', 'RADV_DEBUG'):
+                flags = [f for f in environment.get(name, '').split(',') if f]
+                if 'nodcc' not in flags:
+                    flags.append('nodcc')
+                environment[name] = ','.join(flags)
         os.execvpe(command[0], command, environment)
     except (ValueError, OSError) as error:
         print(f'devario-gpu-run: {error}', file=sys.stderr)
