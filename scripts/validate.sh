@@ -145,6 +145,8 @@ required_files=(
   "$project_dir/packages/calamares/0001-devario-wayland-runtime.patch"
   "$project_dir/packages/ckbcomp/PKGBUILD"
   "$project_dir/packages/devario-base/PKGBUILD"
+  "$project_dir/packages/devario-filesystem/profile"
+  "$project_dir/tests/test-filesystem-profile.py"
   "$project_dir/packages/devario-base/shelly.conf"
   "$project_dir/packages/devario-base/shelly-storage-migrate"
   "$project_dir/packages/devario-base/shelly-storage-migrate.service"
@@ -269,6 +271,7 @@ done < <(
   find "$project_dir/packages" -mindepth 2 -maxdepth 2 -type f -name PKGBUILD -print
   printf '%s\n' "$project_dir/scripts/lib/edition.sh"
   printf '%s\n' "$profile_dir/late-airootfs/etc/skel/.bashrc"
+  printf '%s\n' "$project_dir/packages/devario-filesystem/profile"
   printf '%s\n' "$profile_dir/airootfs/etc/xdg/uwsm/env.d/60-devario-gpu.sh"
   for boot_helper in kernel.sh kernel-command-line initramfs-update boot-update systemd-boot-update kernel-reboot-notify module-setup.sh live-root.sh install-root.sh verify-live-image; do
     printf '%s\n' "$project_dir/packages/devario-boot/$boot_helper"
@@ -315,6 +318,9 @@ if ! DEVARIO_PROFILE_DIR="$profile_dir" python3 "$project_dir/tests/test-systemd
 fi
 if ! python3 "$project_dir/tests/test-kernel-reboot-notify.py"; then
   fail "Kernel reboot notification tests failed"
+fi
+if ! python3 "$project_dir/tests/test-filesystem-profile.py"; then
+  fail "Filesystem login profile tests failed"
 fi
 if ! python3 "$project_dir/tests/test-stage-core-repository.py"; then
   fail "Repository staging and provider selection tests failed"
