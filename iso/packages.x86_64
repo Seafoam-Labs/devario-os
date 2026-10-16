@@ -23,6 +23,7 @@ devario-dracut
 devario-filesystem
 devario-keyring
 devario-plymouth-theme
+devario-welcome
 dmidecode
 dosfstools
 e2fsprogs
