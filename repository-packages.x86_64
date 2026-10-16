@@ -212,6 +212,7 @@ zstd
 # Upstream packages formerly sourced from Arch extra; retain source provenance.
 abseil-cpp
 accountsservice
+adw-gtk3
 adwaita-cursors
 adwaita-fonts
 adwaita-icon-theme

@@ -453,7 +453,7 @@ for required_package in \
   aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous \
   calamares ckbcomp devario-desktop \
   devario-base devario-boot devario-dracut devario-keyring greetd systemd pearl pearl-greeter shelly fastfetch fish \
-  chafa imagemagick ghostty gnome-keyring seahorse upower power-profiles-daemon papirus-icon-theme vimix-cursors \
+  chafa imagemagick ghostty gnome-keyring seahorse upower power-profiles-daemon adw-gtk3 papirus-icon-theme vimix-cursors \
   strace ripgrep vulkan-tools mesa-utils wayland-utils usbutils lsof nvme-cli netcat matugen \
   linux-devario linux-devario-headers nvidia-open-dkms nvidia-utils \
   vulkan-intel vulkan-radeon vulkan-swrast vulkan-virtio xorg-xwayland; do

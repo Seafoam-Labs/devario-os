@@ -88,6 +88,22 @@ the ISO. UWSM, GTK, and GSettings defaults select the `Vimix` theme at size 24;
 new users also receive editable Aqueous cursor settings. Personal cursor
 choices take precedence over the session and toolkit defaults.
 
+The live ISO and fresh installations use `adw-gtk3` as the GTK 3/4 base theme.
+Build and publish `devario-core/adw-gtk3` 6.5-1 from
+`devario-custom-packagbuilds` before rebuilding the ISO. GTK and GSettings
+defaults select the theme; Pearl's first-session GTK Material profile layers
+generated colors over it using the included Matugen. Existing user preferences
+take precedence.
+
+Papirus is the default icon theme. Publish `papirus-icon-theme` 20260801-2 from
+`devario-custom-packagbuilds` before rebuilding the ISO. Papirus supplies the
+GSettings default, compiled by the existing GLib transaction hook. This package
+update delivers the default to existing installations. The ISO overlays select
+the same theme for fresh installations. Explicit user theme choices take
+precedence; log out and back
+in after upgrading to refresh running applications. The legacy
+`devario-aqueous-desktop` 1-16 package also requires the updated Papirus package.
+
 Fastfetch uses a persistent system default at `/etc/xdg/fastfetch/config.jsonc`,
 linked to the shared Devario configuration and fish logo under
 `/usr/share/devario/fastfetch/`. Both plain `fastfetch` and the Bash/Fish welcome
