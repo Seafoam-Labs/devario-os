@@ -7,7 +7,6 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
-from unittest.mock import patch
 
 PROJECT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('stage_iso', PROJECT / 'scripts/stage-iso-repositories.py')
@@ -39,9 +38,10 @@ class RepositorySelectionTests(unittest.TestCase):
     def test_lower_priority_copy_cannot_override_core_version(self):
         sources = [source('devario-core', [package('lib', version='1')]),
                    source('devario-libs', [package('lib', 'devario-libs', version='2')])]
-        with patch.object(stage.audit, 'compare_versions', side_effect=lambda a, b: int(a) - int(b)):
-            _, _, missing = stage.select_packages(sources, ['lib>=2'], [], [])
-        self.assertEqual(missing, {'lib>=2': ['ISO package list']})
+        _, selected, missing = stage.select_packages(sources, ['lib>=2'], [], [])
+        self.assertFalse(missing)  # Version satisfaction belongs to Shelly.
+        self.assertEqual(selected['lib']['repository'], 'devario-core')
+        self.assertEqual(selected['lib']['version'], '1')
 
     def test_local_installer_metadata_replaces_old_runtime_dependencies(self):
         sources = [source('devario-core', [package('calamares', depends=['obsolete'])]),

@@ -1,0 +1,154 @@
+#!/usr/bin/python3 -I
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Carry Calamares's installed XKB selection into Aqueous's system defaults."""
+import argparse
+import datetime
+import json
+import os
+from pathlib import Path
+import re
+import shlex
+import sys
+import tempfile
+import tomllib
+
+XORG = "etc/X11/xorg.conf.d/00-keyboard.conf"
+INPUT = "etc/xdg/aqueous/input.toml"
+KEYS = {"xkblayout": "xkb_layout", "xkbvariant": "xkb_variant", "xkboptions": "xkb_options"}
+
+
+def keyboard_selection(source):
+    """Read Xorg data, never source it as shell code or use the live keymap."""
+    section = None
+    selected = {}
+    candidates = []
+    for number, line in enumerate(source.splitlines(), 1):
+        tokens = shlex.split(line, comments=True)
+        if not tokens:
+            continue
+        directive = tokens[0].lower()
+        if directive == "section":
+            if section is not None or len(tokens) != 2:
+                raise ValueError(f"Invalid Xorg Section at line {number}")
+            section = tokens[1].lower()
+            selected = {}
+        elif directive == "endsection":
+            if section is None or len(tokens) != 1:
+                raise ValueError(f"Invalid Xorg EndSection at line {number}")
+            if section == "inputclass" and selected:
+                candidates.append(selected)
+            section = None
+        elif section == "inputclass" and directive == "option" and len(tokens) >= 2:
+            key = KEYS.get(tokens[1].lower())
+            if key is not None:
+                if len(tokens) != 3 or key in selected:
+                    raise ValueError(f"Invalid or duplicate {tokens[1]} at line {number}")
+                selected[key] = tokens[2]
+    if section is not None:
+        raise ValueError("Unterminated Xorg Section")
+    if len(candidates) != 1 or not candidates[0].get("xkb_layout", "").strip():
+        raise ValueError("Expected exactly one InputClass with a nonempty XkbLayout")
+    return {key: candidates[0].get(key, "") for key in KEYS.values()}
+
+
+def toml_string(value):
+    return json.dumps(value, ensure_ascii=False).replace("\x7f", "\\u007f")
+
+
+def toml_key(value):
+    return value if re.fullmatch(r"[A-Za-z0-9_-]+", value) else toml_string(value)
+
+
+def toml_value(value):
+    if isinstance(value, str):
+        return toml_string(value)
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value).lower()
+    if isinstance(value, (datetime.datetime, datetime.date, datetime.time)):
+        return value.isoformat()
+    if isinstance(value, list):
+        return "[" + ", ".join(toml_value(item) for item in value) + "]"
+    if isinstance(value, dict):
+        return "{ " + ", ".join(f"{toml_key(key)} = {toml_value(item)}"
+                                  for key, item in value.items()) + " }"
+    raise ValueError(f"Unsupported TOML value: {type(value).__name__}")
+
+
+def render_config(config):
+    """Preserve TOML values and table structure, including tablet rule arrays.
+
+    Formatting is normalized; bare keys and section names keep the output
+    compatible with Aqueous's input parser. No external TOML writer is needed.
+    """
+    lines = []
+
+    def tables(items):
+        return isinstance(items, list) and bool(items) and all(isinstance(v, dict) for v in items)
+
+    def emit(table, path=()):
+        for key, value in table.items():
+            if not isinstance(value, dict) and not tables(value):
+                lines.append(f"{toml_key(key)} = {toml_value(value)}")
+        for key, value in table.items():
+            child = (*path, key)
+            name = ".".join(toml_key(part) for part in child)
+            if isinstance(value, dict):
+                lines.extend(("", f"[{name}]"))
+                emit(value, child)
+            elif tables(value):
+                for item in value:
+                    lines.extend(("", f"[[{name}]]"))
+                    emit(item, child)
+
+    emit(config)
+    result = "\n".join(lines).lstrip("\n") + "\n"
+    tomllib.loads(result)
+    return result
+
+
+def configure(root):
+    selection = keyboard_selection((root / XORG).read_text(encoding="utf-8"))
+    target = root / INPUT
+    config = tomllib.loads(target.read_text(encoding="utf-8")) if target.exists() else {}
+    inputs = config.setdefault("input", {})
+    if not isinstance(inputs, dict):
+        raise ValueError("Aqueous input configuration must contain an [input] table")
+    inputs.update(selection)
+    content = render_config(config)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    # Replace only after parsing and rendering succeed. Readers see either
+    # the complete old file or the complete new file, never a partial write.
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=target.parent,
+                                         prefix=".input.toml.", delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(content)
+            stream.flush()
+            os.fchmod(stream.fileno(), 0o644)
+            os.fsync(stream.fileno())
+        os.replace(temporary, target)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return selection
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", type=Path, default=Path("/"),
+                        help="installed root (default: / inside Calamares's target chroot)")
+    args = parser.parse_args()
+    try:
+        selection = configure(args.root)
+    except (OSError, ValueError) as error:
+        print(f"Devario keyboard: cannot configure {INPUT}: {error}", file=sys.stderr)
+        return 1
+    print(f"Devario keyboard: installed Aqueous XKB defaults: {selection}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

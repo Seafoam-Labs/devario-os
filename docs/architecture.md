@@ -17,7 +17,7 @@ the Community edition.
 ```mermaid
 flowchart LR
     Build["Package and ISO build"] --> Repo["Signed Devario repository"]
-    Repo --> Shelly["Shelly + libalpm runtime"]
+    Repo --> Shelly["Shelly native RLPM backend"]
     Profile["Devario ISO profile"] --> Image["Community live and install image"]
     Repo --> Image
     Image --> System["Installed Devario system"]
@@ -48,6 +48,12 @@ them.
 
 The build validates this boundary, checks requested versus installed package
 inventories, and rejects dormant process calls to Pacman-family executables.
+Repository preflight checks package and provider names and repository priority.
+It does not compare package versions or load a package-manager library. Shelly
+validates version constraints, provider compatibility and conflicts when it
+prepares the build-root and image installation transactions. A preflight report's
+`complete` field means all dependency names are present, not that installation
+has been validated; its `scope` field records this distinction.
 Shelly reads `/etc/shelly.conf`, stores its local and synchronization databases
 under `/var/lib/shelly`, caches packages under `/var/cache/shelly/pkg`, and
 uses `/etc/shelly.d` for its mutable keyring and local hooks. Public keyring
