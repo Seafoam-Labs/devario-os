@@ -225,7 +225,7 @@ applies to the newly launched process, not an already-running application or
 compositor. Physical hot-plug, external-monitor, suspend/resume, and removal
 acceptance testing is still required before claiming seamless eGPU support.
 Build and publish `bolt`, `boltctl`, `python-pyudev`, and
-`devario-aqueous-desktop` 1-14 or newer when using the legacy desktop package.
+`devario-aqueous-desktop` 1-15 or newer when using the legacy desktop package.
 
 The live ISO and installed system use Plymouth with the Devario theme. The
 late image overlay selects `Theme=devario` in `/etc/plymouth/plymouthd.conf`,
