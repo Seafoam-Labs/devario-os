@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 pkgname=devario-filesystem
 pkgver=1
-pkgrel=2
+pkgrel=3
 pkgdesc="Devario filesystem hierarchy and distribution identity"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -13,6 +13,8 @@ backup=('etc/os-release' 'etc/issue' 'etc/hosts' 'etc/fstab' 'etc/crypttab'
         'etc/passwd' 'etc/group' 'etc/shadow' 'etc/gshadow' 'etc/nsswitch.conf'
         'etc/profile' 'etc/shells' 'etc/ld.so.conf' 'etc/resolv.conf'
         'etc/subuid' 'etc/subgid')
+source=('profile')
+sha256sums=('f7ced3aa3910abcb439a5e4cdf6d87602a6b4d4c4594f8470f403aa7e11b2e0f')
 
 package() {
   local dir
@@ -50,9 +52,7 @@ package() {
   printf 'passwd: files systemd\ngroup: files [SUCCESS=merge] systemd\nshadow: files systemd\ngshadow: files systemd\nhosts: mymachines resolve [!UNAVAIL=return] files myhostname dns\nnetworks: files\nprotocols: files\nservices: files\nethers: files\nrpc: files\n' > "$pkgdir/etc/nsswitch.conf"
   printf '/bin/sh\n/bin/bash\n/usr/bin/sh\n/usr/bin/bash\n' > "$pkgdir/etc/shells"
   printf 'include /etc/ld.so.conf.d/*.conf\ninclude /usr/lib/ld.so.conf.d/*.conf\n' > "$pkgdir/etc/ld.so.conf"
-  printf '%s\n' 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/bin' \
-    'for profile in /etc/profile.d/*.sh; do' \
-    '  [ ! -r "$profile" ] || . "$profile"' 'done' 'unset profile' > "$pkgdir/etc/profile"
+  install -Dm644 "$srcdir/profile" "$pkgdir/etc/profile"
   for dir in fstab crypttab resolv.conf subuid subgid; do
     : > "$pkgdir/etc/$dir"
   done

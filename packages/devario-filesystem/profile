@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/bin
+
+# Package profile scripts use this helper to add paths without duplicates.
+append_path() {
+  case ":${PATH}:" in
+    *:"$1":*) ;;
+    *) PATH="${PATH:+${PATH}:}$1" ;;
+  esac
+}
+
+for profile in /etc/profile.d/*.sh; do
+  [ ! -r "$profile" ] || . "$profile"
+done
+
+unset profile
+unset -f append_path
