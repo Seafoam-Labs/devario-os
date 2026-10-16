@@ -85,6 +85,16 @@ live session and new installed users. The late ISO overlay supplies
 `~/.config/aqueous/layout.toml` through `/etc/skel`. Rebuild the ISO to include
 these defaults; users can change their layout through Pearl settings.
 
+Desktop icons are enabled for the live session and new installed users through
+the Pearl preferences in `/etc/skel`. UWSM initializes localized XDG user folders
+before Pearl starts. The live desktop includes an **Install Devario** shortcut
+that opens Calamares through the existing Wayland-aware installer launcher.
+Live-session setup seeds Pearl's approval for that shortcut's exact location and
+contents once; later edits require approval again. The shortcut and its approval
+stay in the live user's home, which Calamares removes during installation along
+with the setup helper. Existing users keep their preferences. Rebuild the ISO
+with a Pearl package supporting `desktop_icons` to deliver these defaults.
+
 Vimix is the default cursor for the live session, login screen, and new
 installations. Build and publish `devario-core/vimix-cursors` before rebuilding
 the ISO. UWSM, GTK, and GSettings defaults select the `Vimix` theme at size 24;

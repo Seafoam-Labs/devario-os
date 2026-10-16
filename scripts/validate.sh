@@ -116,6 +116,9 @@ required_files=(
   "$project_dir/tests/test-live-installer.js"
   "$project_dir/tests/test-start-installer.py"
   "$profile_dir/airootfs/usr/lib/devario/start-installer"
+  "$profile_dir/airootfs/usr/lib/devario/prepare-live-desktop"
+  "$profile_dir/airootfs/etc/xdg/uwsm/env.d/55-devario-user-dirs.sh"
+  "$profile_dir/late-airootfs/etc/skel/.config/pearl/preferences.json"
   "$profile_dir/late-airootfs/usr/share/applications/calamares.desktop"
   "$profile_dir/airootfs/etc/xdg/uwsm/env.d/60-devario-gpu.sh"
   "$profile_dir/airootfs/etc/calamares/modules/services-systemd.conf"
@@ -331,7 +334,7 @@ fi
 if ! python3 "$project_dir/tests/test-stage-iso-repositories.py"; then
   fail "Multi-repository ISO staging tests failed"
 fi
-if ! python3 "$project_dir/tests/test-pearl-desktop.py"; then
+if ! DEVARIO_PROFILE_DIR="$profile_dir" python3 "$project_dir/tests/test-pearl-desktop.py"; then
   fail "Pearl desktop and live login integration tests failed"
 fi
 if ! python3 "$project_dir/tests/test-qemu-graphics.py"; then
@@ -1191,9 +1194,12 @@ if [[ -n "$legacy_desktop_references" ]]; then
   echo "$legacy_desktop_references" >&2
   fail "the Devario ISO profile retains a legacy desktop or greeter reference"
 fi
-if [[ -e "$profile_dir/airootfs/etc/skel/Desktop/install-devario.desktop" ]]; then
-  fail "the live installer must be discovered through Pearl, not an XFCE desktop folder"
-fi
+for overlay in airootfs late-airootfs; do
+  if find "$profile_dir/$overlay/etc/skel" -type f \
+    \( -name install-devario.desktop -o -name desktop-launchers.json \) -print 2>/dev/null | grep -q .; then
+    fail "the installer shortcut and its approval must be seeded only in the live user's home"
+  fi
+done
 if [[ ! -f "$live_installer_desktop" ]]; then
   fail "the Pearl launcher is missing the Install Devario desktop entry"
 fi

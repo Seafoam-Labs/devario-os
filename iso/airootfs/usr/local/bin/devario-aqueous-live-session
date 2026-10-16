@@ -2,4 +2,5 @@
 
 # greetd's one-shot live autologin enters the same UWSM lifecycle advertised
 # by the installed Aqueous Wayland session.
+/usr/lib/devario/prepare-live-desktop || printf '%s\n' 'Could not prepare the live installer desktop shortcut.' >&2
 exec /usr/bin/uwsm start -- aqueous-wm

@@ -1,5 +1,6 @@
 #!/usr/bin/python3 -I
 """Exercise the real desktop only when a QEMU acceptance request is present."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -8,6 +9,7 @@ import shutil
 import stat
 import subprocess
 import time
+from urllib.parse import unquote, urlsplit
 
 REQUEST = Path('/sys/firmware/qemu_fw_cfg/by_name/opt/org.devario/desktop/raw')
 
@@ -78,6 +80,30 @@ def main():
         ['pgrep', '-u', str(account.pw_uid), '-x', shell],
         stdout=subprocess.DEVNULL).returncode == 0)
     if phase == 'live':
+        def pearl_preferences():
+            reply = client('pearlctl', 'preferences', 'status', check=False)
+            try:
+                result = json.loads(reply)['result']
+                return result if 'preferences' in result and not result.get('busy') else None
+            except (ValueError, KeyError, TypeError):
+                return None
+        preferences = wait_for('Pearl preferences', pearl_preferences)
+        if preferences.get('err'):
+            raise RuntimeError(f"Pearl could not load the desktop defaults: {preferences['err']}")
+        if not preferences['preferences']['desktop_icons']['enabled']:
+            raise RuntimeError('Pearl has not enabled desktop icons')
+        desktop = Path(client('xdg-user-dir', 'DESKTOP').rstrip('\n'))
+        shortcut = desktop / 'install-devario.desktop'
+        if shortcut.is_symlink() or not shortcut.is_file():
+            raise RuntimeError('the live installer desktop shortcut is missing or a symlink')
+        if shortcut.read_bytes() != Path('/usr/share/applications/install-devario.desktop').read_bytes():
+            raise RuntimeError('the desktop shortcut differs from the shipped installer launcher')
+        approvals = json.loads((Path(account.pw_dir) / '.local/state/pearl/desktop-launchers.json').read_text())
+        digest = list(hashlib.sha256(shortcut.read_bytes()).hexdigest().encode('ascii'))
+        if not any(unquote(urlsplit(entry['uri']).path) == str(shortcut) and entry['digest'] == digest
+                   for entry in approvals['approvals']):
+            raise RuntimeError('Pearl has no matching approval for the installer shortcut')
+        print('Live installer desktop shortcut and Pearl approval verified', flush=True)
         log = (runtime / 'aqueous-wm.log').read_text()
         if any(message in log for message in (
                 'VulkanRendererUnavailable', 'RendererCreateFailed',
@@ -85,7 +111,7 @@ def main():
             raise RuntimeError('the live compositor logged a Vulkan startup failure')
         launcher = subprocess.Popen(
             ['runuser', '-u', account.pw_name, '--', 'env', *environment,
-             '/usr/lib/devario/start-installer'])
+             'gio', 'launch', str(shortcut)])
         try:
             def installer_window():
                 windows = json.loads(client('aqueousctl', 'windows', '--json'))

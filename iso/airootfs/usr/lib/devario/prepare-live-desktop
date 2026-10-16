@@ -1,0 +1,72 @@
+#!/usr/bin/python3 -I
+"""Seed only the distribution's installer shortcut before the live shell starts."""
+import hashlib
+import json
+import os
+from pathlib import Path
+import pwd
+import subprocess
+import tempfile
+from urllib.parse import quote_from_bytes
+
+SOURCE = Path('/usr/share/applications/install-devario.desktop')
+LIVE = Path('/run/devario/live')
+
+
+def atomic_write(path, contents):
+    fd, temporary = tempfile.mkstemp(prefix=f'.{path.name}.', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(contents)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def seed_shortcut(desktop, state_dir, source=SOURCE):
+    marker = state_dir / 'devario-installer-shortcut.seeded'
+    shortcut = desktop / source.name
+    # Relogin must not restore a deleted shortcut or approve an edited one.
+    if marker.exists() or os.path.lexists(shortcut):
+        return
+    contents = source.read_bytes()
+    approvals_path = state_dir / 'desktop-launchers.json'
+    approvals = {'version': 1, 'approvals': []}
+    if approvals_path.exists():
+        approvals = json.loads(approvals_path.read_text())
+        if approvals.get('version') != 1 or not isinstance(approvals.get('approvals'), list):
+            raise ValueError('Unsupported Pearl launcher approval document')
+    # Match GIO's filename URI escaping (Path.as_uri escapes more punctuation).
+    uri = 'file://' + quote_from_bytes(os.fsencode(shortcut), safe="/!$&'()*+,=:@")
+    approvals['approvals'] = [entry for entry in approvals['approvals'] if entry['uri'] != uri]
+    # Pearl stores SHA-256 lowercase hex as a Zig [64]u8 JSON array.
+    approvals['approvals'].append({
+        'uri': uri,
+        'digest': list(hashlib.sha256(contents).hexdigest().encode('ascii')),
+    })
+    state_dir.mkdir(parents=True, exist_ok=True)
+    desktop.mkdir(parents=True, exist_ok=True)
+    # Exclusive creation prevents following or replacing a pre-existing symlink.
+    with shortcut.open('xb') as stream:
+        stream.write(contents)
+    atomic_write(approvals_path, (json.dumps(approvals) + '\n').encode())
+    atomic_write(marker, b'1\n')
+
+
+def main():
+    if pwd.getpwuid(os.getuid()).pw_name != 'liveuser' or not LIVE.exists():
+        return
+    subprocess.run(['/usr/bin/xdg-user-dirs-update'], check=True)
+    desktop = Path(subprocess.check_output(['/usr/bin/xdg-user-dir', 'DESKTOP'], text=True).rstrip('\n'))
+    home = Path.home()
+    if not desktop.is_absolute() or desktop.resolve() in (home.resolve(), Path('/')):
+        return  # Honor a disabled Desktop directory; never populate HOME.
+    state_home = Path(os.environ.get('XDG_STATE_HOME') or home / '.local/state')
+    seed_shortcut(desktop, state_home / 'pearl')
+
+
+if __name__ == '__main__':
+    main()

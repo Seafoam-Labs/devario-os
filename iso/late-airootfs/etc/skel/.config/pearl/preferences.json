@@ -1,5 +1,12 @@
 {
   "version": 1,
+  "desktop_icons": {
+    "enabled": true,
+    "output": "",
+    "icon_size": 48,
+    "show_hidden": false,
+    "arrangement": "automatic"
+  },
   "notifications": {
     "filters_enabled": true,
     "rules": []

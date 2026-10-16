@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check the packaged Pearl defaults and live overlay after greeter install hooks."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -9,12 +10,165 @@ import tempfile
 import tomllib
 import types
 import unittest
+from unittest import mock
 
 PROJECT = Path(__file__).resolve().parents[1]
 PROFILE = Path(os.environ.get('DEVARIO_PROFILE_DIR', PROJECT / 'iso'))
 
 
+class LiveDesktopShortcutTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix='devario-desktop-shortcut-')
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.desktop = self.root / 'Bureau été #1'
+        self.state = self.root / 'state/pearl'
+        self.source = PROFILE / 'airootfs/usr/share/applications/install-devario.desktop'
+        self.helper = types.ModuleType('prepare_live_desktop')
+        exec((PROFILE / 'airootfs/usr/lib/devario/prepare-live-desktop').read_text(), self.helper.__dict__)
+
+    def seed(self):
+        self.helper.seed_shortcut(self.desktop, self.state, self.source)
+
+    def test_shortcut_approval_matches_exact_contents_and_uri(self):
+        self.seed()
+        shortcut = self.desktop / self.source.name
+        self.assertFalse(shortcut.is_symlink())
+        self.assertEqual(shortcut.read_bytes(), self.source.read_bytes())
+        state = self.state / 'desktop-launchers.json'
+        approval = json.loads(state.read_text())
+        self.assertEqual(approval, {'version': 1, 'approvals': [{
+            'uri': shortcut.as_uri(),
+            'digest': list(hashlib.sha256(shortcut.read_bytes()).hexdigest().encode('ascii')),
+        }]})
+        self.assertIn('%23', approval['approvals'][0]['uri'])
+        self.assertEqual(state.stat().st_mode & 0o777, 0o600)
+
+    def test_relogin_preserves_edited_or_deleted_shortcut_and_revoked_approval(self):
+        self.seed()
+        shortcut = self.desktop / self.source.name
+        shortcut.write_text('[Desktop Entry]\nExec=/tmp/changed\n')
+        state = self.state / 'desktop-launchers.json'
+        state.write_text('{"version": 1, "approvals": []}\n')
+        self.seed()
+        self.assertIn('/tmp/changed', shortcut.read_text())
+        self.assertEqual(json.loads(state.read_text())['approvals'], [])
+        shortcut.unlink()
+        self.seed()
+        self.assertFalse(shortcut.exists())
+
+    def test_approval_uri_matches_gio_punctuation_escaping(self):
+        self.desktop = self.root / "!$&'()*+,;=:@[]~ é"
+        self.seed()
+        approval = json.loads((self.state / 'desktop-launchers.json').read_text())['approvals'][0]
+        self.assertEqual(approval['uri'], self.root.as_uri() +
+                         "/!$&'()*+,%3B=:@%5B%5D~%20%C3%A9/install-devario.desktop")
+
+    def test_preexisting_file_or_symlink_is_not_overwritten_or_approved(self):
+        self.desktop.mkdir()
+        shortcut = self.desktop / self.source.name
+        shortcut.write_text('user shortcut')
+        self.seed()
+        self.assertEqual(shortcut.read_text(), 'user shortcut')
+        self.assertFalse(self.state.exists())
+        shortcut.unlink()
+        target = self.root / 'missing-target'
+        shortcut.symlink_to(target)
+        self.seed()
+        self.assertTrue(shortcut.is_symlink())
+        self.assertFalse(target.exists())
+        self.assertFalse(self.state.exists())
+
+    def test_other_approvals_are_preserved(self):
+        self.state.mkdir(parents=True)
+        other = {'uri': 'file:///other.desktop', 'digest': [97] * 64}
+        state = self.state / 'desktop-launchers.json'
+        state.write_text(json.dumps({'version': 1, 'approvals': [other]}))
+        self.seed()
+        self.assertEqual(json.loads(state.read_text())['approvals'][0], other)
+
+    def test_invalid_approval_state_is_preserved(self):
+        self.state.mkdir(parents=True)
+        state = self.state / 'desktop-launchers.json'
+        for contents in ('broken', '{"version": 2, "approvals": []}'):
+            with self.subTest(contents=contents):
+                state.write_text(contents)
+                with self.assertRaises(ValueError):
+                    self.seed()
+                self.assertEqual(state.read_text(), contents)
+                self.assertFalse(self.desktop.exists())
+
+    def test_live_setup_uses_xdg_directory_and_skips_disabled_desktop(self):
+        self.helper.LIVE = self.root / 'live'
+        self.helper.LIVE.touch()
+        with mock.patch.object(self.helper.pwd, 'getpwuid', return_value=types.SimpleNamespace(pw_name='liveuser')), \
+                mock.patch.object(self.helper.subprocess, 'run') as update, \
+                mock.patch.object(self.helper.subprocess, 'check_output') as desktop, \
+                mock.patch.object(self.helper, 'seed_shortcut') as seed, \
+                mock.patch.dict(os.environ, {'HOME': str(self.root), 'XDG_STATE_HOME': str(self.root / 'state')}):
+            desktop.return_value = str(self.desktop) + '\n'
+            self.helper.main()
+            update.assert_called_once_with(['/usr/bin/xdg-user-dirs-update'], check=True)
+            desktop.assert_called_once_with(['/usr/bin/xdg-user-dir', 'DESKTOP'], text=True)
+            seed.assert_called_once_with(self.desktop, self.state)
+            seed.reset_mock()
+            for path in (self.root, '/', 'relative-desktop'):
+                desktop.return_value = str(path) + '\n'
+                self.helper.main()
+                seed.assert_not_called()
+
+    def test_setup_is_live_user_only(self):
+        self.helper.LIVE = self.root / 'live'
+        with mock.patch.object(self.helper.subprocess, 'run') as update, \
+                mock.patch.object(self.helper.pwd, 'getpwuid') as account:
+            account.return_value.pw_name = 'liveuser'
+            self.helper.main()  # No live boot marker.
+            self.helper.LIVE.touch()
+            account.return_value.pw_name = 'installeduser'
+            self.helper.main()
+            update.assert_not_called()
+
+
 class PearlDesktopTests(unittest.TestCase):
+    @unittest.skipUnless(Path('/usr/bin/xdg-user-dirs-update').exists(), 'xdg-user-dirs is unavailable')
+    def test_user_directory_initialization_for_new_and_existing_users(self):
+        with tempfile.TemporaryDirectory(prefix='devario-user-dirs-') as temporary:
+            home = Path(temporary)
+            config = home / '.config'
+            env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(config), LC_ALL='C')
+            script = PROFILE / 'airootfs/etc/xdg/uwsm/env.d/55-devario-user-dirs.sh'
+            subprocess.run(['sh', str(script)], env=env, check=True)
+            desktop = subprocess.check_output(['/usr/bin/xdg-user-dir', 'DESKTOP'], env=env, text=True).strip()
+            self.assertEqual(Path(desktop), home / 'Desktop')
+            self.assertTrue(Path(desktop).is_dir())
+            localized = home / 'Bureau été'
+            localized.mkdir()
+            for chosen in (localized, home):
+                with self.subTest(chosen=chosen):
+                    subprocess.run(['/usr/bin/xdg-user-dirs-update', '--set', 'DESKTOP', str(chosen)],
+                                   env=env, check=True)
+                    subprocess.run(['sh', str(script)], env=env, check=True)
+                    desktop = subprocess.check_output(['/usr/bin/xdg-user-dir', 'DESKTOP'], env=env, text=True).strip()
+                    self.assertEqual(Path(desktop), chosen)
+
+    def test_desktop_defaults_and_live_shortcut_lifecycle(self):
+        preferences = json.loads((PROFILE / 'late-airootfs/etc/skel/.config/pearl/preferences.json').read_text())
+        self.assertTrue(preferences['desktop_icons']['enabled'])
+        user_dirs = PROFILE / 'airootfs/etc/xdg/uwsm/env.d/55-devario-user-dirs.sh'
+        self.assertIn('/usr/bin/xdg-user-dirs-update', user_dirs.read_text())
+        wrapper = (PROFILE / 'airootfs/usr/local/bin/devario-aqueous-live-session').read_text()
+        helper = '/usr/lib/devario/prepare-live-desktop'
+        self.assertLess(wrapper.index(helper), wrapper.index('exec /usr/bin/uwsm'))
+        permissions = json.loads((PROFILE / 'profile.json').read_text())['permissions']
+        self.assertEqual(permissions[helper], '755')
+        cleanup = (PROFILE / 'airootfs/etc/calamares/modules/prepare_target.conf').read_text()
+        self.assertIn('rm -f ' + helper, cleanup)
+        self.assertIn('rm -rf /home/liveuser', cleanup)
+        for overlay in ('airootfs', 'late-airootfs'):
+            skeleton = PROFILE / overlay / 'etc/skel'
+            self.assertFalse(list(skeleton.rglob('install-devario.desktop')))
+            self.assertFalse(list(skeleton.rglob('desktop-launchers.json')))
+
     def test_virtio_allocator_excludes_native_and_mixed_gpus(self):
         graphics = types.ModuleType('graphics')
         exec((PROFILE / 'airootfs/usr/lib/devario/graphics-session').read_text(), graphics.__dict__)
