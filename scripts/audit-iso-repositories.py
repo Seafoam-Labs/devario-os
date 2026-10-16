@@ -36,6 +36,12 @@ def dependency_name(requirement):
 
 
 def resolve(requested, packages):
+    # Shelly orders virtual-provider candidates by name within a repository;
+    # tar entry order is not a provider preference. Keep repository priority
+    # (and same-name copies) stable while making each repository deterministic.
+    repository_order = {name: index for index, name in
+                        enumerate(dict.fromkeys(p.get("repository", "") for p in packages))}
+    packages = sorted(packages, key=lambda p: (repository_order[p.get("repository", "")], p["name"]))
     selected = {}
     missing = {}
     requested_names = {dependency_name(name) for name in requested}
@@ -59,7 +65,12 @@ def resolve(requested, packages):
         # their entries have not yet been visited (e.g. devario-dracut/initramfs).
         package = next((p for p in candidates if p["name"] in selected), None)
         if package is None:
-            package = next((p for p in candidates if p["name"] in requested_names), candidates[0])
+            package = next((p for p in candidates if p["name"] in requested_names), None)
+        if package is None:
+            # Match Shelly's preference for a literal package name before a
+            # virtual provider. Archive order must not pin zlib-ng-compat's
+            # unversioned "zlib" provision instead of the real zlib package.
+            package = next((p for p in candidates if p["name"] == name), candidates[0])
         if package["name"] in selected:
             continue
         selected[package["name"]] = package

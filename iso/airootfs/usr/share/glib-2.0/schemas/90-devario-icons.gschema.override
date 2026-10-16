@@ -1,3 +1,0 @@
-# Devario default; explicit user choices take precedence.
-[org.gnome.desktop.interface]
-icon-theme='Papirus'

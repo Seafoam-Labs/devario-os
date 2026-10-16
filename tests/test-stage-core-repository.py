@@ -64,6 +64,20 @@ class RepositoryRecordsTests(unittest.TestCase):
         self.assertFalse(missing)
         self.assertEqual(set(selected), {"devario-dracut", "linux"})
 
+    def test_literal_zlib_precedes_earlier_unversioned_provider(self):
+        packages = [
+            dict(name="zlib-ng-compat", version="2.3.3-1", depends=[], provides=["zlib", "libz.so"]),
+            dict(name="zlib", version="1:1.3.2-4", depends=[], provides=["libz.so"]),
+            dict(name="libarchive", version="3.8.10-1", depends=["libz.so", "zlib>=1.2.1"], provides=[]),
+        ]
+        for dependencies in (["libz.so", "zlib>=1.2.1"], ["zlib>=1.2.1", "libz.so"]):
+            packages[-1]["depends"] = dependencies
+            for ordered in (packages, list(reversed(packages))):
+                with self.subTest(order=[p["name"] for p in ordered], dependencies=dependencies):
+                    selected, missing = dependency_audit.resolve(["libarchive"], ordered)
+                    self.assertFalse(missing)
+                    self.assertEqual(set(selected), {"libarchive", "zlib"})
+
 
 if __name__ == "__main__":
     unittest.main()
