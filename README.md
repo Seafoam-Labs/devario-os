@@ -218,12 +218,14 @@ devario-gpu-run auto -- application arguments
 ```
 
 Use a PCI address from `--list` for an AMD/Intel Mesa GPU. `nvidia` requests
-NVIDIA render offload; `auto` restores normal driver discovery. Selection
+NVIDIA render offload; `auto` clears GPU selection while preserving inherited
+driver preferences. Explicit Mesa selection filters Vulkan drivers and uses
+the Mesa device-select layer when installed. Selection
 applies to the newly launched process, not an already-running application or
 compositor. Physical hot-plug, external-monitor, suspend/resume, and removal
 acceptance testing is still required before claiming seamless eGPU support.
 Build and publish `bolt`, `boltctl`, `python-pyudev`, and
-`devario-aqueous-desktop` 1-13 or newer before rebuilding the ISO.
+`devario-aqueous-desktop` 1-14 or newer when using the legacy desktop package.
 
 The live ISO and installed system use Plymouth with the Devario theme. The
 late image overlay selects `Theme=devario` in `/etc/plymouth/plymouthd.conf`,

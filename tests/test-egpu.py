@@ -43,7 +43,7 @@ class EgpuTests(unittest.TestCase):
                      'MESA_LOADER_DRIVER_OVERRIDE': 'zink', 'DRI_PRIME': '1'}
         with self.assertRaisesRegex(ValueError, 'No NVIDIA'):
             launcher.launch_environment('nvidia', [], inherited)
-        attached = [('0000:05:00.0', '0x10de', 'nvidia')]
+        attached = [('0000:05:00.0', '0x10de', '0x2684', 'nvidia')]
         env = launcher.launch_environment('nvidia', attached, inherited)
         self.assertNotIn('VK_LOADER_DRIVERS_DISABLE', env)
         self.assertNotIn('__EGL_VENDOR_LIBRARY_FILENAMES', env)
@@ -52,19 +52,65 @@ class EgpuTests(unittest.TestCase):
         self.assertEqual(env['__NV_PRIME_RENDER_OFFLOAD'], '1')
         self.assertEqual(env['__GLX_VENDOR_LIBRARY_NAME'], 'nvidia')
         self.assertEqual(env['__VK_LAYER_NV_optimus'], 'NVIDIA_only')
-        self.assertEqual(launcher.launch_environment('auto', [], inherited), {'PATH': '/usr/bin'})
         self.assertEqual(inherited['VK_LOADER_DRIVERS_DISABLE'], '*nvidia*')
         with self.assertRaises(ValueError):
-            launcher.launch_environment('nvidia', [('0000:05:00.0', '0x10de', 'vfio-pci')], {})
+            launcher.launch_environment('nvidia', [('0000:05:00.0', '0x10de', '0x2684', 'vfio-pci')], {})
+
+    def test_auto_preserves_driver_preferences_but_clears_gpu_selection(self):
+        launcher = load('devario-gpu-run')
+        inherited = dict.fromkeys(launcher.SELECTION_VARIABLES, 'stale-selection')
+        preferences = dict.fromkeys(launcher.DRIVER_FILTER_VARIABLES, 'user-preference')
+        inherited.update(preferences, PATH='/usr/bin')
+        original = dict(inherited)
+        self.assertEqual(launcher.launch_environment('auto', [], inherited),
+                         dict(preferences, PATH='/usr/bin'))
+        self.assertEqual(inherited, original)
 
     def test_mesa_uses_stable_pci_address_and_rejects_unbound_gpu(self):
         launcher = load('devario-gpu-run')
-        attached = [('0000:05:00.0', '0x1002', 'amdgpu')]
-        env = launcher.launch_environment('0000:05:00.0', attached, {})
-        self.assertEqual(env, {'DRI_PRIME': 'pci-0000_05_00_0'})
+        attached = [('0000:05:00.0', '0x1002', '0x73bf', 'amdgpu')]
+        with patch.object(launcher, 'has_device_select_layer', return_value=True):
+            env = launcher.launch_environment('0000:05:00.0', attached,
+                                              {'VK_DRIVER_FILES': '/stale.json', 'DRI_PRIME': '1'})
+        self.assertEqual(env, {'DRI_PRIME': 'pci-0000_05_00_0',
+                              'VK_LOADER_DRIVERS_SELECT': '*radeon_icd*',
+                              'MESA_VK_DEVICE_SELECT': '1002:73bf',
+                              'MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE': '1'})
         for selection in ('0000:06:00.0', '1', '0000:05:00.0;false'):
             with self.subTest(selection=selection), self.assertRaises(ValueError):
                 launcher.launch_environment(selection, attached, {})
+        with self.assertRaises(ValueError):
+            launcher.launch_environment('0000:05:00.0',
+                                        [('0000:05:00.0', '0x1002', '0x73bf', 'vfio-pci')], {})
+
+    def test_identical_mesa_gpus_use_pci_selection_without_ambiguous_device_id(self):
+        launcher = load('devario-gpu-run')
+        attached = [(address, '0x1002', '0x73bf', 'amdgpu')
+                    for address in ('0000:05:00.0', '0000:06:00.0')]
+        with patch.object(launcher, 'has_device_select_layer', return_value=True):
+            env = launcher.launch_environment('0000:06:00.0', attached,
+                                              {'MESA_VK_DEVICE_SELECT': 'stale'})
+        self.assertEqual(env['DRI_PRIME'], 'pci-0000_06_00_0')
+        self.assertNotIn('MESA_VK_DEVICE_SELECT', env)
+        self.assertEqual(env['MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE'], '1')
+
+    def test_missing_vulkan_layer_and_legacy_radeon_warn(self):
+        launcher = load('devario-gpu-run')
+        with tempfile.TemporaryDirectory() as temporary:
+            layer_dirs = (temporary,)
+            attached = [('0000:05:00.0', '0x1002', '0x73bf', 'amdgpu')]
+            with patch.object(launcher, 'warn') as warn:
+                launcher.launch_environment('0000:05:00.0', attached, {}, layer_dirs)
+                self.assertIn('vulkan-mesa-layers', warn.call_args.args[0])
+            Path(temporary, launcher.DEVICE_SELECT_LAYER).touch()
+            with patch.object(launcher, 'warn') as warn:
+                launcher.launch_environment('0000:05:00.0', attached, {}, layer_dirs)
+                warn.assert_not_called()
+            with patch.object(launcher, 'warn') as warn:
+                env = launcher.launch_environment('0000:05:00.0',
+                    [('0000:05:00.0', '0x1002', '0x6798', 'radeon')], {}, layer_dirs)
+                self.assertEqual(env, {'DRI_PRIME': 'pci-0000_05_00_0'})
+                self.assertIn('no Vulkan support', warn.call_args.args[0])
 
     def test_enumeration_observes_removal_and_ignores_audio(self):
         launcher = load('devario-gpu-run')
@@ -76,10 +122,11 @@ class EgpuTests(unittest.TestCase):
                 device.mkdir()
                 (device / 'class').write_text(klass)
                 (device / 'vendor').write_text('0x10de')
+                (device / 'device').write_text('0x2684')
             driver = root / 'drivers/nvidia'
             driver.mkdir(parents=True)
             (gpu / 'driver').symlink_to(driver)
-            self.assertEqual(launcher.devices(root), [('0000:05:00.0', '0x10de', 'nvidia')])
+            self.assertEqual(launcher.devices(root), [('0000:05:00.0', '0x10de', '0x2684', 'nvidia')])
             (gpu / 'driver').unlink()
             self.assertEqual(launcher.devices(root), [])
 
@@ -87,12 +134,22 @@ class EgpuTests(unittest.TestCase):
         result = subprocess.run([str(PACKAGE / 'devario-gpu-run'), 'auto', '--',
                                  '/usr/bin/python3', '-c',
                                  'import os,sys; print(sys.argv[1]); '
-                                 'assert "VK_LOADER_DRIVERS_DISABLE" not in os.environ; sys.exit(7)',
+                                 'assert os.environ["VK_LOADER_DRIVERS_DISABLE"] == "*nvidia*"; '
+                                 'assert "DRI_PRIME" not in os.environ; sys.exit(7)',
                                  'one argument; $(literal)'],
-                                env=dict(os.environ, VK_LOADER_DRIVERS_DISABLE='*nvidia*'),
+                                env=dict(os.environ, VK_LOADER_DRIVERS_DISABLE='*nvidia*', DRI_PRIME='1'),
                                 text=True, capture_output=True)
         self.assertEqual(result.returncode, 7, result.stderr)
         self.assertEqual(result.stdout.strip(), 'one argument; $(literal)')
+
+    def test_no_dcc_preserves_existing_debug_flags_without_duplicates(self):
+        result = subprocess.run([str(PACKAGE / 'devario-gpu-run'), '--no-dcc', 'auto', '--',
+                                 '/usr/bin/python3', '-c',
+                                 'import os; assert os.environ["AMD_DEBUG"] == "sync,nodcc"; '
+                                 'assert os.environ["RADV_DEBUG"] == "hang,nodcc"'],
+                                env=dict(os.environ, AMD_DEBUG='sync', RADV_DEBUG='hang,nodcc'),
+                                text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_monitor_subscribes_before_scan_and_refreshes_add_and_remove(self):
         hotplug = load('gpu-hotplug')
