@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Audit an ISO package closure against downloaded, signature-verified databases."""
+"""Audit dependency-name coverage in signature-verified repository databases.
+
+Shelly's native resolver validates version constraints during installation.
+This metadata preflight does not implement a second package version resolver.
+"""
 import argparse
-import ctypes
-import ctypes.util
-from functools import lru_cache
 import hashlib
 import json
 from pathlib import Path
 import re
-import shutil
-import subprocess
 import tarfile
+
+SCOPE = ("Dependency-name coverage only; Shelly validates version constraints, "
+         "provider compatibility, conflicts and installability during installation")
 
 
 def records(path, repository):
@@ -29,51 +31,25 @@ def records(path, repository):
     return result
 
 
-@lru_cache(maxsize=1)
-def alpm_comparator():
-    library = ctypes.util.find_library("alpm")
-    if not library:
-        raise RuntimeError("Package version comparison requires vercmp or libalpm (Ubuntu: libalpm13t64)")
-    compare = ctypes.CDLL(library).alpm_pkg_vercmp
-    compare.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
-    compare.restype = ctypes.c_int
-    return compare
-
-
-def compare_versions(left, right):
-    if shutil.which("vercmp"):
-        return int(subprocess.check_output(["vercmp", left, right], text=True).strip())
-    return alpm_comparator()(left.encode(), right.encode())
-
-
-def satisfies(requirement, name, version):
-    match = re.fullmatch(r"([^<>=]+)(>=|<=|=|>|<)?(.*)", requirement)
-    if not match or match[1] != name:
-        return False
-    if not match[2]:
-        return True
-    if not version:
-        return False
-    comparison = compare_versions(version, match[3])
-    return {"=": comparison == 0, ">=": comparison >= 0, "<=": comparison <= 0,
-            ">": comparison > 0, "<": comparison < 0}[match[2]]
+def dependency_name(requirement):
+    return re.split(r"[<>=]", requirement, maxsplit=1)[0]
 
 
 def resolve(requested, packages):
     selected = {}
     missing = {}
-    requested_names = {re.split(r"[<>=]", name, maxsplit=1)[0] for name in requested}
+    requested_names = {dependency_name(name) for name in requested}
     pending = [(name, "ISO package list") for name in requested]
     while pending:
         requirement, parent = pending.pop()
+        name = dependency_name(requirement)
         candidates = []
         for package in packages:
-            if satisfies(requirement, package["name"], package["version"]):
+            if name == package["name"]:
                 candidates.append(package)
                 continue
             for provide in package["provides"]:
-                name, _, version = provide.partition("=")
-                if satisfies(requirement, name, version):
+                if name == dependency_name(provide):
                     candidates.append(package)
                     break
         if not candidates:
@@ -108,7 +84,7 @@ def main():
     result = dict(schemaVersion=1, databases=inputs, requested=requested,
                   selected=[selected[n] for n in sorted(selected)], missing=missing,
                   complete=not missing,
-                  scope="Database dependency audit; package signatures, conflicts and installation still require verification")
+                  scope=SCOPE)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     print(f"Selected {len(selected)} packages; {len(missing)} unresolved requirements. Report: {args.output}")

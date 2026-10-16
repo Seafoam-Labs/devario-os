@@ -122,12 +122,14 @@ def prepare(args):
     write(args.work / "dependency-audit.json", json.dumps({
         "requested": required, "missing": missing,
         "selected": sorted(selected), "complete": not missing,
+        "scope": audit.SCOPE,
     }, indent=2) + "\n")
     if missing:
         details = "; ".join(f"{name} (required by {', '.join(parents)})" for name, parents in missing.items())
         raise ValueError("Missing build dependencies in the staged snapshot: " + details +
                          ". Publish them to a configured repository and stage a fresh snapshot before retrying.")
     plan = {"packages": sorted(selected.values(), key=lambda item: item["name"]),
+            "requirements": required,
             "uid": os.getuid(), "gid": os.getgid()}
     write(args.work / "build-inputs.json", json.dumps(plan, indent=2) + "\n")
     (args.work / "artifacts").mkdir()
@@ -217,6 +219,9 @@ def provision(args):
     cli = args.work / "cli/usr/bin/shelly"
     builder = load_builder(args.work)
     requested = [p["name"] + "=" + p["version"] for p in plan["packages"]]
+    # Keep the original version constraints for Shelly's native resolver, not
+    # just the exact snapshot versions chosen by the name-coverage preflight.
+    requested = list(dict.fromkeys([*requested, *plan["requirements"]]))
     with builder.mounted_root(root):
         run(cli, "--config", config, "sync", "standard", "--no-confirm")
         run(cli, "--config", config, "install", "standard", "--no-confirm", *requested)

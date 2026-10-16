@@ -71,7 +71,8 @@ def local_inputs(metadata):
 
 def select_packages(sources, requested, local, build_requirements):
     # The first repository owning a package name wins, including when its
-    # version cannot satisfy a dependency. Lower-priority copies cannot shadow it.
+    # version may not satisfy a dependency. Shelly checks versions when installing;
+    # lower-priority copies cannot shadow the repository selected here.
     effective = {}
     for source in sources:
         for package in source["packages"]:
@@ -181,6 +182,7 @@ def main():
         artifacts, selected, missing = select_packages(sources, requested, local, build_requirements)
         report = output.with_name(output.name + '-preflight.json')
         report.write_text(json.dumps(dict(complete=not missing, missing=missing,
+                                         scope=audit.SCOPE,
                                          selected=list(selected.values()), buildRequirements=build_requirements), indent=2) + '\n')
         # Keep the authenticated upstream metadata even when package publication is incomplete.
         shutil.copytree(metadata, evidence)

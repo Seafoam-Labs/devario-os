@@ -226,12 +226,13 @@ class UpdateTests(unittest.TestCase):
         events = self.transaction(sync_failures=3)
         self.assertFalse(any("upgrade" in e for e in events))
 
-    def test_calamares_requires_updates_last_and_connectivity_before_partitioning(self):
+    def test_calamares_requires_updates_before_final_defaults_and_connectivity_before_partitioning(self):
         import yaml
         settings = yaml.safe_load((PROFILE / "airootfs/etc/calamares/settings.conf").read_text())
         sequence = next(step["exec"] for step in settings["sequence"] if "exec" in step)
         self.assertLess(sequence.index("shellprocess@update_preflight"), sequence.index("partition"))
-        self.assertEqual(sequence[-3:], ["services-systemd", "shellprocess@update_target", "umount"])
+        self.assertEqual(sequence[-4:], ["services-systemd", "shellprocess@update_target",
+                                         "shellprocess@keyboard_aqueous", "umount"])
         self.assertLess(sequence.index("shellprocess@systemd_boot"), sequence.index("shellprocess@update_target"))
         for name, command in (("update_preflight", update.HELPER + " --preflight"),
                               ("update_target", update.HELPER + ' --target "${ROOT}"')):

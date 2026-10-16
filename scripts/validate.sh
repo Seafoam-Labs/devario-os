@@ -97,6 +97,9 @@ required_files=(
   "$profile_dir/airootfs/etc/calamares/modules/update_target.conf"
   "$profile_dir/airootfs/usr/lib/devario/update-target-packages"
   "$project_dir/tests/test-update-target-packages.py"
+  "$profile_dir/airootfs/etc/calamares/modules/keyboard_aqueous.conf"
+  "$profile_dir/airootfs/usr/lib/devario/configure-target-keyboard"
+  "$project_dir/tests/test-configure-target-keyboard.py"
   "$profile_dir/airootfs/usr/lib/devario/configure-target-nvidia"
   "$profile_dir/airootfs/usr/share/devario/nvidia-supported-gpus.json"
   "$project_dir/tests/test-configure-target-nvidia.py"
@@ -359,6 +362,9 @@ if [[ -n "${DEVARIO_NVIDIA_TEST_ROOT:-}" ]] && ! DEVARIO_PROFILE_DIR="$profile_d
 fi
 if ! DEVARIO_PROFILE_DIR="$profile_dir" python3 "$project_dir/tests/test-update-target-packages.py"; then
   fail "Calamares installation update behavior tests failed"
+fi
+if ! DEVARIO_PROFILE_DIR="$profile_dir" python3 "$project_dir/tests/test-configure-target-keyboard.py"; then
+  fail "Calamares Aqueous keyboard installation behavior tests failed"
 fi
 if ! DEVARIO_PROFILE_DIR="$profile_dir" \
   bash "$project_dir/tests/test-prepare-target-kernel.sh"; then

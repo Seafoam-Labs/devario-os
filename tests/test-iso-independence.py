@@ -8,7 +8,6 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
 import yaml
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -128,19 +127,16 @@ class IndependenceTests(unittest.TestCase):
                     ], text=True).splitlines()
                     self.assertEqual(values, ["yes", "low", "yes", "DROP", "ACCEPT", "DROP", "SKIP"])
 
-    def test_version_comparison_without_vercmp(self):
-        # Ubuntu CI installs the ALPM library without makepkg/vercmp. Exercise
-        # real ALPM semantics, including epoch, package release and prerelease.
-        with patch.object(audit.shutil, "which", return_value=None):
-            for left, right, sign in (
-                ("1:1.0-1", "9.0-9", 1),
-                ("1.0-2", "1.0-1", 1),
-                ("1.0rc1", "1.0", -1),
-                ("1.0-1", "1.0-1", 0),
-            ):
-                with self.subTest(left=left, right=right):
-                    result = audit.compare_versions(left, right)
-                    self.assertEqual((result > 0) - (result < 0), sign)
+    def test_name_coverage_defers_version_constraints_to_shelly(self):
+        # This source-only preflight inventories names; Shelly decides whether
+        # the selected snapshot can satisfy the original version constraints.
+        packages = [dict(name="app", version="1", provides=[],
+                         depends=["engine>=2", "missing>=3"]),
+                    dict(name="engine-provider", version="1", provides=["engine=1"], depends=[])]
+        selected, missing = audit.resolve(["app>=2"], packages)
+        self.assertEqual(set(selected), {"app", "engine-provider"})
+        self.assertEqual(selected["app"]["depends"], ["engine>=2", "missing>=3"])
+        self.assertEqual(missing, {"missing>=3": ["app"]})
 
 
 if __name__ == "__main__":

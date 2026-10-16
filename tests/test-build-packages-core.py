@@ -41,7 +41,8 @@ class CoreBuilderTests(unittest.TestCase):
     def test_missing_core_dependency_stops_before_privileges(self):
         self.args.repo.mkdir()
         (self.args.repo / "shelly-cli-1-1-x86_64.pkg.tar.zst").touch()
-        audit = argparse.Namespace(records=lambda *a: [], resolve=lambda *a: ({}, {"litehtml": ["qt6-tools"]}))
+        audit = argparse.Namespace(SCOPE="dependency-name coverage", records=lambda *a: [],
+                                   resolve=lambda *a: ({}, {"litehtml": ["qt6-tools"]}))
         with patch.object(builder.os, "geteuid", return_value=1000), \
                 patch.object(builder.shutil, "which", return_value="/usr/bin/fixture"), \
                 patch.object(builder, "verify_repository"), \
@@ -59,7 +60,8 @@ class CoreBuilderTests(unittest.TestCase):
         self.args.repo.mkdir()
         (self.args.repo / "shelly-cli-1-1-x86_64.pkg.tar.zst").touch()
         selected = {name: dict(name=name, version="1-1") for name in ("gcc", "glibc", "binutils", "cmake")}
-        audit = argparse.Namespace(records=lambda *a: [], resolve=lambda *a: (selected, {}))
+        audit = argparse.Namespace(SCOPE="dependency-name coverage", records=lambda *a: [],
+                                   resolve=lambda *a: (selected, {}))
         for noninteractive in ("0", "1"):
             with self.subTest(noninteractive=noninteractive):
                 self.args.work = self.directory / ("work-" + noninteractive)
@@ -71,6 +73,8 @@ class CoreBuilderTests(unittest.TestCase):
                         patch.object(builder, "module_from", return_value=audit), \
                         patch.object(builder, "run", return_value=subprocess.CompletedProcess([], 0, stdout="")) as run:
                     builder.prepare(self.args)
+                plan = json.loads((self.args.work / "build-inputs.json").read_text())
+                self.assertEqual(plan["requirements"], builder.dependencies({recipe: "" for recipe in builder.RECIPES}))
                 elevation = next(call.args for call in run.call_args_list if call.args[0] == "sudo")
                 self.assertEqual(elevation[:3] if noninteractive == "1" else elevation[:2],
                                  ("sudo", "-n", "--") if noninteractive == "1" else ("sudo", "--"))
@@ -78,6 +82,7 @@ class CoreBuilderTests(unittest.TestCase):
         self.args.work.mkdir()
         builder.write(self.args.work / "build-inputs.json", json.dumps({
             "uid": 1000, "gid": 1000, "packages": self.packages,
+            "requirements": ["gcc>=1", "glibc", "binutils", "gcc=1-1"],
         }))
         for recipe in builder.RECIPES:
             builder.write(self.args.work / "source" / recipe / "PKGBUILD", "# fixture\n")
@@ -102,7 +107,8 @@ class CoreBuilderTests(unittest.TestCase):
                          ["[options]", "[devario-core]"])
         self.assertNotIn("Include", config)
         install = next(call for call in calls if "install" in call)
-        self.assertEqual(install[-3:], ("gcc=1-1", "glibc=1-1", "binutils=1-1"))
+        self.assertEqual(install[-6:], ("gcc=1-1", "glibc=1-1", "binutils=1-1",
+                                        "gcc>=1", "glibc", "binutils"))
         builds = [call for call in calls if "build" in call]
         self.assertEqual(len(builds), 6)
         for call in builds:

@@ -20,7 +20,7 @@ jobs:
       - name: Install validation tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes gnupg openssl jq desktop-file-utils libalpm13t64 libarchive-tools nodejs python3-venv qemu-system-x86 qemu-utils squashfs-tools xz-utils zstd
+          sudo apt-get install --yes gnupg openssl jq desktop-file-utils libarchive-tools nodejs python3-venv qemu-system-x86 qemu-utils squashfs-tools xz-utils zstd
       - name: Prepare isolated validation Python
         run: |
           validation_env="$(python3 scripts/prepare-validation-env.py)"

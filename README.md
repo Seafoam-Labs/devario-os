@@ -40,6 +40,9 @@ The installed system does not ship the `pacman` or `pacman-key` executables. It 
 - Fastfetch on the first interactive shell in each terminal
 - Calamares 3.4.2 built from Codeberg with [Pearl appearance](packages/calamares/README.md), including dark/light palettes and reduced-motion support
 - Devario-packaged `ckbcomp` for Calamares keyboard previews on clean Arch builders
+- Calamares keyboard selections carried into `/etc/xdg/aqueous/input.toml`
+  after installation updates, including XKB variants and options; personal
+  Aqueous input configurations retain precedence over the system default
 - Offline installation by unpacking the tested live SquashFS
 - systemd-boot installation for 64-bit UEFI targets, with a FAT EFI partition at `/boot`
 - Btrfs as the default filesystem, with Btrfs, XFS, and F2FS available
