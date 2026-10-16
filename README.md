@@ -254,6 +254,13 @@ Publish `devario-boot` 1-10 or newer along with `plymouth` and
 handoff, and encrypted-root unlock still need BIOS/UEFI and installed boot
 acceptance testing.
 
+`devario-boot` 1-11 installs a post-transaction kernel upgrade hook that asks
+logged-in local Wayland and X11 desktop users to reboot. It sends one
+notification per user per transaction and prints the reminder in the package
+manager output. Live-image and chroot transactions are skipped; a missing
+desktop notification service does not fail the update. Publish the updated
+package to deliver the hook to existing installations and future ISOs.
+
 The live account declarations are added only after ISO package hooks finish.
 They remain available for systemd to create `liveuser` in the writable live
 session at boot, but the account is not materialized in the SquashFS copied by

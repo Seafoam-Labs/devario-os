@@ -1,0 +1,47 @@
+#!/usr/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -u
+
+# Match boot-update's installed-system boundary and never contact host sessions
+# from an installer or package build chroot with a shared /run.
+if [[ ! -e /var/lib/devario/systemd-boot-installed && ! -e /var/lib/devario/limine-installed ]]; then
+  exit 0
+fi
+if systemd-detect-virt --chroot --quiet; then
+  exit 0
+fi
+
+echo 'Kernel updated. Reboot your computer to use the updated kernel.'
+declare -A notified=()
+while read -r session _; do
+  [[ -n "$session" ]] || continue
+  uid= name= type= remote= class=
+  while IFS='=' read -r key value; do
+    case "$key" in
+      User) uid=$value ;;
+      Name) name=$value ;;
+      Type) type=$value ;;
+      Remote) remote=$value ;;
+      Class) class=$value ;;
+    esac
+  done < <(loginctl show-session "$session" --no-pager \
+    -p User -p Name -p Type -p Remote -p Class 2>/dev/null)
+
+  [[ "$type" == wayland || "$type" == x11 ]] || continue
+  [[ "$class" == user || "$class" == user-early ]] || continue
+  [[ "$remote" == no && "$uid" =~ ^[0-9]+$ && -n "$name" ]] || continue
+  [[ -z "${notified[$uid]:-}" ]] || continue
+  notified[$uid]=1
+
+  # Authenticate as the session owner, not the package manager's root user.
+  # No extra desktop dependency is needed: busctl ships with systemd.
+  # Request a dismissible notification with no automatic expiry. A missing or
+  # unresponsive notification server must not fail the package transaction.
+  runuser -u "$name" -- busctl --address="unix:path=/run/user/$uid/bus" \
+    --timeout=5 call org.freedesktop.Notifications /org/freedesktop/Notifications \
+    org.freedesktop.Notifications Notify 'susssasa{sv}i' \
+    'Devario' 0 'system-reboot' 'Reboot recommended' \
+    'The kernel was updated. Reboot your computer to use the updated kernel.' \
+    0 1 urgency y 1 0 >/dev/null 2>&1 || :
+done < <(loginctl list-sessions --no-legend --no-pager 2>/dev/null)
+exit 0

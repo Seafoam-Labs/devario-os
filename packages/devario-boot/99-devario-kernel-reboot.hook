@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[Trigger]
+Operation = Upgrade
+Type = Path
+Target = usr/lib/modules/*/vmlinuz
+
+[Action]
+Description = Notifying desktop users to reboot after the kernel update...
+When = PostTransaction
+Exec = /usr/lib/devario/kernel-reboot-notify
