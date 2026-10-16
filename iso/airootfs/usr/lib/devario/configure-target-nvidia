@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Verify the offline NVIDIA payload, then configure the installed target."""
+"""Configure supported NVIDIA hardware, or prune NVIDIA from non-NVIDIA targets."""
 import argparse
 import json
 import os
@@ -20,8 +20,9 @@ def log(message):
     print(f"Devario NVIDIA: {message}", flush=True)
 
 
-def output(*args):
-    return subprocess.check_output(args, text=True).strip()
+def output(*args, env=None):
+    options = {"env": env} if env is not None else {}
+    return subprocess.check_output(args, text=True, **options).strip()
 
 
 def detect():
@@ -60,8 +61,10 @@ def check_support(devices, support):
         log(f"supported GPU {device['address']} ({' '.join(ids)})")
 
 
-def installed_packages():
-    inventory = json.loads(output("shelly", "list", "standard", "--show-hidden", "--json"))
+def installed_packages(env=None):
+    args = ("shelly", "list", "standard", "--show-hidden", "--json")
+    listing = output(*args) if env is None else output(*args, env=env)
+    inventory = json.loads(listing)
     if not isinstance(inventory, list):
         raise RuntimeError("Shelly did not return an installed package list")
     return {p["Name"]: p["Version"] for p in inventory}
@@ -184,7 +187,74 @@ def enable_kms(config=Path("/etc/devario-dracut.conf"),
     atomic_write(config, text)
 
 
+
+def disable_kms(config=Path("/etc/devario-dracut.conf"),
+                modprobe=Path("/etc/modprobe.d/devario-nvidia.conf")):
+    # A copied live installation must never force early NVIDIA KMS on a system
+    # where Calamares has selected the non-NVIDIA driver policy.
+    previous = config.read_text() if config.exists() else ""
+    lines = [line for line in previous.splitlines(keepends=True)
+             if not re.match(r"^\s*(?:export\s+)?NVIDIA_EARLY_KMS\s*=", line)]
+    text = "".join(lines)
+    if text and not text.endswith("\n"):
+        text += "\n"
+    text += 'NVIDIA_EARLY_KMS="false"\n'
+    if not config.exists() or config.read_text() != text:
+        atomic_write(config, text)
+    if modprobe.exists() or modprobe.is_symlink():
+        # Do not destroy a non-installer-owned modprobe configuration.
+        if modprobe.is_symlink() or modprobe.read_text() != (
+                "# Managed by the Devario installer.\noptions nvidia_drm modeset=1\n"):
+            raise RuntimeError(f"Refusing to remove non-installer-owned NVIDIA configuration: {modprobe}")
+        modprobe.unlink()
+
+
+def remove_unused_nvidia():
+    # Installed files come from unpackfs. Use the native RLPM transaction,
+    # never unlink package payloads or modify Shelly's database by hand.
+    names = ("nvidia-open-dkms", "nvidia-utils")
+    # Force the same native backend for BOTH inventories and the transaction.
+    # Do not mutate the user's persistent Shelly configuration.
+    with tempfile.TemporaryDirectory(prefix="devario-nvidia-rlpm-") as directory:
+        conf = Path(directory) / "shelly"
+        conf.mkdir(mode=0o700)
+        # Only NativePackageBackend is honoured by the Shelly CLI.
+        # Cascade must be disabled via the remove command's arguments.
+        (conf / "config.json").write_text(json.dumps({
+            "NativePackageBackend": "rlpm",
+        }) + "\n")
+        env = os.environ.copy()
+        env["XDG_CONFIG_HOME"] = directory
+        before = installed_packages(env=env)
+        present = [name for name in names if name in before]
+        if not present:
+            log("no NVIDIA packages to remove from this target")
+            return
+        log("removing unnecessary NVIDIA packages through RLPM: " + ", ".join(present))
+        try:
+            subprocess.run(["shelly", "remove", "standard", *present,
+                            "--no-cascade", "--no-confirm"],
+                           env=env, stdin=subprocess.DEVNULL, check=True)
+        except subprocess.CalledProcessError as error:
+            raise RuntimeError(
+                "RLPM could not remove the NVIDIA packages. Ensure the ISO includes "
+                "devario-aqueous-desktop 1-15 or newer with NVIDIA as optional "
+                "rather than hard dependencies; rebuild the metapackage and ISO before retrying."
+            ) from error
+        after = installed_packages(env=env)
+        remaining = [name for name in names if name in after]
+        if remaining:
+            raise RuntimeError("RLPM reported success but NVIDIA packages remain: " + ", ".join(remaining))
+    log("non-NVIDIA target is free of NVIDIA driver packages")
+
+
 def configure(devices, updated=False):
+    if not devices:
+        # Clear any live-image KMS policy before a removal transaction: on an
+        # already bootable target, an ALPM hook may rebuild initramfs.
+        disable_kms()
+        remove_unused_nvidia()
+        return
     kernel, version = check_payload(devices, updated=True) if updated else check_payload(devices)
     if not modules_ready(kernel, version):
         log(f"building NVIDIA {version} modules for {kernel}; DKMS logs are in /var/lib/dkms")
@@ -192,14 +262,14 @@ def configure(devices, updated=False):
     subprocess.run(["depmod", "-a", kernel], check=True)
     if not modules_ready(kernel, version):
         raise RuntimeError(f"NVIDIA {version} modules are incomplete or incompatible with {kernel}")
-    if devices:
-        enable_kms()
-        log(f"enabled NVIDIA_EARLY_KMS for {version} / {kernel}")
-    else:
-        log(f"NVIDIA {version} modules ready for a future eGPU / {kernel}; early KMS unchanged")
+    enable_kms()
+    log(f"enabled NVIDIA_EARLY_KMS for {version} / {kernel}")
 
 
 def preflight(devices):
+    if not devices:
+        log("no NVIDIA display controllers detected; skipping NVIDIA payload preflight")
+        return
     # Inspect the pristine payload copied by unpackfs. Shelly's read-only
     # inventory command still initializes user state and resolves paths via
     # /proc/self/fd. Supply those in a private mount namespace, without writing

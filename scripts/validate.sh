@@ -547,9 +547,23 @@ done
 desktop_meta="$project_dir/packages/devario-aqueous-desktop/PKGBUILD"
 for desktop_dependency in \
   aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous pearl pearl-greeter greetd \
-  linux-devario-headers nvidia-open-dkms nvidia-utils bolt boltctl python-pyudev; do
+  linux-devario-headers bolt boltctl python-pyudev; do
   if ! grep -Eq "['\"]${desktop_dependency}([<>=][^'\"]*)?['\"]" "$desktop_meta"; then
     fail "the Devario desktop metapackage must depend on $desktop_dependency"
+  fi
+done
+
+# NVIDIA remains explicitly present on the live ISO, but is optional in the
+# installed desktop: Calamares removes it on machines without NVIDIA hardware.
+# Check the actual dependency arrays rather than any occurrence in the PKGBUILD.
+desktop_hard_dependencies="$(sed -n '/^[[:space:]]*depends=(/,/^[[:space:]]*)/p' "$desktop_meta")"
+desktop_optional_dependencies="$(sed -n '/^[[:space:]]*optdepends=(/,/^[[:space:]]*)/p' "$desktop_meta")"
+for nvidia_package in nvidia-open-dkms nvidia-utils; do
+  if ! grep -Eq "['\"]${nvidia_package}:[[:space:]]" <<< "$desktop_optional_dependencies"; then
+    fail "the Devario desktop metapackage must list $nvidia_package as an optional dependency"
+  fi
+  if grep -Eq "['\"]${nvidia_package}([<>=][^'\"]*)?['\"]" <<< "$desktop_hard_dependencies"; then
+    fail "the Devario desktop metapackage must not hard-depend on $nvidia_package"
   fi
 done
 if grep -Eq "['\"]vulkan-nouveau([<>=][^'\"]*)?['\"]" "$desktop_meta"; then

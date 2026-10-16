@@ -2,7 +2,7 @@
 
 pkgname=devario-aqueous-desktop
 pkgver=1
-pkgrel=14
+pkgrel=15
 pkgdesc="Complete Aqueous and Pearl desktop environment for Devario"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -43,12 +43,16 @@ depends=(
   'noto-fonts'
   'ttf-dejavu'
   'linux-devario-headers'
-  'nvidia-open-dkms=615.71.09'
-  'nvidia-utils=615.71.09'
   'vulkan-intel'
   'vulkan-virtio'
   'vulkan-radeon'
   'vulkan-swrast'
+)
+# NVIDIA is installed on the live ISO, but is not a hard dependency of the
+# installed desktop. Calamares removes it from non-NVIDIA targets via RLPM.
+optdepends=(
+  'nvidia-open-dkms: open kernel modules for supported NVIDIA GPUs'
+  'nvidia-utils: NVIDIA userspace driver and Vulkan/OpenGL integration'
 )
 # Retire the old integration and its unconditional Noctalia user service.
 conflicts=('aqueous-noctalia')

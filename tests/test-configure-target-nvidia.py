@@ -210,7 +210,7 @@ class NvidiaTests(unittest.TestCase):
                     self.assertEqual(events[0], ["dkms", "autoinstall", "-k", KERNEL])
                 self.assertFalse(any("modprobe" in e for e in events))
 
-    def test_preflight_dispatch_also_checks_disconnected_egpu_payload(self):
+    def test_preflight_dispatch_handles_gpu_and_no_gpu(self):
         with patch.object(nvidia.sys, "argv", [str(HELPER), "--preflight"]), \
                 patch.object(nvidia, "detect", return_value=[DEVICE]), \
                 patch.object(nvidia, "preflight") as preflight:
@@ -229,15 +229,72 @@ class NvidiaTests(unittest.TestCase):
                     preflight.assert_called_once_with([])
                     configure.assert_not_called()
 
-    def test_disconnected_egpu_builds_modules_without_enabling_early_kms(self):
-        with patch.object(nvidia, 'check_payload', return_value=(KERNEL, VERSION)), \
-                patch.object(nvidia, 'modules_ready', side_effect=[False, True]), \
-                patch.object(nvidia.subprocess, 'run') as run, \
-                patch.object(nvidia, 'enable_kms') as enable:
+    def test_no_gpu_skips_preflight_and_never_calls_shelly(self):
+        with patch.object(nvidia.subprocess, "run") as run:
+            nvidia.preflight([])
+            run.assert_not_called()
+
+    def test_no_gpu_does_not_validate_payload_or_build_modules(self):
+        with patch.object(nvidia, "check_payload") as check, \
+                patch.object(nvidia, "disable_kms") as disable, \
+                patch.object(nvidia, "remove_unused_nvidia") as remove, \
+                patch.object(nvidia.subprocess, "run") as run:
             nvidia.configure([])
-            self.assertEqual([call.args[0] for call in run.call_args_list],
-                             [['dkms', 'autoinstall', '-k', KERNEL], ['depmod', '-a', KERNEL]])
-            enable.assert_not_called()
+            disable.assert_called_once_with()
+            remove.assert_called_once_with()
+            check.assert_not_called()
+            run.assert_not_called()
+
+    def test_no_gpu_removes_only_installed_nvidia_packages_with_rlpm(self):
+        before = {"nvidia-open-dkms": f"{VERSION}-1", "nvidia-utils": f"{VERSION}-1",
+                  "dkms": "3.1-1", "linux-devario-headers": "7.2.7-1"}
+        after = {"dkms": "3.1-1", "linux-devario-headers": "7.2.7-1"}
+        inventory = [before, after]
+        def assert_backend(args, **kwargs):
+            directory = Path(kwargs["env"]["XDG_CONFIG_HOME"])
+            self.assertEqual(json.loads((directory / "shelly/config.json").read_text()), {
+                "NativePackageBackend": "rlpm",
+            })
+        with patch.object(nvidia, "installed_packages", side_effect=inventory), \
+                patch.object(nvidia.subprocess, "run", side_effect=assert_backend) as run:
+            nvidia.remove_unused_nvidia()
+            run.assert_called_once()
+            args = run.call_args.args[0]
+            self.assertEqual(args, ["shelly", "remove", "standard", "nvidia-open-dkms",
+                                    "nvidia-utils", "--no-cascade", "--no-confirm"])
+            self.assertTrue(run.call_args.kwargs["check"])
+            self.assertIn("XDG_CONFIG_HOME", run.call_args.kwargs["env"])
+            self.assertIn("devario-nvidia-rlpm-", run.call_args.kwargs["env"]["XDG_CONFIG_HOME"])
+
+    def test_no_gpu_removal_errors_instead_of_ignoring_stale_metapackage(self):
+        installed = {"nvidia-open-dkms": f"{VERSION}-1"}
+        with patch.object(nvidia, "installed_packages", return_value=installed), \
+                patch.object(nvidia.subprocess, "run", side_effect=subprocess.CalledProcessError(1, "shelly")):
+            with self.assertRaisesRegex(RuntimeError, "rebuild the metapackage"):
+                nvidia.remove_unused_nvidia()
+        with patch.object(nvidia, "installed_packages", side_effect=[installed, installed]), \
+                patch.object(nvidia.subprocess, "run"):
+            with self.assertRaisesRegex(RuntimeError, "packages remain"):
+                nvidia.remove_unused_nvidia()
+        with patch.object(nvidia, "installed_packages", return_value={}), \
+                patch.object(nvidia.subprocess, "run") as run:
+            nvidia.remove_unused_nvidia()
+            run.assert_not_called()
+
+    def test_disable_kms_preserves_unrelated_settings(self):
+        config = self.write("etc/devario-dracut.conf",
+                            'BUILD_UKI="false"\nNVIDIA_EARLY_KMS="true"\n')
+        modprobe = self.write("etc/modprobe.d/devario-nvidia.conf",
+                              "# Managed by the Devario installer.\noptions nvidia_drm modeset=1\n")
+        nvidia.disable_kms(config, modprobe)
+        self.assertEqual(config.read_text(), 'BUILD_UKI="false"\nNVIDIA_EARLY_KMS="false"\n')
+        self.assertFalse(modprobe.exists())
+        nvidia.disable_kms(config, modprobe)
+        self.assertEqual(config.read_text().count('NVIDIA_EARLY_KMS="false"'), 1)
+        modprobe.write_text("# user managed\n")
+        with self.assertRaisesRegex(RuntimeError, "non-installer-owned"):
+            nvidia.disable_kms(config, modprobe)
+        self.assertEqual(modprobe.read_text(), "# user managed\n")
 
     def test_calamares_order_and_package_contract(self):
         import yaml
@@ -258,8 +315,13 @@ class NvidiaTests(unittest.TestCase):
         permissions = json.loads((PROFILE / "profile.json").read_text())["permissions"]
         self.assertEqual(permissions[nvidia.HELPER], "755")
         recipe = (PROJECT / "packages/devario-aqueous-desktop/PKGBUILD").read_text()
+        self.assertIn("optdepends=(", recipe)
+        hard_dependencies, optional_dependencies = recipe.split("optdepends=(", 1)
         for name in ("nvidia-open-dkms", "nvidia-utils"):
-            self.assertIn(f"'{name}={VERSION}'", recipe)
+            self.assertNotIn(f"'{name}=", hard_dependencies)
+            self.assertIn(f"'{name}:", optional_dependencies)
+        # 1-14 on main still declared hard NVIDIA dependencies.
+        self.assertGreaterEqual(int(recipe.split("pkgrel=", 1)[1].splitlines()[0]), 15)
 
     def test_local_package_checksums(self):
         import hashlib

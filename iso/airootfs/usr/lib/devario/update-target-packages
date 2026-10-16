@@ -205,7 +205,7 @@ def update_target():
             log(phase)
             run(["shelly", "upgrade", "standard", "--no-confirm"])
             inventory("packages-after.json")
-            phase = "Verifying updated drivers and rebuilding boot files"
+            phase = "Applying GPU driver policy and rebuilding boot files"
             log(phase)
             run(["/usr/lib/devario/configure-target-nvidia", "--configure-updated"])
             run(["/usr/lib/devario/boot-update"])
