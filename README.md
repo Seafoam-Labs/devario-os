@@ -2,8 +2,9 @@
 
 **A modern, Shelly-first Linux desktop.**
 
-Devario OS is the independently usable core of Devario Community. It is an
-Arch Linux derivative with the
+Devario OS is an independent Linux distribution with Arch Linux package
+ecosystem compatibility, and the independently usable core of Devario Community.
+It features the
 [Aqueous](https://github.com/Seafoam-Labs/Aqueous) Wayland desktop, the base
 Calamares installer, and
 [Shelly](https://www.seafoam-labs.org/shelly-alpm/) as its system package
@@ -18,7 +19,31 @@ boundaries.
 To try Devario on physical hardware, follow
 [Create and Boot a Devario USB Drive](docs/Create-and-Boot-Devario-USB.md).
 
-The installed system does not ship the `pacman` or `pacman-key` executables. It uses these Devario packages:
+## Independent distribution, Arch-compatible ecosystem
+
+Devario maintains its own system integration, signed package repositories,
+kernel and boot lifecycle, desktop defaults, installer, and release validation.
+The live and installed systems use Devario repositories by default; Arch
+repositories and mirrorlists are not included in the default configuration.
+Shelly manages the system through its native RLPM backend.
+
+Compatibility with Arch is at the package ecosystem level: Devario retains
+Arch-compatible package archives, repository metadata, PKGBUILD recipes, and
+ALPM hooks. Shelly's native `shelly build` command builds PKGBUILD recipes into
+installable package archives, and Shelly handles package transactions. This
+allows Devario to reuse Arch ecosystem tooling and packaging work while
+maintaining its own operating-system policies and release process.
+
+Package-format compatibility does not guarantee that every Arch or AUR package
+will work unchanged: dependencies, library versions, hardware requirements,
+and assumptions about system tools still need to match Devario. Shelly's
+optional AUR workflow uses Shelly's native builder and requires the recipe's
+build tools and dependencies. The supported default
+package workflow uses signed Devario binary repositories and local package
+archives.
+
+The installed system uses Shelly for package transactions and signing-key
+management, supplied by these Devario packages:
 
 - `shelly` and `shelly-cli` from `devario-core` provide the UI, CLI, and native RLPM backend.
 - `devario-base` provides the base-system dependency set, Shelly repository configuration, and native RLPM storage directories.
@@ -39,7 +64,7 @@ The installed system does not ship the `pacman` or `pacman-key` executables. It 
 - NVIDIA open-driver support with PCI detection before the graphical greeter
 - Fastfetch on the first interactive shell in each terminal
 - Calamares 3.4.2 built from Codeberg with [Pearl appearance](packages/calamares/README.md), including dark/light palettes and reduced-motion support
-- Devario-packaged `ckbcomp` for Calamares keyboard previews on clean Arch builders
+- Devario-packaged `ckbcomp` for Calamares keyboard previews
 - Calamares keyboard selections carried into `/etc/xdg/aqueous/input.toml`
   after installation updates, including XKB variants and options; personal
   Aqueous input configurations retain precedence over the system default
@@ -300,27 +325,23 @@ URLs in release examples must be provisioned before use.
 
 ## Package-management boundary
 
-The Pacman and `pacman-key` executables are not invoked during package builds,
-ISO construction, live use, installation, or installed-system operation:
+Shelly handles package transactions and signing-key management during package
+builds, ISO construction, live use, installation, and installed-system operation:
 
 | Environment | Package-management components |
 | --- | --- |
 | Live and installed system | `shelly`, `devario-base`, and `devario-keyring` |
-| Package build host | Shelly synchronizes repositories and installs every declared build dependency. `makepkg` runs with `--nodeps`, automatic dependency probes disabled, and a strict Shelly inventory adapter; `repo-add` only writes repository metadata. |
+| Package build host | Shelly synchronizes repositories and installs declared build dependencies. The default ISO workflow uses `shelly build` for native package builds in an isolated root. |
 | ISO build host | Pinned `devario-iso-builder` with a declarative manifest; synchronization, installation, and inventory run through Shelly. |
 
-`makepkg` remains the package archive builder and `repo-add` remains the
-repository database writer because Shelly does not replace those formats or
-construction tools. Every package-manager hook exposed to makepkg points to
-`scripts/makepkg-shelly-adapter.sh`, which accepts only makepkg's read-only
-`-Qi` inventory request, answers it through Shelly, and rejects all other
-operations. The build script forbids dependency, removal, and install modes
-that could bypass that adapter.
+Use `shelly build` to create packages, `shelly install standard` to install
+repository packages or local archives, and `shelly keyring` to manage signing
+keys. The ISO workflow calls `scripts/build-packages-core.py`, which invokes
+Shelly's native builder as an unprivileged user inside the prepared build root.
 
 Shelly's native RLPM backend uses `/etc/shelly.conf`, `/etc/shelly.d/gnupg`,
 `/etc/shelly.d/hooks`, `/var/lib/shelly`, and `/var/cache/shelly/pkg` directly.
-These are file locations, not configuration aliases or a Pacman executable
-requirement. Live and installed systems enable `devario-core` first, followed by
+Live and installed systems enable `devario-core` first, followed by
 `devario-browser`, `devario-development`, `devario-entertainment`, `devario-gaming`,
 `devario-utilities`, `devario-productivity`, and `devario-libs`.
 Each repository requires package and database signatures
@@ -400,17 +421,18 @@ Initialize and populate a damaged or new keyring:
 
 ```sh
 shelly keyring init
-shelly keyring populate archlinux devario
+shelly keyring populate devario-core
 ```
 
 Build a reviewed PKGBUILD with Shelly's native builder:
 
 ```sh
-shelly build /path/to/PKGBUILD
+shelly build --review-only --json /path/to/PKGBUILD
+shelly build --isolated --check /path/to/PKGBUILD
 ```
 
-Devario's controlled release pipeline continues to use `makepkg` because its
-corresponding-source workflow requires source-package creation.
+The first command reviews the recipe without building; the second builds in an
+isolated environment and runs the recipe's checks.
 
 Shelly requests elevation for privileged transaction steps. Run it as the invoking desktop user rather than wrapping the
 whole command in `sudo`. Use full upgrades rather than synchronizing repositories and installing individual packages
@@ -418,8 +440,9 @@ into an otherwise stale system.
 
 ## Build prerequisites
 
-Build on an up-to-date Arch Linux or Arch-derived x86-64 system. Once Shelly is available on the build host, install the
-required ISO assembly and packaging tools through Shelly:
+Devario can build itself. Use an up-to-date Devario x86-64 system with Shelly
+configured, and install the required ISO assembly and packaging tools through
+Shelly:
 
 Python validation dependencies are prepared automatically in an isolated virtual
 environment from hash-pinned wheels. Python must provide `venv` and `ensurepip`;
@@ -440,39 +463,17 @@ For virtual-machine testing, the QEMU helper installs `qemu-desktop` and
 ./scripts/setup-qemu.sh --install-only
 ```
 
-The build host must already have a working Shelly installation. Use a verified
-Seafoam Labs package or a previously built Devario Shelly package to establish
-that bootstrap environment.
+Devario includes Shelly as its system package manager. The build uses the host's
+configured Shelly installation to prepare its tools and dependencies.
 
-Use an official baseline Arch x86-64 builder for distributable artifacts.
-Optimized derivative toolchains can stamp their startup objects with a higher
-ISA requirement even when an individual recipe requests baseline compilation.
+Use a systemd host with systemd-nspawn available. The ISO workflow prepares an
+isolated build root from verified Devario packages, including the compiler and
+recipe dependencies, and runs `shelly build` as an unprivileged user inside it.
+This keeps host toolchain settings out of the package build.
 
-On a systemd host, the supplied nspawn wrapper downloads and verifies the
-explicitly supplied, signed Devario bootstrap filesystem, injects the locally trusted Shelly package,
-installs all build inputs through Shelly, and builds as an unprivileged user.
-It does not invoke the Pacman executable:
-
-```sh
-sudo ./scripts/build-packages-nspawn.sh
-```
-
-To create or update the persistent builder without starting a package build:
-
-```sh
-sudo ./scripts/build-packages-nspawn.sh --prepare-only
-```
-
-The default container root is `/var/lib/machines/devario-builder`. Override it
-with `DEVARIO_NSPAWN_ROOT` when required. The container uses official baseline
-userspace libraries but shares the host CPU, so package recipes must retain the
-explicit x86-64, Rust, Go, and Zig baseline settings enforced by the wrapper.
-
-Do not build packages as root. `build-packages.sh` asks Shelly to synchronize
-and install the complete build dependency set, then runs makepkg only as the
-regular build user. Build the ISO itself as root because image construction
-mounts target API filesystems while Shelly processes package hooks and
-scriptlets.
+Run `./build-iso.sh` as your normal user. It requests elevation for provisioning
+and ISO assembly, where image construction mounts target API filesystems while
+Shelly processes package hooks and scriptlets.
 
 ## Build
 
@@ -515,8 +516,7 @@ do not enter the package build. Calamares's x86-64-v3 ISA check remains enabled.
 The builder records planned and installed package versions under
 `work/iso-runs/<run>/packages/` and retains its root and logs there. This path
 constructs the root directly from package archives; no separate bootstrap image
-is required. `scripts/build-packages.sh` remains the native/controlled makepkg
-entry point for separately managed builders.
+is required.
 
 The local snapshot retains the `devario-core` name for compatibility with the
 assembler, with core packages taking precedence over duplicate names in other
@@ -559,22 +559,21 @@ Controlled release signing/publication and VM boot acceptance remain separate
 workflows. The root `build-iso.sh` orchestrates the entire local build;
 `scripts/build-iso.sh` is the assembly step used by it.
 
-For individual build steps, stage the signed packages published by Remora
-before building local ISO inputs:
+For individual build steps, stage the signed repository snapshot and build the
+local ISO inputs with the same native Shelly helper used by `./build-iso.sh`.
+Use a fresh work directory for each build:
 
 ```sh
-python3 scripts/stage-core-repository.py
+python3 scripts/stage-iso-repositories.py --output repo/core
+python3 scripts/build-packages-core.py --repo repo/core --work work/local-packages
+./scripts/stage-installer-packages.sh work/local-packages/artifacts
 ```
 
-Build Calamares, `ckbcomp`, `devario-filesystem`, `devario-base`, `devario-boot`,
-and `devario-keyring`. These six local ISO inputs and the regenerated build
+This builds Calamares, `ckbcomp`, `devario-filesystem`, `devario-base`,
+`devario-boot`, and `devario-keyring`. These six local ISO inputs and the regenerated build
 database do not require signing. Downloaded packages retain their signature
 checks. The kernel, headers, dracut, Shelly, Aqueous, `devario-desktop`, Pearl,
 and `pearl-greeter` come from `devario-core`:
-
-```sh
-./scripts/build-packages.sh
-```
 
 If those six archives have already been built, merge their directory with
 `./scripts/stage-installer-packages.sh /path/to/artifacts` instead. No local
@@ -584,9 +583,8 @@ separate signing requirements described below.
 Core artifacts are written only to `repo/core/`; that directory is never
 shared with managed-edition artifacts.
 
-Pass local package-directory names to rebuild only selected packages while
-retaining the other existing repository artifacts. Kernel and dracut updates
-belong in the external package repository. Build them in its controlled baseline
+Kernel and dracut updates belong in the external package repository.
+Build them in its controlled baseline
 environment and supply signed artifacts to the staged `devario-core` repository
 before constructing the ISO. To check the pinned 7.2.7-1 kernel recipe in that
 source checkout:
@@ -601,7 +599,7 @@ host build tools target baseline x86-64. Updating it is a maintainer operation
 documented in [Kernel packaging](docs/KERNEL-PACKAGING.md); installed systems receive
 the resulting binary exclusively from the signed Devario repository.
 
-Validate package, profile, Calamares, service, and Shelly/Pacman-boundary invariants:
+Validate package, profile, Calamares, service, and Shelly package-management invariants:
 
 ```sh
 ./scripts/validate.sh
@@ -704,78 +702,19 @@ installed system to use it with `Optional TrustAll`. That mode works offline but
 temporary repository used only while constructing the image has `SigLevel = Never`, because the build host does not own
 Devario's trust root; this does not become the installed configuration.
 
-For a release, export the public half of an existing offline-controlled signing
-key into a reviewed source commit. Release artifacts are produced only by the
-fresh, one-shot controlled nspawn wrappers; a native script cannot claim
-release mode. Supply immutable bootstrap/snapshot inputs, an external
-invoking-user-owned mode-0700 signing home, and a fresh output directory:
-
-```sh
-DEVARIO_GNUPGHOME=/secure/devario-gnupg \
-  DEVARIO_SIGNING_KEY=<fingerprint> \
-  ./scripts/init-repository-key.sh
-
-sudo env DEVARIO_RELEASE_BUILD=1 \
-  DEVARIO_BOOTSTRAP_URL=https://archive.example.org/devario-bootstrap-2026.08.14.tar.zst \
-  DEVARIO_REPOSITORY_SNAPSHOT_URL=https://repo.seafoam-labs.org/snapshots/2026-08-14/ \
-  DEVARIO_NSPAWN_ROOT=/var/lib/machines/devario-core-release-2026.08.14 \
-  DEVARIO_GNUPGHOME=/secure/devario-gnupg \
-  DEVARIO_SIGNING_KEY=<fingerprint> \
-  ./scripts/build-packages-nspawn.sh --output /release/2026.08.14/packages
-
-sudo env DEVARIO_RELEASE_BUILD=1 \
-  DEVARIO_BOOTSTRAP_URL=https://archive.example.org/devario-bootstrap-2026.08.14.tar.zst \
-  DEVARIO_REPOSITORY_SNAPSHOT_URL=https://repo.seafoam-labs.org/snapshots/2026-08-14/ \
-  DEVARIO_NSPAWN_ROOT=/var/lib/machines/devario-iso-release-2026.08.14 \
-  DEVARIO_GNUPGHOME=/secure/devario-gnupg \
-  DEVARIO_SIGNING_KEY=<fingerprint> \
-  DEVARIO_CORE_REPO_DIR=/release/2026.08.14/packages/devario-core \
-  DEVARIO_CORE_REPO_URL=https://packages.example.org/devario-core/x86_64 \
-  DEVARIO_OUTPUT_DIR=/release/2026.08.14/image \
-  ./scripts/build-iso-nspawn.sh --release-version 2026.08.14
-```
-
-The release version must match
-`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`. It is bound in the signed input lock and
-attestation, embedded in the image build-source record, and rendered into
-`/etc/os-release`; candidate metadata cannot supply a different version later.
-Community images use `NAME="Devario"` and `PRETTY_NAME="Devario"` in both
-development and release builds. Edition information stays in `VARIANT` and
-`VARIANT_ID`; release versions stay in `VERSION`, `VERSION_ID`, and `BUILD_ID`.
-The closed output also retains `CORE-INPUT-LOCK.json`,
-`CONTROLLED-BUILDER.json` and its signature, and
-`BUILDER-ATTESTATION.json` and its signature.
-
-Release-mode ISO construction rejects non-HTTPS repository URLs and unsigned
-artifacts, then verifies every package and repository database against the
-active production signer in the packaged rotation-safe public bundle. It
-writes a runtime `/etc/shelly.conf` requiring signatures. Replace the example
-URLs with the real immutable/repository endpoints.
-
-Build managed packages through the core-controlled external-package interface;
-the input root keeps core repository bytes and the two public trust bundles
-physically distinct:
-
-```sh
-sudo env \
-  DEVARIO_BOOTSTRAP_URL=https://archive.example.org/devario-bootstrap-2026.08.14.tar.zst \
-  DEVARIO_REPOSITORY_SNAPSHOT_URL=https://repo.seafoam-labs.org/snapshots/2026-08-14/ \
-  DEVARIO_NSPAWN_ROOT=/var/lib/machines/devario-managed-release-2026.08.14 \
-  DEVARIO_GNUPGHOME=/secure/devario-managed-gnupg \
-  DEVARIO_SIGNING_KEY=<managed-fingerprint> \
-  ./scripts/build-packages-nspawn.sh --managed-build \
-    --managed-overlay ../devario-managed-overlay \
-    --managed-input-root /release/2026.08.14/managed-input \
-    --output /release/2026.08.14/managed-packages
-```
+The local Community workflow builds the six installer packages with Shelly's
+native builder. Publication additionally requires signed packages and repository
+metadata, the production public keyring, and HTTPS repository endpoints. The
+local build's unsigned installer-package exception is limited to ISO construction.
 
 Before publishing a release:
 
 1. Create a dedicated offline-controlled Devario package-signing key. Never commit its private material.
-2. Sign every package archive and the repository database; `build-packages.sh` does this when `DEVARIO_SIGNING_KEY` is
-   set or its configured signing home contains a fingerprint.
-3. Distribute the exported public key through `devario-keyring`. The Shelly keyring service populates both `archlinux`
-   and `devario`, and remains enabled so a freshly installed target initializes its own keyring.
+2. Sign every published package archive and the repository database. Shelly supports
+   package signing with `shelly build --sign --key <fingerprint> /path/to/PKGBUILD`;
+   repository metadata must also be signed before publication.
+3. Distribute the exported public key through `devario-keyring`. The Shelly keyring service runs
+   `shelly keyring populate devario-core` and remains enabled so a freshly installed target initializes its own keyring.
 4. Publish the repository over HTTPS at a stable URL available after installation.
 5. Verify that the production Devario repository renders with `SigLevel = Required`, which requires signatures on both
    packages and databases; remove `TrustAll` and the development `file://` server.
@@ -918,7 +857,7 @@ Before publishing an image, verify that:
 6. NetworkManager and `pearl-greeter.service` are enabled on the installed system.
 7. Pearl Greeter lists `Aqueous`, authenticates a user, and starts the
    packaged UWSM session.
-8. `command -v shelly` succeeds, while `command -v pacman` and `command -v pacman-key` fail.
+8. `command -v shelly` succeeds, and `shelly keyring list` shows the initialized package-signing keys.
 9. Shelly comes from `devario-core`, uses its native RLPM backend, and runs without `devario-alpm-runtime`.
 10. The installer completes its required final Shelly synchronization and full
     upgrade; `/var/log/devario-installer-update/result.json` records `complete`.
@@ -937,8 +876,8 @@ Before publishing an image, verify that:
     `nvidia`, `nvidia-smi` succeeds, and
     `/sys/module/nvidia_drm/parameters/modeset` contains `Y`. Also verify that a
     non-NVIDIA machine records `none` and still reaches Aqueous.
-14. An `execve` trace of package and ISO construction contains Shelly calls and no Pacman, `pacman-key`, `pacman-conf`,
-    or `pacstrap` process.
+14. An `execve` trace confirms that package transactions during package and ISO
+    construction run through Shelly, and the default ISO workflow uses `shelly build`.
 
 ## Development limitations
 
@@ -953,9 +892,9 @@ Before publishing an image, verify that:
   and dependencies. Its recipe rejects v4 startup objects, and ISO preflight
   rejects Calamares archives declaring v4 ISA requirements. Host-native builds
   on a CachyOS v4 toolchain are not compatible with the image's v3 target.
-- Shelly's optional AUR workflow still requires a makepkg-compatible build toolchain. That toolchain is intentionally
-  absent from the default live and installed systems; the supported default runtime covers signed binary repositories
-  and local package archives.
+- Shelly's optional AUR workflow uses the native `shelly build` command and
+  requires the recipe's build tools and dependencies. The supported default
+  runtime covers signed binary repositories and local package archives.
 - The inspected `aqueous-core 0.9.1-1` repository artifact retains a build-machine
   directory after `$ORIGIN/../lib/aqueous` in its ELF RUNPATH. It fails the strict
   artifact check until that package is rebuilt with only its private library path.
