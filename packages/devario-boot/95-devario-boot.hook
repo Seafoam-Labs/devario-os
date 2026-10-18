@@ -16,6 +16,7 @@ Operation = Install
 Operation = Upgrade
 Type = Package
 Target = devario-dracut
+Target = devario-dracut-git
 Target = devario-boot
 Target = plymouth
 Target = devario-plymouth-theme

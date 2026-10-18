@@ -1,7 +1,7 @@
 pkgbase = devario-boot
 	pkgdesc = Devario kernel, dracut and systemd-boot lifecycle
 	pkgver = 1
-	pkgrel = 12
+	pkgrel = 13
 	url = https://github.com/Seafoam-Labs/devario-os
 	arch = any
 	license = GPL-3.0-or-later
@@ -33,7 +33,7 @@ pkgbase = devario-boot
 	source = verify-live-image
 	source = 99-devario-kernel-reboot.hook
 	source = kernel-reboot-notify
-	sha256sums = 2755438fbe2fbdf8836429c8ac5d6f13a093f723e9814c92ba3417f7529bef65
+	sha256sums = 893729c704fcef8de8c66a8a2a8d0239e8a74caef71090d85d10fa1c37a3108b
 	sha256sums = 84a5729ec34807c789c8ec8cad6955d1120a53c45ccfc217d08fb991e54067ca
 	sha256sums = b32cbdec21d068c6c23a0a0fd3fdca2982ed378d80b16ae2d998b62bbabff967
 	sha256sums = 3a8807cef4c6dc0d2ef29e9ee4ef246e46203ae01371511abd6d81d4283b6da9
