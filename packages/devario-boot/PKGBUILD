@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 pkgname=devario-boot
 pkgver=1
-pkgrel=11
+pkgrel=12
 pkgdesc="Devario kernel, dracut and systemd-boot lifecycle"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -30,7 +30,7 @@ sha256sums=(
   '84a5729ec34807c789c8ec8cad6955d1120a53c45ccfc217d08fb991e54067ca'
   'b32cbdec21d068c6c23a0a0fd3fdca2982ed378d80b16ae2d998b62bbabff967'
   '3a8807cef4c6dc0d2ef29e9ee4ef246e46203ae01371511abd6d81d4283b6da9'
-  '80587bb42107d9794ca18c7c9d04c34aba2aaf9f8cfb5f91bc850aa85b6ae0a2'
+  '3aca8df7f571d55871ffcf3f83bb5262fb8ce536723edb718ba143f10ec7a209'
   'ab440090615d94ecac8526a8c12a5a02ac2f118a85ccd595e7499345d8c67437'
   'a652f93b752d464be23521f2e2296cb62c884a96f87b49b5321824e5a5076857'
   '04b447e3c7129b1d50557102c0c264a528079861ed158e35c8ce14f93decfb99'
