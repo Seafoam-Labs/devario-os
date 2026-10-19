@@ -1,7 +1,7 @@
 pkgbase = devario-boot
 	pkgdesc = Devario kernel, dracut and systemd-boot lifecycle
 	pkgver = 1
-	pkgrel = 13
+	pkgrel = 14
 	url = https://github.com/Seafoam-Labs/devario-os
 	arch = any
 	license = GPL-3.0-or-later
