@@ -67,7 +67,7 @@ def matches(path, size, digest):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--url", default="https://repo.seafoam-labs.org/devario-core/x86_64")
+    parser.add_argument("--url", default="https://mirrors.seafoam-labs.org/devario-core/x86_64")
     parser.add_argument("--output", type=Path, default=PROJECT / "repo/core")
     parser.add_argument("--cache", type=Path, default=PROJECT / "work/repository-downloads")
     parser.add_argument("--keyring", type=Path, default=PROJECT / "packages/devario-keyring")

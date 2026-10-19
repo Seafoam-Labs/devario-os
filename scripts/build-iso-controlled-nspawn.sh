@@ -27,7 +27,7 @@ bootstrap_keyring="${DEVARIO_BOOTSTRAP_KEYRING:-$project_dir/packages/devario-ke
 core_repo="${DEVARIO_CORE_REPO_DIR:-}"; core_keyring="${DEVARIO_CORE_KEYRING_DIR:-$project_dir/packages/devario-keyring}"
 managed_repo="${DEVARIO_MANAGED_REPO_DIR:-}"; managed_keyring="${DEVARIO_MANAGED_KEYRING_DIR:-}"
 managed_input_lock="${DEVARIO_MANAGED_INPUT_LOCK:-}"
-core_url="${DEVARIO_CORE_REPO_URL:-https://repo.seafoam-labs.org/devario-core/x86_64}"; managed_url="${DEVARIO_MANAGED_REPO_URL:-}"
+core_url="${DEVARIO_CORE_REPO_URL:-https://mirrors.seafoam-labs.org/devario-core/x86_64}"; managed_url="${DEVARIO_MANAGED_REPO_URL:-}"
 signing_home="${DEVARIO_GNUPGHOME:-}"; signing_key="${DEVARIO_SIGNING_KEY:-}"
 output_dir="$(realpath -m -- "${DEVARIO_OUTPUT_DIR:-$project_dir/out}")"
 for value in "$bootstrap_url" "$repository_snapshot_url" "$core_repo" "$core_url" "$signing_home" "$signing_key"; do

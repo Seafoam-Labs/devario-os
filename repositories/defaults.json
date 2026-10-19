@@ -3,7 +3,7 @@
   "repositories": [
     {
       "name": "devario-core",
-      "server": "https://repo.seafoam-labs.org/devario-core/$arch",
+      "server": "https://mirrors.seafoam-labs.org/devario-core/$arch",
       "activeSigner": "BB62CD2725FD8E25558F900A84F94F672976872C",
       "publicKeyUrl": "https://repo.seafoam-labs.org/repositories/devario-core/pubkey.asc"
     },

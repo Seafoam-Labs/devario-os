@@ -1,0 +1,47 @@
+--- a/src/modules/finished/FinishedPage.cpp
++++ b/src/modules/finished/FinishedPage.cpp
+@@ -19,7 +19,10 @@
+ #include "compat/CheckBox.h"
+ #include "utils/Retranslator.h"
+ 
++#include <QFile>
+ #include <QFocusEvent>
++#include <QJsonDocument>
++#include <QJsonObject>
+ 
+ 
+ FinishedPage::FinishedPage( Config* config, QWidget* parent )
+@@ -101,6 +104,22 @@
+                                                  "or close the installer.</p></body></html>",
+                                                  "@tooltip" ) );
+         }
++        // The update wrapper copies the result into the live session before
++        // the target is unmounted. Never display a warning over a failure.
++        QFile resultFile( QStringLiteral( "/run/devario-installer-update/result.json" ) );
++        if ( !Calamares::Settings::instance()->isSetupMode() && resultFile.open( QIODevice::ReadOnly ) )
++        {
++            const auto result = QJsonDocument::fromJson( resultFile.readAll() ).object();
++            if ( result.value( QStringLiteral( "status" ) ).toString() == QStringLiteral( "updates-pending" ) )
++            {
++                ui->mainText->setText(
++                    tr( "<h1>Installation complete — updates pending</h1>"
++                        "<p>System updates could not be completed. Connect to the internet after restarting "
++                        "and use Shelly to update your system.</p>", "@info" )
++                    + QStringLiteral( "<p>%1</p>" )
++                          .arg( result.value( QStringLiteral( "reason" ) ).toString().left( 400 ).toHtmlEscaped() ) );
++            }
++        }
+     }
+     else
+     {
+--- a/src/modules/finished/FinishedViewStep.cpp
++++ b/src/modules/finished/FinishedViewStep.cpp
+@@ -85,6 +85,8 @@
+ void
+ FinishedViewStep::onActivate()
+ {
++    // The page is constructed before the installation jobs have run.
++    m_widget->retranslate();
+     m_config->doNotify();
+     connect( qApp, &QApplication::aboutToQuit, m_config, qOverload<>( &Config::doRestart ) );
+ }

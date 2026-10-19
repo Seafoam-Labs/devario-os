@@ -21,6 +21,12 @@ PAYLOAD = Path("/run/devario/install-root")
 RUNTIME = Path("/run/devario-installer-update")
 EVIDENCE = Path("/var/log/devario-installer-update")
 BOOT_MARKER = Path("/var/lib/devario/systemd-boot-installed")
+CONNECTIVITY_BUDGET = 30
+SYNC_TIMEOUT = 60
+
+
+class UpdatesUnavailable(RuntimeError):
+    """Updates cannot be fetched; no package upgrade has started."""
 
 
 def log(message):
@@ -79,7 +85,8 @@ def check_connectivity(root=PAYLOAD):
     # A clock older than the image is almost certainly unset. TLS below also
     # checks certificate validity, including clocks set too far into the future.
     if time.time() + 86400 < (root / "etc/shelly.conf").stat().st_mtime:
-        raise RuntimeError("System clock predates this image; correct the time before installing")
+        raise UpdatesUnavailable("System clock predates this image; correct the time before updating")
+    deadline = time.monotonic() + CONNECTIVITY_BUDGET
     for name, servers in repository_servers(root).items():
         errors = []
         for server in servers:
@@ -88,13 +95,16 @@ def check_connectivity(root=PAYLOAD):
                 raise RuntimeError(f"Repository {name} needs an HTTPS server without embedded credentials")
             url = server.rstrip("/") + "/" + name + ".db"
             for attempt in range(3):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise UpdatesUnavailable("Repository connectivity check timed out; check the network and clock")
                 try:
                     request = urllib.request.Request(url, headers={"Range": "bytes=0-0"})
-                    with urllib.request.urlopen(request, timeout=15) as response:
+                    with urllib.request.urlopen(request, timeout=min(5, remaining)) as response:
                         if urllib.parse.urlsplit(response.url).scheme != "https":
                             raise RuntimeError(f"Repository {name} redirected away from HTTPS")
                         if not response.read(1):
-                            raise RuntimeError(f"Repository {name} returned an empty database")
+                            raise UpdatesUnavailable(f"Repository {name} returned an empty database")
                     break
                 except (OSError, urllib.error.URLError) as error:
                     if attempt == 2:
@@ -106,15 +116,30 @@ def check_connectivity(root=PAYLOAD):
             log(f"Repository {name} is reachable")
             break
         else:
-            raise RuntimeError(f"Cannot reach repository {name}; check the network and clock: {'; '.join(errors)}")
+            if not servers:
+                raise RuntimeError(f"Repository {name} has no configured servers")
+            raise UpdatesUnavailable(f"Cannot reach repository {name}; check the network and clock: {'; '.join(errors)}")
+
+
+def preflight():
+    # This is live-session state, independent of the target's /run mount.
+    RUNTIME.mkdir(mode=0o700, parents=True, exist_ok=True)
+    (RUNTIME / "result.json").unlink(missing_ok=True)
+    try:
+        check_connectivity()
+    except UpdatesUnavailable as error:
+        log(f"Updates may be skipped: {error}. Connectivity will be checked again after installation.")
 
 
 @contextmanager
 def target_resolver(root, source=Path("/etc/resolv.conf")):
     """Do not follow an absolute target symlink into the live filesystem."""
-    resolver = source.read_bytes()
-    if not resolver.strip():
-        raise RuntimeError("The live system has no DNS resolver configuration")
+    try:
+        resolver = source.read_bytes()
+    except FileNotFoundError:
+        resolver = b""
+    # An offline live session may have no resolver yet. The target connectivity
+    # check handles that as unavailable updates, after initializing local trust.
     destination = root / "etc/resolv.conf"
     backup = root / "etc/resolv.conf.devario-installer-backup"
     if backup.exists() or backup.is_symlink():
@@ -138,6 +163,8 @@ def run_target(root):
         raise RuntimeError("Updates require an installed target with its bootloader configured")
     subprocess.run(["findmnt", "--mountpoint", str(root)], check=True,
                    stdout=subprocess.DEVNULL)
+    RUNTIME.mkdir(mode=0o700, parents=True, exist_ok=True)
+    (RUNTIME / "result.json").unlink(missing_ok=True)
     runtime = root / RUNTIME.relative_to("/")
     runtime.mkdir(mode=0o700, parents=True, exist_ok=True)
     (runtime / "active").touch(mode=0o600)
@@ -154,6 +181,12 @@ def run_target(root):
                             f"XDG_STATE_HOME={RUNTIME}/state",
                             f"XDG_RUNTIME_DIR={RUNTIME}",
                             HELPER, "--run-target"], check=True)
+        # Publish only after successful helper completion and DNS restoration.
+        # Calamares reads this live copy after the target has been unmounted.
+        result = json.loads((root / EVIDENCE.relative_to("/") / "result.json").read_text())
+        if result.get("status") not in ("complete", "updates-pending"):
+            raise RuntimeError("The target update helper did not record a completed result")
+        (RUNTIME / "result.json").write_text(json.dumps(result) + "\n")
     finally:
         (runtime / "active").unlink(missing_ok=True)
 
@@ -171,11 +204,11 @@ def update_target():
         (EVIDENCE / name).unlink(missing_ok=True)
     phase = "Initializing package trust"
     with (EVIDENCE / "update.log").open("a", buffering=1) as transcript:
-        def run(args, capture=False):
+        def run(args, capture=False, timeout=None):
             transcript.write("\n$ " + " ".join(args) + "\n")
             result = subprocess.run(args, stdin=subprocess.DEVNULL,
                                     stdout=subprocess.PIPE if capture else transcript,
-                                    stderr=transcript, text=True, check=True)
+                                    stderr=transcript, text=True, check=True, timeout=timeout)
             return result.stdout
 
         def inventory(filename):
@@ -185,21 +218,38 @@ def update_target():
                 raise RuntimeError("Shelly returned an invalid installed package inventory")
             (EVIDENCE / filename).write_text(json.dumps(packages, sort_keys=True, indent=2) + "\n")
 
+        def pending(reason, error):
+            # Cleanup failure is fatal and must not publish a success warning.
+            run(["gpgconf", "--homedir", "/etc/shelly.d/gnupg", "--kill", "all"])
+            result = {"status": "updates-pending", "phase": phase, "reason": reason,
+                      "error": str(error), "recordedAt": int(time.time())}
+            transcript.write("\n" + json.dumps(result) + "\n")
+            status.write_text(json.dumps(result) + "\n")
+            log(f"Updates pending: {reason} Logs: {EVIDENCE}")
+
         try:
             log(phase)
             run(["shelly", "keyring", "init"])
             run(["shelly", "keyring", "populate", "devario-core"])
             inventory("packages-before.json")
+            phase = "Checking repository connectivity"
+            log(phase)
+            try:
+                check_connectivity(Path("/"))
+            except UpdatesUnavailable as error:
+                pending(str(error), error)
+                return
             phase = "Synchronizing Shelly repositories"
             log(phase)
             # Retry only synchronization, never a package transaction.
             for attempt in range(3):
                 try:
-                    run(["shelly", "sync", "standard", "--no-confirm"])
+                    run(["shelly", "sync", "standard", "--no-confirm"], timeout=SYNC_TIMEOUT)
                     break
-                except subprocess.CalledProcessError:
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
                     if attempt == 2:
-                        raise
+                        pending("Repository synchronization could not be completed. Try updating with Shelly after restarting.", error)
+                        return
                     time.sleep(attempt + 1)
             phase = "Updating installed packages"
             log(phase)
@@ -245,7 +295,7 @@ def main():
     if os.geteuid() != 0:
         raise RuntimeError("The installer update helper requires root")
     if args.preflight:
-        check_connectivity()
+        preflight()
     elif args.target is not None:
         run_target(args.target)
     else:

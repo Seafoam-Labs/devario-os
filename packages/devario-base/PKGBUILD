@@ -2,7 +2,7 @@
 
 pkgname=devario-base
 pkgver=3
-pkgrel=15
+pkgrel=17
 pkgdesc="Minimal package set defining a base Devario installation"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -53,7 +53,7 @@ replaces=('base' 'devario-alpm-runtime')
 backup=('etc/shelly.conf')
 source=('shelly.conf' 'devario-report.sh' 'devario-report.desktop')
 sha256sums=(
-  '1f38a7d2e986abea46882aa7d3cfd7b2e1be11e6a5c328d3e395bb4a31fa6d18'
+  '883ee906806e349ac12a08c885124499c4c6495345bdd62ada4f4fde318fa8c5'
   '119b53a8143666fec4dbd22373857651bbe8d14206722209016f71b3fd9a84e6'
   '80393599bf8724177dafe28a258f59756c1713e52a3777fff1663df82deb634d'
 )

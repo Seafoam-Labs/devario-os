@@ -24,6 +24,7 @@ class UpdateTests(unittest.TestCase):
         self.root = Path(temporary.name)
         self.enterContext(patch.object(update, "log"))
         self.enterContext(patch.object(update.time, "sleep"))
+        self.enterContext(patch.object(update, "RUNTIME", self.root / "live-runtime"))
 
     def write(self, name, text):
         path = self.root / name
@@ -65,15 +66,34 @@ class UpdateTests(unittest.TestCase):
             self.assertEqual(len(requests), 4)
             run.assert_not_called()
 
-    def test_unreachable_repository_and_clock_fail_before_installation(self):
+    def test_unreachable_repository_and_clock_make_updates_unavailable(self):
         self.write("etc/shelly.conf", "[core]\nServer = https://bad.test\n")
         with patch.object(update.urllib.request, "urlopen", side_effect=urllib.error.URLError("TLS failed")) as fetch:
-            with self.assertRaisesRegex(RuntimeError, "Cannot reach repository core"):
+            with self.assertRaisesRegex(update.UpdatesUnavailable, "Cannot reach repository core"):
                 update.check_connectivity(self.root)
             self.assertEqual(fetch.call_count, 3)
         with patch.object(update.time, "time", return_value=0), \
-                self.assertRaisesRegex(RuntimeError, "clock predates"):
+                self.assertRaisesRegex(update.UpdatesUnavailable, "clock predates"):
             update.check_connectivity(self.root)
+
+    def test_preflight_clears_stale_warning_and_allows_offline_install(self):
+        update.RUNTIME.mkdir()
+        status = update.RUNTIME / "result.json"
+        status.write_text('{"status":"updates-pending"}')
+        with patch.object(update, "check_connectivity", side_effect=update.UpdatesUnavailable("DNS unavailable")):
+            update.preflight()
+        self.assertFalse(status.exists())
+        with patch.object(update, "check_connectivity", side_effect=RuntimeError("invalid configuration")):
+            with self.assertRaisesRegex(RuntimeError, "invalid configuration"):
+                update.preflight()
+
+    def test_connectivity_has_overall_deadline(self):
+        self.write("etc/shelly.conf", "[core]\nServer = https://bad.test\n")
+        with patch.object(update.time, "monotonic", side_effect=[0, update.CONNECTIVITY_BUDGET + 1]), \
+                patch.object(update.urllib.request, "urlopen") as fetch:
+            with self.assertRaisesRegex(update.UpdatesUnavailable, "timed out"):
+                update.check_connectivity(self.root)
+            fetch.assert_not_called()
 
     def test_http_and_empty_repository_fail(self):
         for config in ("[core]\nServer = http://insecure.test\n", "[core]\n"):
@@ -114,6 +134,13 @@ class UpdateTests(unittest.TestCase):
                 self.fail("must not enter target")
         self.assertEqual(backup.read_text(), "original\n")
 
+    def test_offline_resolver_may_be_missing_or_empty(self):
+        resolver = self.write("etc/resolv.conf", "original\n")
+        for source in (self.root / "missing", self.write("empty", "")):
+            with update.target_resolver(self.root, source):
+                self.assertEqual(resolver.read_bytes(), b"")
+            self.assertEqual(resolver.read_text(), "original\n")
+
     def test_wrapper_only_runs_commands_in_target_and_restores_dns(self):
         self.write("var/lib/devario/systemd-boot-installed", "")
         resolver = self.write("etc/resolv.conf", "target resolver\n")
@@ -137,7 +164,28 @@ class UpdateTests(unittest.TestCase):
             update.run_target(self.root)
         self.assertEqual([e[0] for e in events], ["findmnt", "chroot"])
         self.assertEqual(resolver.read_text(), "target resolver\n")
-        self.assertFalse((self.root / "run/devario-installer-update/active").exists())
+        self.assertFalse((self.root / update.RUNTIME.relative_to("/") / "active").exists())
+        self.assertFalse((update.RUNTIME / "result.json").exists())
+
+    def test_wrapper_publishes_result_after_restoring_dns(self):
+        self.write("var/lib/devario/systemd-boot-installed", "")
+        resolver = self.write("etc/resolv.conf", "original\n")
+        source = self.write("live-resolver", "nameserver 192.0.2.1\n")
+        original = update.target_resolver
+        target_status = self.root / update.EVIDENCE.relative_to("/") / "result.json"
+        target_status.parent.mkdir(parents=True)
+        for status in ("updates-pending", "complete"):
+            result = {"status": status, "reason": "DNS unavailable"}
+            def run(args, **kwargs):
+                if args[0] == "chroot":
+                    self.assertFalse((update.RUNTIME / "result.json").exists())
+                    target_status.write_text(json.dumps(result))
+            with patch.object(update, "target_resolver", side_effect=lambda root: original(root, source)), \
+                    patch.object(update.subprocess, "run", side_effect=run):
+                update.run_target(self.root)
+            self.assertEqual(resolver.read_text(), "original\n")
+            target_status.unlink()
+            self.assertEqual(json.loads((update.RUNTIME / "result.json").read_text()), result)
 
     def test_refuses_live_root_and_unprepared_target(self):
         with patch.object(update.subprocess, "run") as run:
@@ -148,7 +196,8 @@ class UpdateTests(unittest.TestCase):
                 update.update_target()
             run.assert_not_called()
 
-    def transaction(self, failure=None, sync_failures=0, no_updates=False):
+    def transaction(self, failure=None, sync_failures=0, no_updates=False,
+                    connectivity_error=None, sync_timeout=False, expect_pending=False):
         runtime = self.root / "run/update"
         self.write("run/update/active", "")
         marker = self.write("boot-installed", "")
@@ -168,6 +217,9 @@ class UpdateTests(unittest.TestCase):
             events.append(args)
             if args[:2] == ["shelly", "sync"]:
                 sync_attempts += 1
+                self.assertEqual(kwargs["timeout"], update.SYNC_TIMEOUT)
+                if sync_timeout:
+                    raise subprocess.TimeoutExpired(args, update.SYNC_TIMEOUT)
                 if sync_attempts <= sync_failures:
                     raise subprocess.CalledProcessError(1, args)
             if failure and failure in args:
@@ -182,8 +234,18 @@ class UpdateTests(unittest.TestCase):
 
         with patch.object(update, "RUNTIME", runtime), patch.object(update, "EVIDENCE", evidence), \
                 patch.object(update, "BOOT_MARKER", marker), patch.object(update, "Path", side_effect=mapped_path), \
+                patch.object(update, "check_connectivity", side_effect=connectivity_error), \
                 patch.object(update.subprocess, "run", side_effect=run):
-            if failure or sync_failures >= 3:
+            if expect_pending:
+                update.update_target()
+                result = json.loads((evidence / "result.json").read_text())
+                self.assertEqual(result["status"], "updates-pending")
+                self.assertTrue(result["reason"])
+                self.assertTrue((evidence / "packages-before.json").exists())
+                self.assertFalse((evidence / "packages-after.json").exists())
+                self.assertFalse(any("upgrade" in e for e in events))
+                self.assertEqual(events[-1], ["gpgconf", "--homedir", "/etc/shelly.d/gnupg", "--kill", "all"])
+            elif failure or connectivity_error:
                 with self.assertRaisesRegex(RuntimeError, "Installation is incomplete"), \
                         patch.object(update.sys, "stderr"):
                     update.update_target()
@@ -211,22 +273,42 @@ class UpdateTests(unittest.TestCase):
                 self.assertEqual(events[-1], ["gpgconf", "--homedir", "/etc/shelly.d/gnupg", "--kill", "all"])
 
     def test_failures_stop_the_pipeline_without_retrying_transactions(self):
-        for failure in ("init", "populate", "sync", "upgrade", "--configure-updated", "/usr/lib/devario/boot-update"):
+        for failure in ("init", "populate", "upgrade", "--configure-updated", "/usr/lib/devario/boot-update"):
             with self.subTest(failure=failure):
                 events = self.transaction(failure=failure)
                 self.assertIn(failure, events[-2])
                 self.assertEqual(events[-1][0], "gpgconf")
-                self.assertEqual(sum(failure in e for e in events), 3 if failure == "sync" else 1)
+                self.assertEqual(sum(failure in e for e in events), 1)
+
+    def test_offline_target_skips_sync_and_upgrade(self):
+        events = self.transaction(connectivity_error=update.UpdatesUnavailable("DNS unavailable"), expect_pending=True)
+        self.assertFalse(any("sync" in e for e in events))
+
+    def test_invalid_repository_configuration_is_fatal(self):
+        self.transaction(connectivity_error=RuntimeError("invalid configuration"))
+
+    def test_warning_cleanup_failure_is_fatal(self):
+        self.transaction(failure="gpgconf", sync_failures=3)
+
+    def test_preflight_offline_does_not_prevent_later_updates(self):
+        with patch.object(update, "check_connectivity", side_effect=update.UpdatesUnavailable("offline")):
+            update.preflight()
+        events = self.transaction()
+        self.assertTrue(any("upgrade" in e for e in events))
 
     def test_agent_cleanup_failure_prevents_success(self):
         self.transaction(failure="gpgconf")
 
     def test_sync_retries_are_bounded(self):
         self.assertEqual(sum("sync" in e for e in self.transaction(sync_failures=2)), 3)
-        events = self.transaction(sync_failures=3)
+        events = self.transaction(sync_failures=3, expect_pending=True)
         self.assertFalse(any("upgrade" in e for e in events))
 
-    def test_calamares_requires_updates_before_final_defaults_and_connectivity_before_partitioning(self):
+    def test_sync_timeout_finishes_with_warning(self):
+        events = self.transaction(sync_timeout=True, expect_pending=True)
+        self.assertEqual(sum("sync" in e for e in events), 3)
+
+    def test_calamares_optional_updates_precede_final_defaults_and_unmount(self):
         import yaml
         settings = yaml.safe_load((PROFILE / "airootfs/etc/calamares/settings.conf").read_text())
         sequence = next(step["exec"] for step in settings["sequence"] if "exec" in step)
@@ -243,7 +325,8 @@ class UpdateTests(unittest.TestCase):
             self.assertFalse(config["verbose"])
             self.assertEqual(config["script"], [command])
         welcome = yaml.safe_load((PROFILE / "airootfs/etc/calamares/modules/welcome.conf").read_text())
-        self.assertIn("internet", welcome["requirements"]["required"])
+        self.assertNotIn("internet", welcome["requirements"]["required"])
+        self.assertIn("internet", welcome["requirements"]["check"])
         self.assertEqual(json.loads((PROFILE / "profile.json").read_text())["permissions"][update.HELPER], "755")
 
 

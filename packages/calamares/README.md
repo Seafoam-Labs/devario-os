@@ -65,7 +65,14 @@ motion without adding Darkly/KDE runtime dependencies or crossing the user/root
 configuration boundary. Its QML sidebar and slideshow use the same generated
 palette and motion values as Qt Widgets.
 
-When changing `PearlStyle.cpp`, `PearlStyle.h`, or either patch, update the
+The update-warning patch refreshes the finished page on activation and reads
+`/run/devario-installer-update/result.json` from the live session. An
+`updates-pending` result displays a persistent warning and Shelly update
+instructions alongside the existing restart option. Failure and setup screens
+keep their normal behavior. The target update wrapper publishes this result
+before unmounting, only after successful helper completion and DNS restoration.
+
+When changing `PearlStyle.cpp`, `PearlStyle.h`, or any patch, update the
 PKGBUILD checksums and package release. `makepkg --verifysource` and
 `makepkg --nobuild --nodeps` verify the source inputs and clean patch application.
 On a Calamares update, verify the branding lookup, ViewManager lifecycle and QML
@@ -73,6 +80,19 @@ APIs against the new source before refreshing patches. Re-render and compare bot
 palettes against the chosen Pearl release whenever the reference changes.
 
 ## Verification
+
+With pristine Calamares 3.4.2 sources unpacked, verify the real patched completion
+widget without installing or rebooting anything:
+
+```sh
+python3 tests/test-calamares-update-warning.py /path/to/calamares-3.4.2
+```
+
+This compiles the widget against Qt6 with stubbed application configuration and
+checks the warning text, escaped failure reasons, restart checkbox, successful
+updates and fatal failure screen. Run `tests/test-update-target-packages.py`
+in the validation Python environment for update and cleanup behavior. Full
+offline-install and reboot acceptance checks are listed in the main README.
 
 Calamares targets x86-64-v3. The recipe replaces host compiler flags and checks
 the toolchain's C runtime startup objects before compiling. Build in a Devario

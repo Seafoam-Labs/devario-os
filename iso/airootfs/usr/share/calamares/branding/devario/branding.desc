@@ -17,6 +17,8 @@ strings:
   versionedName: "${PRETTY_NAME}"
   shortVersionedName: "Devario"
   bootloaderEntryName: "Devario"
+  supportUrl: "https://fluxer.gg/vOjrMXcE"
+  donateUrl: "https://www.patreon.com/SeafoamLabs"
 images:
   productIcon: "mark.svg"
   productLogo: "mark.svg"

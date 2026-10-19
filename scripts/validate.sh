@@ -149,6 +149,8 @@ required_files=(
   "$script_dir/verify-calamares-isa.sh"
   "$project_dir/tests/test-calamares-isa.py"
   "$project_dir/packages/calamares/0001-devario-wayland-runtime.patch"
+  "$project_dir/packages/calamares/0003-devario-update-warning.patch"
+  "$project_dir/tests/test-calamares-update-warning.py"
   "$project_dir/packages/ckbcomp/PKGBUILD"
   "$project_dir/packages/devario-base/PKGBUILD"
   "$project_dir/packages/devario-filesystem/profile"

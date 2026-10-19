@@ -281,7 +281,7 @@ if (( release_build )); then
   python3 - "$container_root/etc/shelly.conf" "$repository_snapshot_url" <<'PYCONF'
 import pathlib,sys
 p=pathlib.Path(sys.argv[1]); text=p.read_text()
-text=text.replace('https://repo.seafoam-labs.org/devario-core/$arch',sys.argv[2]+'devario-core/$arch')
+text=text.replace('https://mirrors.seafoam-labs.org/devario-core/$arch',sys.argv[2]+'devario-core/$arch')
 p.write_text(text)
 PYCONF
 fi

@@ -124,7 +124,7 @@ def merge_database(sources, selected, kind, output):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--url', default='https://repo.seafoam-labs.org/devario-core/x86_64')
+    parser.add_argument('--url', default='https://mirrors.seafoam-labs.org/devario-core/x86_64')
     parser.add_argument('--repositories', type=Path, default=PROJECT / 'repositories/defaults.json')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--cache', type=Path, default=PROJECT / 'work/repository-downloads')

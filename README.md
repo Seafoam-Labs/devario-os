@@ -346,7 +346,8 @@ Live and installed systems enable `devario-core` first, followed by
 `devario-utilities`, `devario-productivity`, and `devario-libs`.
 Each repository requires package and database signatures
 verified through the existing Devario keyring. Calamares copies this configuration
-into the installed system and requires network access to finish installation.
+into the installed system. Network access is optional for installation; unavailable
+updates produce a visible completion warning.
 
 After user, network, NVIDIA, bootloader and service configuration, the last
 installation phase initializes the target keyring, runs
@@ -354,22 +355,37 @@ installation phase initializes the target keyring, runs
 `shelly upgrade standard --no-confirm`. These commands run inside the installed
 target with the native RLPM backend; the live session's package state is not
 updated. Before partitioning, the installer checks access to every configured
-repository, including any edition repositories. Package and database signature
-verification remains governed by the signed runtime repository configuration.
+repository, including any edition repositories, and treats connectivity failures
+as advisory. It checks connectivity again inside the target before synchronization,
+so a connection restored during installation can still be used. Package and database
+signature verification remains governed by the signed runtime repository configuration.
 
 The update wrapper temporarily supplies the live system's resolved DNS
 configuration and restores the target's original file or symlink afterward,
-including on failure. It retries repository synchronization up to three times
-but never automatically retries a package upgrade. Unavailable repositories,
-signature failures, failed transactions, and failed driver or boot verification
-stop installation; there is no silent offline fallback. An interrupted resolver
-backup is retained for recovery rather than overwritten by a later attempt.
+including on failure. A missing or empty live resolver is allowed for offline
+installation. Connectivity probes have a 30-second budget and synchronization
+gets up to three attempts of 60 seconds each. If connectivity or synchronization
+fails before the upgrade starts, the installer records `updates-pending`, completes
+cleanup and shows “Installation complete — updates pending” with instructions to
+update using Shelly after restarting. Failed synchronization never starts an upgrade
+using stale or partially refreshed databases. Every failure once the upgrade starts
+is fatal, including download, signature, transaction, driver and boot-file failures;
+package upgrades are never automatically retried. Invalid repository configuration,
+local keyring initialization failures and cleanup failures also stop installation.
+An interrupted resolver backup is retained for recovery rather than overwritten
+by a later attempt.
 
 After the upgrade, Calamares verifies NVIDIA modules against the installed
 driver and kernel and regenerates the boot images and systemd-boot entries.
-Only then does it unmount the target and report success. Update diagnostics,
-before/after package inventories, and `result.json` with completion status and
+When updates are skipped, the earlier NVIDIA and bootloader installation remains
+in place. Both successful update paths and pending-update paths proceed through
+final keyboard configuration and unmounting before reporting installation success.
+The warning result is copied into the live session before unmounting and cleared
+at the next preflight. Update diagnostics, before/after package inventories,
+and `result.json` with completion status and
 repository database hashes are stored in `/var/log/devario-installer-update/`.
+Pending updates record the phase and reason; after-update inventories and database
+hashes are only recorded when those steps complete.
 The image's original package inventory remains the record of the ISO contents;
 the installed system may contain newer packages.
 
@@ -691,7 +707,7 @@ example:
 
 ```sh
 sudo env \
-  DEVARIO_CORE_REPO_URL=https://repo.seafoam-labs.org/devario-core/x86_64 \
+  DEVARIO_CORE_REPO_URL=https://mirrors.seafoam-labs.org/devario-core/x86_64 \
   ./scripts/build-iso-nspawn.sh
 ```
 
@@ -859,12 +875,16 @@ Before publishing an image, verify that:
    packaged UWSM session.
 8. `command -v shelly` succeeds, and `shelly keyring list` shows the initialized package-signing keys.
 9. Shelly comes from `devario-core`, uses its native RLPM backend, and runs without `devario-alpm-runtime`.
-10. The installer completes its required final Shelly synchronization and full
-    upgrade; `/var/log/devario-installer-update/result.json` records `complete`.
+10. With working repositories, the installer completes final Shelly synchronization
+    and full upgrade; `/var/log/devario-installer-update/result.json` records `complete`.
     Exercise both an image with available updates and one already current.
-    Disconnected networking is rejected before partitioning; a download,
-    signature, disk-space, driver verification or boot-hook failure during the
-    final update must prevent the installer from reporting success.
+    Also exercise an installation offline throughout, a connection lost before
+    synchronization and a connection restored during installation. Unavailable
+    connectivity or exhausted synchronization retries must finish with a visible
+    updates-pending warning, usable restart option and bootable installed system.
+    Confirm `result.json` records `updates-pending` and the logs retain the reason.
+    Any failure after the package upgrade starts, including a download, signature,
+    disk-space, driver verification or boot-hook failure, must prevent success.
 11. Package install, local-package install, removal, provider resolution, and ALPM hooks work.
 12. A kernel, dracut, DKMS, microcode, or systemd upgrade runs Devario's ordered
     dracut generation and boot update, refreshes

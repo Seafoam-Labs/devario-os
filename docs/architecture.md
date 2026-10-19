@@ -102,11 +102,10 @@ and signature information.
 
 ## Trust boundary
 
-Community systems use `devario-core` and `seafoam-labs` at
-`https://repo.seafoam-labs.org`, with `devario-core` first. Their verified public
-key bundles are packaged by `devario-keyring` and `seafoam-keyring`. Both services
-currently advertise the same signer; each repository remains a separate locked
-input. Release builds require complete signed package closures and named
+Community systems use the Devario repositories at
+`https://mirrors.seafoam-labs.org`, with `devario-core` first. Their verified public
+key bundles are packaged by `devario-keyring`; each repository remains a separate
+locked input. Release builds require complete signed package closures and named
 immutable repository/bootstrap snapshots. See [the ISO builder contract](ISO-BUILDER.md).
 
 External editions may introduce an additional repository and trust root in
