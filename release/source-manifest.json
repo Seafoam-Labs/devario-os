@@ -12,8 +12,8 @@
       "id": "devario-iso-builder-b4cbf2d7",
       "path": "tools/devario-iso-builder/devario-iso-builder.tar.gz",
       "kind": "build-tool-source",
-      "size": 24761,
-      "sha256": "c90ffc21fb4ba70305d96eeaffa21443a7e98f605c4043981b4d4268a530c2ee",
+      "size": 26171,
+      "sha256": "14e398ddec755e5c9d18afc70e0679c4ee512de7af4bd67848a4849b2fd82452",
       "upstream": {
         "url": "https://github.com/Seafoam-Labs/devario-iso-builder",
         "revision": "084ffe6c3d45a98e131f83558f0e43467691b05e"
