@@ -2,10 +2,13 @@
 """Exercise welcome hooks on real pseudoterminals and default config discovery."""
 
 import errno
+import importlib.util
 import json
 import os
 from pathlib import Path
 import pty
+import re
+import runpy
 import shutil
 import subprocess
 import tempfile
@@ -81,6 +84,45 @@ class FastfetchTests(unittest.TestCase):
                 self.assertNotIn("FETCH_CALLED", self.shell_run(shell, source, terminal=False))
                 self.assertNotIn("FETCH_CALLED", self.shell_run(shell, source, term="dumb"))
                 self.assertNotIn("FETCH_CALLED", self.shell_run(shell, f"{source}; true", interactive=False))
+
+    @unittest.skipUnless(shutil.which("fastfetch"), "fastfetch is not installed")
+    def test_decorations_fit_a_40_column_terminal(self):
+        config = json.loads((ASSETS / "config.jsonc").read_text())
+        config["logo"] = {"type": "none"}
+        # Short information values can fit a narrow window; decoration must not
+        # force them into a wide, side-by-side layout.
+        config["modules"] = [module for module in config["modules"]
+                             if module["type"] in ("custom", "colors")]
+        result = subprocess.run(["fastfetch", "--config", "-", "--pipe", "false"],
+                                input=json.dumps(config), capture_output=True,
+                                text=True, check=True, timeout=10, env=self.env)
+        plain = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", result.stdout)
+        self.assertLessEqual(max(map(len, plain.splitlines()), default=0), 40)
+
+    @unittest.skipUnless(shutil.which("fastfetch") and importlib.util.find_spec("PIL"),
+                         "Fastfetch and Pillow are required for the image preview")
+    def test_preview_keeps_image_above_information(self):
+        from PIL import Image
+
+        if not Path("/usr/share/fonts/noto/NotoSansMono-Regular.ttf").exists():
+            self.skipTest("Noto Sans Mono is required for the image preview")
+        preview = runpy.run_path(str(ROOT / "scripts/preview-fastfetch.py"))
+        config = preview["configuration"]("image", sample=True)
+        source = self.directory / "logo.png"
+        Image.new("RGB", (64, 64), "red").save(source)
+        config["logo"].update(source=str(source), width=8)
+        config["logo"]["padding"]["top"] = 0
+        config["modules"] = [{"type": "custom", "format": "PREVIEW_TEXT"}]
+        destination = self.directory / "preview.png"
+        preview["render"](config, destination, sample=True)
+        with Image.open(destination) as picture:
+            red = [(x, y) for y in range(picture.height) for x in range(picture.width)
+                   if picture.getpixel((x, y)) == (255, 0, 0)]
+            text = [(x, y) for y in range(picture.height - 32) for x in range(picture.width)
+                    if picture.getpixel((x, y)) == (201, 198, 207)]
+        self.assertTrue(red, "the preview must include the logo")
+        self.assertTrue(text, "the preview must include the information")
+        self.assertLess(max(y for _, y in red), min(y for _, y in text))
 
     @unittest.skipUnless(shutil.which("fastfetch"), "fastfetch is not installed")
     def test_config_paths_logos_and_user_override(self):

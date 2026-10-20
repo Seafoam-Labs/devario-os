@@ -156,9 +156,13 @@ The package count uses Fastfetch's Devario `{shelly}` detector, which queries
 `devario-core/fastfetch` 2.69.0-4 package before rebuilding the ISO; an
 unpatched upstream Fastfetch does not support this format field.
 
-The default is the seafoam-and-blue fish PNG with the DEVARIO wordmark, beside
-a bordered layout with system, hardware, Dev Tools (Zig and .NET), and session
-sections. Missing developer tools display `not installed`. Fastfetch automatically
+The default is the seafoam-and-blue fish PNG with the DEVARIO wordmark, above
+the system, hardware, and session information. The logo is 24 columns wide;
+the information uses the full terminal width without a fixed-width frame or
+an indented color strip. This keeps reflowed text out of the image when a
+Ghostty window is narrowed after the welcome display has finished. Long values
+can still wrap normally, and the logo can be clipped in windows narrower than
+24 columns. Fastfetch automatically
 uses the terminal's image support (including Ghostty), or Chafa text rendering
 when available. ImageMagick and Chafa are explicitly included in the ISO and
 required by the Fastfetch package; its build checks enforce both image backends.
@@ -168,6 +172,11 @@ preview, or omit `--sample` to detect this machine's real information.
 See the [rendered example](docs/assets/fastfetch-preview.png). Recreate it with
 `python3 scripts/preview-fastfetch.py --sample --render docs/assets/fastfetch-preview.png`
 (requires Pillow and Noto Sans Mono).
+The rendered example is an illustration assembled with Pillow; image-protocol
+and resize behavior must be checked in a real terminal. To check a change, run
+the preview in a wide Ghostty window, shrink the window to 40 columns, and widen
+it again without rerunning Fastfetch. The image should remain above the text,
+and there should be no box borders to wrap into the information.
 
 The striped, compact, and bold text fish designs remain available; preview them
 with `python3 scripts/preview-fastfetch.py all --sample`.
