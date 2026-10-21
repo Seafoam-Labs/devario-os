@@ -2,7 +2,7 @@
 
 pkgname=devario-aqueous-desktop
 pkgver=1
-pkgrel=17
+pkgrel=19
 pkgdesc="Complete Aqueous and Pearl desktop environment for Devario"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -35,6 +35,7 @@ depends=(
   'upower'
   'brightnessctl'
   'playerctl'
+  'bluez'
   'bluez-utils'
   'bolt'
   'boltctl'
@@ -74,6 +75,8 @@ source=(
   '20-devario-gpu.conf'
   'devario-egpu.conf'
   '60-devario-gpu.sh'
+  '90-devario-bluetooth.hook'
+  'enable-bluetooth-default'
 )
 sha256sums=(
   '2cecdd6b68deaedc81997669b26ddfb705c458c8de9d8fdd465aaae35eba845b'
@@ -89,9 +92,13 @@ sha256sums=(
   '0051ed83f1263fdbd1728a5137c2b0264e8841d2d5ffe5eb19c3677de5769b80'
   'a445b985551fa6ec6f26379726f6780690ecc08491fd6deacaa26fd307ea72ec'
   '5256d83bdff4938902d57f1518330eea82c9d62b497ecb864cc2e17ce7b06a26'
+  '7e2cb52efe1a2bbf575c0d990b40c303121c4d81956f64d6a843531c4d62ff8c'
+  'db228a913b367a05cb1fa49e0de99527f973a6008b73f86d5635a5a9f367279e'
 )
 
 package() {
+  install -Dm644 "$srcdir/90-devario-bluetooth.hook" "$pkgdir/usr/share/rlpm/hooks/90-devario-bluetooth.hook"
+  install -Dm755 "$srcdir/enable-bluetooth-default" "$pkgdir/usr/lib/devario/enable-bluetooth-default"
   install -Dm755 "$srcdir/gpu-hotplug" "$pkgdir/usr/lib/devario/gpu-hotplug"
   install -Dm755 "$srcdir/devario-gpu-run" "$pkgdir/usr/bin/devario-gpu-run"
   install -Dm644 "$srcdir/devario-gpu-hotplug.service" "$pkgdir/usr/lib/systemd/system/devario-gpu-hotplug.service"

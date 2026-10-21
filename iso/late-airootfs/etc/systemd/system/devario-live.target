@@ -1,5 +1,5 @@
 [Unit]
 Description=Devario Live Graphical Session
-Wants=NetworkManager.service pearl-greeter.service shelly-storage-migrate.service shelly-keyring-init.service upower.service power-profiles-daemon.service scx_loader.service
-After=NetworkManager.service pearl-greeter.service shelly-storage-migrate.service shelly-keyring-init.service upower.service power-profiles-daemon.service scx_loader.service
+Wants=NetworkManager.service bluetooth.service pearl-greeter.service shelly-storage-migrate.service shelly-keyring-init.service upower.service power-profiles-daemon.service scx_loader.service
+After=NetworkManager.service bluetooth.service pearl-greeter.service shelly-storage-migrate.service shelly-keyring-init.service upower.service power-profiles-daemon.service scx_loader.service
 AllowIsolate=yes

@@ -290,6 +290,7 @@ done < <(
   printf '%s\n' "$profile_dir/airootfs/usr/lib/devario/prepare-target-kernel"
   printf '%s\n' "$profile_dir/airootfs/usr/lib/devario/acceptance-self-check"
   printf '%s\n' "$project_dir/packages/devario-aqueous-desktop/gpu-driver-setup"
+  printf '%s\n' "$project_dir/packages/devario-aqueous-desktop/enable-bluetooth-default"
   printf '%s\n' "$project_dir/tests/fixtures/gpu-driver-setup/mock-modprobe"
   printf '%s\n' "$project_dir/tests/test-gpu-driver-setup.sh"
   printf '%s\n' "$project_dir/tests/test-prepare-target-kernel.sh"
@@ -344,6 +345,9 @@ if ! python3 "$project_dir/tests/test-stage-iso-repositories.py"; then
 fi
 if ! DEVARIO_PROFILE_DIR="$profile_dir" python3 "$project_dir/tests/test-pearl-desktop.py"; then
   fail "Pearl desktop and live login integration tests failed"
+fi
+if ! python3 "$project_dir/tests/test-bluetooth-default.py"; then
+  fail "Bluetooth default migration tests failed"
 fi
 if ! python3 "$project_dir/tests/test-qemu-graphics.py"; then
   fail "QEMU Venus setup behavior tests failed"
@@ -958,7 +962,7 @@ fastfetch_config="$profile_dir/late-airootfs/usr/share/devario/fastfetch/config.
 live_sysusers="$profile_dir/late-airootfs/usr/lib/sysusers.d/devario-live.conf"
 live_tmpfiles="$profile_dir/late-airootfs/usr/lib/tmpfiles.d/devario-live.conf"
 
-for boot_service in upower.service power-profiles-daemon.service scx_loader.service; do
+for boot_service in bluetooth.service upower.service power-profiles-daemon.service scx_loader.service; do
   if ! grep -F 'Wants=' "$live_target" | grep -Fwq "$boot_service" \
     || ! grep -F 'After=' "$live_target" | grep -Fwq "$boot_service"; then
     fail "the live readiness target must start and order $boot_service"

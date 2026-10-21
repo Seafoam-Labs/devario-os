@@ -1,0 +1,10 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = devario-aqueous-desktop
+
+[Action]
+Description = Enabling the Devario Bluetooth service default...
+When = PostTransaction
+Exec = /usr/lib/devario/enable-bluetooth-default
