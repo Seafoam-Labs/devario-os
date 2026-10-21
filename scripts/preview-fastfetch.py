@@ -59,26 +59,38 @@ def render(config, destination, sample):
                                      input=json.dumps(text_config), text=True)
     ansi = re.compile(r"\x1b\[([0-9;]*)m")
     lines = output.rstrip().splitlines()
-    logo_columns = logo["width"] + logo["padding"]["right"] if logo["type"] == "auto" else 0
+    stacked = logo.get("position") == "top"
+    logo_columns = logo["width"] + logo["padding"]["right"] if logo["type"] == "auto" and not stacked else 0
     columns = max(len(ansi.sub("", line)) for line in lines)
-    width = round((logo_columns + columns) * cell + margin * 2)
-    height = line_height * len(lines) + margin * 2 + 32
-    canvas = Image.new("RGB", (width, height), "#201a25")
-    draw = ImageDraw.Draw(canvas)
-    palette = ["#201a25", "#b98088", "#93b58b", "#c2b484", "#78a9ba", "#a692b5",
-               "#62c6b5", "#c9c6cf", "#716977", "#ce9aa2", "#aecaa8", "#d8c999",
-               "#97c3d3", "#c2b0d1", "#84dfcf", "#eeeaf2"]
+    picture, logo_top, text_top = None, 0, 0
     if logo["type"] == "auto":
         picture = Image.open(logo["source"]).convert("RGBA")
         logo_width = round(logo["width"] * cell)
         picture.thumbnail((logo_width, round(logo_width * picture.height / picture.width)),
                           Image.Resampling.LANCZOS)
-        canvas.paste(picture, (margin, margin + logo["padding"]["top"] * line_height), picture)
+        logo_top = logo["padding"].get("top", 0) * line_height
+        if stacked:
+            logo_rows = (picture.height + line_height - 1) // line_height
+            text_top = logo_top + (logo_rows + logo["padding"].get("bottom", 0)) * line_height
+    content_width = round((logo_columns + columns) * cell)
+    content_height = text_top + line_height * len(lines)
+    if picture is not None:
+        content_width = max(content_width, picture.width)
+        content_height = max(content_height, logo_top + picture.height)
+    width = content_width + margin * 2
+    height = content_height + margin * 2 + 32
+    canvas = Image.new("RGB", (width, height), "#201a25")
+    draw = ImageDraw.Draw(canvas)
+    palette = ["#201a25", "#b98088", "#93b58b", "#c2b484", "#78a9ba", "#a692b5",
+               "#62c6b5", "#c9c6cf", "#716977", "#ce9aa2", "#aecaa8", "#d8c999",
+               "#97c3d3", "#c2b0d1", "#84dfcf", "#eeeaf2"]
+    if picture is not None:
+        canvas.paste(picture, (margin, margin + logo_top), picture)
     for row, line in enumerate(lines):
         x, color, bold, pos = margin + logo_columns * cell, palette[7], False, 0
         for match in ansi.finditer(line):
             fragment = line[pos:match.start()]
-            draw.text((x, margin + row * line_height), fragment, font=fonts[bold], fill=color)
+            draw.text((x, margin + text_top + row * line_height), fragment, font=fonts[bold], fill=color)
             x += len(fragment) * cell
             codes = [int(v) if v else 0 for v in match.group(1).split(";")]
             index = 0
@@ -104,7 +116,7 @@ def render(config, destination, sample):
                     index += 2
                 index += 1
             pos = match.end()
-        draw.text((x, margin + row * line_height), line[pos:], font=fonts[bold], fill=color)
+        draw.text((x, margin + text_top + row * line_height), line[pos:], font=fonts[bold], fill=color)
     caption = "Illustrative system values" if sample else "Detected system values"
     draw.text((margin, height - 30), caption, font=fonts[0], fill=palette[8])
     canvas.save(destination)
