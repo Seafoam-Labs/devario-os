@@ -82,6 +82,7 @@ python-pyudev
 qt6-imageformats
 ripgrep
 rsync
+rtkit
 scx-scheds
 scx-tools
 seahorse

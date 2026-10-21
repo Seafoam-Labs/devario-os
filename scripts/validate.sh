@@ -477,7 +477,7 @@ package_is_listed() {
 
 for required_package in \
   aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous \
-  calamares ckbcomp devario-desktop \
+  calamares ckbcomp devario-desktop rtkit \
   devario-base devario-boot devario-dracut devario-keyring greetd systemd pearl pearl-greeter shelly fastfetch fish \
   chafa imagemagick ghostty gnome-keyring seahorse scx-scheds scx-tools upower power-profiles-daemon adw-gtk3 papirus-icon-theme vimix-cursors \
   strace ripgrep vulkan-tools mesa-utils wayland-utils usbutils lsof nvme-cli netcat matugen \
@@ -584,6 +584,9 @@ done
 # Check the actual dependency arrays rather than any occurrence in the PKGBUILD.
 desktop_hard_dependencies="$(sed -n '/^[[:space:]]*depends=(/,/^[[:space:]]*)/p' "$desktop_meta")"
 desktop_optional_dependencies="$(sed -n '/^[[:space:]]*optdepends=(/,/^[[:space:]]*)/p' "$desktop_meta")"
+if ! grep -Eq "['\"]rtkit([<>=][^'\"]*)?['\"]" <<< "$desktop_hard_dependencies"; then
+  fail "the Devario desktop metapackage must hard-depend on rtkit for realtime audio"
+fi
 for nvidia_package in nvidia-open-dkms nvidia-utils; do
   if ! grep -Eq "['\"]${nvidia_package}:[[:space:]]" <<< "$desktop_optional_dependencies"; then
     fail "the Devario desktop metapackage must list $nvidia_package as an optional dependency"

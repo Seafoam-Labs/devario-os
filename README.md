@@ -401,6 +401,50 @@ The desktop comes from `devario-core/devario-desktop`, with stable Aqueous and
 configuration; the legacy local `devario-aqueous-desktop` recipe is no longer
 in the default build order.
 
+### Realtime audio and existing installations
+
+The default desktop and ISO require `rtkit` so PipeWire can request realtime
+scheduling through D-Bus. RTKit activates on demand; no manual service enablement,
+realtime group membership, or custom priority limits are needed.
+
+For an installed system reporting `Unit rtkit-daemon.service could not be found`,
+install the package and reboot:
+
+```sh
+sudo shelly install standard rtkit
+systemctl reboot
+```
+
+After logging back in, play audio and check the service, current-boot user
+journals, and processing threads:
+
+```sh
+systemctl status rtkit-daemon.service --no-pager
+journalctl --user -b -u pipewire.service -u pipewire-pulse.service -u wireplumber.service --no-pager
+ps -eLo pid,tid,cls,rtprio,ni,comm | rg 'pipewire|wireplumber|data-loop'
+```
+
+RTKit should activate successfully, and active audio processing threads should
+show realtime scheduling (`FF` or `RR`) with positive `RTPRIO`. Other threads may
+still use `TS`. Confirm that the RTKit `ServiceUnknown` errors no longer appear
+in the new boot. A zero process realtime-priority limit alone is not a failure:
+RTKit grants thread priorities through D-Bus.
+
+For automatic delivery to existing installations, rebuild and publish the six
+`aqueous-desktop` outputs at `1.0.4-3` from
+[Aqueous's active recipe](https://github.com/Seafoam-Labs/Aqueous/tree/main/packaging/devario/aqueous-desktop).
+Its `devario-desktop` output now requires `rtkit`. Also publish
+`devario-aqueous-desktop` `1-17` for installations using the legacy package.
+Ensure `rtkit` and its dependencies are available in the signed repository;
+its recipe is `devario-custom-packagbuilds/devario-core/rtkit/PKGBUILD`.
+After publication, `sudo shelly upgrade standard` installs the new dependency
+for either desktop package. Reboot and repeat the checks above. Rebuild the ISO
+with the updated repository for live sessions and fresh installations.
+
+Release verification must cover both an upgrade of an affected installation
+without reinstalling and a fresh installation from the rebuilt ISO. Source
+validation alone does not establish successful runtime scheduling.
+
 ## Using Shelly
 
 Run a full repository synchronization and system upgrade:
