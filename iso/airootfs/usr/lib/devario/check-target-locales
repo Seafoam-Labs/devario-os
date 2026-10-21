@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Check that glibc can load every locale selected for the installed system."""
+import argparse
+import locale
+from pathlib import Path
+import shlex
+import sys
+
+
+def check(config):
+    selected = {}
+    for number, line in enumerate(config.read_text(encoding="utf-8").splitlines(), 1):
+        fields = shlex.split(line, comments=True)
+        if not fields:
+            continue
+        if len(fields) != 1 or "=" not in fields[0]:
+            raise ValueError(f"{config}:{number}: expected a locale assignment")
+        key, value = fields[0].split("=", 1)
+        if key == "LANG" or key.startswith("LC_"):
+            if not value:
+                raise ValueError(f"{config}:{number}: {key} is empty")
+            selected[key] = value
+    if "LANG" not in selected:
+        raise ValueError(f"{config}: LANG is missing")
+
+    previous = locale.setlocale(locale.LC_ALL)
+    missing = []
+    try:
+        for key, value in selected.items():
+            try:
+                locale.setlocale(locale.LC_ALL, value)
+            except locale.Error:
+                missing.append(f"{key}={value}")
+    finally:
+        locale.setlocale(locale.LC_ALL, previous)
+    if missing:
+        raise ValueError("Configured locales could not be loaded: " + ", ".join(missing)
+                         + ". Enable their entries in /etc/locale.gen and run locale-gen.")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", type=Path, default=Path("/etc/locale.conf"))
+    args = parser.parse_args()
+    try:
+        check(args.config)
+    except (OSError, ValueError) as error:
+        print(f"Locale verification failed: {error}", file=sys.stderr)
+        return 1
+    print("All configured locales can be loaded.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -899,6 +899,29 @@ Before publishing an image, verify that:
 14. An `execve` trace confirms that package transactions during package and ISO
     construction run through Shelly, and the default ISO workflow uses `shelly build`.
 
+## Locale generation and recovery
+
+The ISO retains glibc's full `/etc/locale.gen` catalog. The image builder enables
+and generates `en_US.UTF-8` for the live session; Calamares enables the selected
+language and regional locales during installation. Both paths verify that glibc
+can load the configured locales, since `locale-gen` can return success despite
+an individual generation failure.
+
+For installations affected by [issue #12](https://github.com/Seafoam-Labs/devario-os/issues/12),
+inspect `/etc/locale.conf` and `/usr/share/i18n/SUPPORTED`. Back up
+`/etc/locale.gen`, then add each missing selected locale using its exact entry
+from `SUPPORTED`. For German, the entry is `de_DE.UTF-8 UTF-8`. Keep existing
+enabled locales, including English. Run `sudo locale-gen`, then verify German
+with `LC_ALL=de_DE.UTF-8 locale charmap` (it must print `UTF-8` without warnings).
+Log out and back in to refresh the graphical session's environment. Do not set
+a permanent `LC_ALL` override: it would override the chosen regional formats.
+
+Before releasing an ISO, perform a German Calamares installation and reboot.
+Verify `locale`, `locale -a`, and `locale charmap` in both Aqueous and a TTY, then
+confirm cava renders without an `LC_ALL` override. Also check English and mixed
+language/regional settings, and confirm that the German keyboard still works
+at the LUKS prompt, login screen, desktop, and TTY.
+
 ## Development limitations
 
 - Development images deliberately trust their embedded repository. Public images must use release mode with a signed

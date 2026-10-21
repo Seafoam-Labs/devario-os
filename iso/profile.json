@@ -12,6 +12,7 @@
     "/usr/lib/devario/prepare-target-kernel": "755",
     "/usr/lib/devario/configure-target-nvidia": "755",
     "/usr/lib/devario/configure-target-keyboard": "755",
+    "/usr/lib/devario/check-target-locales": "755",
     "/usr/lib/devario/update-target-packages": "755",
     "/usr/lib/devario/gpu-driver-setup": "755",
     "/usr/lib/devario/desktop-self-check": "755",

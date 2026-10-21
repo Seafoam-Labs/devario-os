@@ -100,6 +100,9 @@ required_files=(
   "$profile_dir/airootfs/etc/calamares/modules/keyboard_aqueous.conf"
   "$profile_dir/airootfs/usr/lib/devario/configure-target-keyboard"
   "$project_dir/tests/test-configure-target-keyboard.py"
+  "$profile_dir/airootfs/etc/calamares/modules/check_locales.conf"
+  "$profile_dir/airootfs/usr/lib/devario/check-target-locales"
+  "$project_dir/tests/test-locales.py"
   "$profile_dir/airootfs/usr/lib/devario/configure-target-nvidia"
   "$profile_dir/airootfs/usr/share/devario/nvidia-supported-gpus.json"
   "$project_dir/tests/test-configure-target-nvidia.py"
@@ -329,6 +332,9 @@ if ! python3 "$project_dir/tests/test-kernel-reboot-notify.py"; then
 fi
 if ! python3 "$project_dir/tests/test-filesystem-profile.py"; then
   fail "Filesystem login profile tests failed"
+fi
+if ! DEVARIO_PROFILE_DIR="$profile_dir" python3 "$project_dir/tests/test-locales.py"; then
+  fail "Live and installed locale tests failed"
 fi
 if ! python3 "$project_dir/tests/test-stage-core-repository.py"; then
   fail "Repository staging and provider selection tests failed"

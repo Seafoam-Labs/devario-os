@@ -12,8 +12,8 @@
       "id": "devario-iso-builder-b4cbf2d7",
       "path": "tools/devario-iso-builder/devario-iso-builder.tar.gz",
       "kind": "build-tool-source",
-      "size": 26171,
-      "sha256": "14e398ddec755e5c9d18afc70e0679c4ee512de7af4bd67848a4849b2fd82452",
+      "size": 27594,
+      "sha256": "82b05f4e1abecdbb50107d97ed637b949709dc58c0a1f7abf97bd052b5147e71",
       "upstream": {
         "url": "https://github.com/Seafoam-Labs/devario-iso-builder",
         "revision": "084ffe6c3d45a98e131f83558f0e43467691b05e"
@@ -22,7 +22,7 @@
         "GPL-3.0-or-later"
       ],
       "correspondingSource": true,
-      "notes": "Local RLPM integration changes against the upstream base revision are retained as LOCAL-CHANGES.patch inside the source archive. The archive SHA-256 pins the complete modified source."
+      "notes": "Local RLPM integration and locale catalog changes against the upstream base revision are retained as LOCAL-CHANGES.patch inside the source archive. The archive SHA-256 pins the complete modified source."
     }
   ]
 }
