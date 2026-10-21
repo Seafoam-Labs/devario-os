@@ -4,7 +4,8 @@ set -euo pipefail
 
 profile_dir="${1:?Usage: stage-image-links.sh STAGED_PROFILE}"
 install -d -- "$profile_dir/airootfs/etc/calamares" \
-  "$profile_dir/late-airootfs/etc/systemd/system/multi-user.target.wants"
+  "$profile_dir/late-airootfs/etc/systemd/system/multi-user.target.wants" \
+  "$profile_dir/late-airootfs/etc/systemd/system/graphical.target.wants"
 
 ln -sT -- /usr/share/calamares/qml "$profile_dir/airootfs/etc/calamares/qml"
 if [[ ! -e "$profile_dir/airootfs/etc/localtime" && ! -L "$profile_dir/airootfs/etc/localtime" ]]; then
@@ -14,3 +15,7 @@ ln -sT -- ../../../../usr/lib/systemd/system/ufw.service \
   "$profile_dir/late-airootfs/etc/systemd/system/multi-user.target.wants/ufw.service"
 ln -sT -- ../../../../usr/lib/systemd/system/devario-gpu-hotplug.service \
   "$profile_dir/late-airootfs/etc/systemd/system/multi-user.target.wants/devario-gpu-hotplug.service"
+ln -sT -- ../../../../usr/lib/systemd/system/scx_loader.service \
+  "$profile_dir/late-airootfs/etc/systemd/system/multi-user.target.wants/scx_loader.service"
+ln -sT -- ../../../../usr/lib/systemd/system/upower.service \
+  "$profile_dir/late-airootfs/etc/systemd/system/graphical.target.wants/upower.service"

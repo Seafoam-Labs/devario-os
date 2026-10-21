@@ -473,7 +473,7 @@ for required_package in \
   aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous \
   calamares ckbcomp devario-desktop \
   devario-base devario-boot devario-dracut devario-keyring greetd systemd pearl pearl-greeter shelly fastfetch fish \
-  chafa imagemagick ghostty gnome-keyring seahorse upower power-profiles-daemon adw-gtk3 papirus-icon-theme vimix-cursors \
+  chafa imagemagick ghostty gnome-keyring seahorse scx-scheds scx-tools upower power-profiles-daemon adw-gtk3 papirus-icon-theme vimix-cursors \
   strace ripgrep vulkan-tools mesa-utils wayland-utils usbutils lsof nvme-cli netcat matugen \
   linux-devario linux-devario-headers nvidia-open-dkms nvidia-utils \
   vulkan-intel vulkan-radeon vulkan-swrast vulkan-virtio xorg-xwayland; do
@@ -949,14 +949,14 @@ fastfetch_config="$profile_dir/late-airootfs/usr/share/devario/fastfetch/config.
 live_sysusers="$profile_dir/late-airootfs/usr/lib/sysusers.d/devario-live.conf"
 live_tmpfiles="$profile_dir/late-airootfs/usr/lib/tmpfiles.d/devario-live.conf"
 
-for power_service in upower.service power-profiles-daemon.service; do
-  if ! grep -F 'Wants=' "$live_target" | grep -Fwq "$power_service" \
-    || ! grep -F 'After=' "$live_target" | grep -Fwq "$power_service"; then
-    fail "the live readiness target must start and order $power_service"
+for boot_service in upower.service power-profiles-daemon.service scx_loader.service; do
+  if ! grep -F 'Wants=' "$live_target" | grep -Fwq "$boot_service" \
+    || ! grep -F 'After=' "$live_target" | grep -Fwq "$boot_service"; then
+    fail "the live readiness target must start and order $boot_service"
   fi
-  if ! grep -A2 -F "name: $power_service" "$services_systemd" | grep -Fq 'action: enable' \
-    || ! grep -A2 -F "name: $power_service" "$services_systemd" | grep -Fq 'mandatory: true'; then
-    fail "Calamares must enable $power_service as a mandatory installed service"
+  if ! grep -A2 -F "name: $boot_service" "$services_systemd" | grep -Fq 'action: enable' \
+    || ! grep -A2 -F "name: $boot_service" "$services_systemd" | grep -Fq 'mandatory: true'; then
+    fail "Calamares must enable $boot_service as a mandatory installed service"
   fi
 done
 
