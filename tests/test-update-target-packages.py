@@ -313,8 +313,9 @@ class UpdateTests(unittest.TestCase):
         settings = yaml.safe_load((PROFILE / "airootfs/etc/calamares/settings.conf").read_text())
         sequence = next(step["exec"] for step in settings["sequence"] if "exec" in step)
         self.assertLess(sequence.index("shellprocess@update_preflight"), sequence.index("partition"))
-        self.assertEqual(sequence[-4:], ["services-systemd", "shellprocess@update_target",
-                                         "shellprocess@keyboard_aqueous", "umount"])
+        self.assertEqual(sequence[-5:], ["services-systemd", "shellprocess@update_target",
+                                         "shellprocess@keyboard_aqueous",
+                                         "shellprocess@shelly_tray", "umount"])
         self.assertLess(sequence.index("shellprocess@systemd_boot"), sequence.index("shellprocess@update_target"))
         for name, command in (("update_preflight", update.HELPER + " --preflight"),
                               ("update_target", update.HELPER + ' --target "${ROOT}"')):

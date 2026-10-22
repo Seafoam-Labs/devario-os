@@ -100,6 +100,9 @@ required_files=(
   "$profile_dir/airootfs/etc/calamares/modules/keyboard_aqueous.conf"
   "$profile_dir/airootfs/usr/lib/devario/configure-target-keyboard"
   "$project_dir/tests/test-configure-target-keyboard.py"
+  "$profile_dir/airootfs/etc/calamares/modules/shelly_tray.conf"
+  "$profile_dir/airootfs/usr/lib/devario/configure-target-shelly-tray"
+  "$project_dir/tests/test-configure-target-shelly-tray.py"
   "$profile_dir/airootfs/etc/calamares/modules/check_locales.conf"
   "$profile_dir/airootfs/usr/lib/devario/check-target-locales"
   "$project_dir/tests/test-locales.py"
@@ -372,6 +375,9 @@ if [[ -n "${DEVARIO_NVIDIA_TEST_ROOT:-}" ]] && ! DEVARIO_PROFILE_DIR="$profile_d
 fi
 if ! DEVARIO_PROFILE_DIR="$profile_dir" python3 "$project_dir/tests/test-update-target-packages.py"; then
   fail "Calamares installation update behavior tests failed"
+fi
+if ! DEVARIO_PROFILE_DIR="$profile_dir" python3 "$project_dir/tests/test-configure-target-shelly-tray.py"; then
+  fail "installed Shelly tray startup tests failed"
 fi
 if ! DEVARIO_PROFILE_DIR="$profile_dir" python3 "$project_dir/tests/test-configure-target-keyboard.py"; then
   fail "Calamares Aqueous keyboard installation behavior tests failed"

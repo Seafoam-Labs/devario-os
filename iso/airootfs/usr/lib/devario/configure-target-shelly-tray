@@ -1,0 +1,124 @@
+#!/usr/bin/python3 -I
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Seed Shelly's per-user tray settings and service in the installed system."""
+import argparse
+import json
+import os
+from pathlib import Path
+import sys
+import tempfile
+
+SERVICE_NAME = "shelly-notifications.service"
+# Match Shelly's systemd_tray.zig so its settings UI can disable/remove this unit.
+SERVICE = """[Unit]
+Description=Shelly Notifications Tray Service
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/shelly-notifications
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target
+"""
+
+
+def checked_path(root, relative):
+    """Do not follow home/config symlinks while provisioning as root."""
+    path = root
+    for part in relative.parts:
+        if part in ("..", "/"):
+            raise ValueError("Expected a path within the installed system")
+        path /= part
+        if path.is_symlink():
+            raise ValueError(f"Refusing symlink: {path}")
+    return path
+
+
+def write_owned(path, content, uid, gid):
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fchmod(stream.fileno(), 0o644)
+            os.fchown(stream.fileno(), uid, gid)
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def configure(root, username):
+    root = root.resolve(strict=True)
+    accounts = [line.split(":") for line in (root / "etc/passwd").read_text().splitlines()
+                if line.split(":", 1)[0] == username]
+    if len(accounts) != 1 or len(accounts[0]) != 7:
+        raise ValueError("Expected one installed account matching the selected user")
+    _, _, uid, gid, _, home, _ = accounts[0]
+    uid, gid = int(uid), int(gid)
+    if uid == 0 or not home.startswith("/") or home == "/":
+        raise ValueError("Expected a non-root user with an absolute home directory")
+    home = checked_path(root, Path(home).relative_to("/"))
+    if not home.is_dir():
+        raise ValueError("The installed user's home directory does not exist")
+    if not os.access(root / "usr/bin/shelly-notifications", os.X_OK):
+        raise ValueError("The installed system is missing shelly-notifications")
+
+    config = checked_path(root, home.relative_to(root) / ".config")
+    settings = checked_path(root, config.relative_to(root) / "shelly/settings.json")
+    service_dir = checked_path(root, config.relative_to(root) / "systemd/user")
+    service = checked_path(root, service_dir.relative_to(root) / SERVICE_NAME)
+    wants = checked_path(root, service_dir.relative_to(root) / "graphical-session.target.wants")
+    link = wants / SERVICE_NAME
+    if link.is_symlink():
+        if os.readlink(link) != f"../{SERVICE_NAME}":
+            raise ValueError("Unexpected Shelly service enablement link")
+    elif link.exists():
+        raise ValueError("Shelly service enablement path is not a symlink")
+
+    preferences = json.loads(settings.read_text()) if settings.exists() else {}
+    if not isinstance(preferences, dict):
+        raise ValueError("Shelly settings must be a JSON object")
+    # Existing homes keep explicit opt-outs and all unrelated preferences.
+    preferences.setdefault("TrayEnabled", True)
+    preferences.setdefault("TrayAutoStart", True)
+    if any(type(preferences[key]) is not bool for key in ("TrayEnabled", "TrayAutoStart")):
+        raise ValueError("Shelly tray preferences must be booleans")
+
+    def directory(path):
+        if path == home:
+            return
+        directory(path.parent)
+        path.mkdir(mode=0o700, exist_ok=True)
+        os.chown(path, uid, gid)
+
+    directory(settings.parent)
+    write_owned(settings, json.dumps(preferences, indent=2) + "\n", uid, gid)
+    if preferences["TrayEnabled"] and preferences["TrayAutoStart"]:
+        directory(wants)
+        if not service.exists():
+            write_owned(service, SERVICE, uid, gid)
+        else:
+            os.chown(service, uid, gid)
+        if not link.is_symlink():
+            link.symlink_to(f"../{SERVICE_NAME}")
+        os.chown(link, uid, gid, follow_symlinks=False)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("username")
+    parser.add_argument("--root", type=Path, default=Path("/"))
+    args = parser.parse_args()
+    try:
+        configure(args.root, args.username)
+    except (OSError, ValueError) as error:
+        print(f"Devario Shelly tray: cannot configure startup: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
