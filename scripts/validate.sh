@@ -112,18 +112,18 @@ required_files=(
   "$project_dir/scripts/lib/qemu-graphics.sh"
   "$project_dir/scripts/test-live-desktop.py"
   "$profile_dir/airootfs/usr/lib/devario/desktop-self-check"
-  "$profile_dir/airootfs/usr/lib/devario/graphics-session"
-  "$profile_dir/airootfs/etc/xdg/uwsm/env.d/61-devario-virtio.sh"
+  "$project_dir/packages/devario-system-integration/graphics-session"
+  "$project_dir/packages/devario-system-integration/61-devario-virtio.sh"
   "$profile_dir/late-airootfs/usr/share/devario/greetd/config.toml"
   "$profile_dir/airootfs/etc/systemd/system/devario-desktop-self-check.service"
   "$project_dir/tests/test-live-installer.js"
   "$project_dir/tests/test-start-installer.py"
   "$profile_dir/airootfs/usr/lib/devario/start-installer"
   "$profile_dir/airootfs/usr/lib/devario/prepare-live-desktop"
-  "$profile_dir/airootfs/etc/xdg/uwsm/env.d/55-devario-user-dirs.sh"
+  "$project_dir/packages/devario-system-integration/55-devario-user-dirs.sh"
   "$profile_dir/late-airootfs/etc/skel/.config/pearl/preferences.json"
   "$profile_dir/late-airootfs/usr/share/applications/calamares.desktop"
-  "$profile_dir/airootfs/etc/xdg/uwsm/env.d/60-devario-gpu.sh"
+  "$project_dir/packages/devario-system-integration/60-devario-gpu.sh"
   "$profile_dir/airootfs/etc/calamares/modules/services-systemd.conf"
   "$profile_dir/late-airootfs/etc/greetd/config.toml"
   "$profile_dir/airootfs/etc/polkit-1/rules.d/49-devario-live-installer.rules"
@@ -170,12 +170,11 @@ required_files=(
   "$project_dir/packages/devario-boot/boot-update"
   "$project_dir/tests/test-dracut-boot.sh"
   "$project_dir/tests/test-dracut-live-qemu.sh"
-  "$project_dir/packages/devario-aqueous-desktop/PKGBUILD"
-  "$project_dir/packages/devario-aqueous-desktop/session.toml"
-  "$project_dir/packages/devario-aqueous-desktop/devario-gpu-driver.service"
-  "$project_dir/packages/devario-aqueous-desktop/gpu-driver-setup"
-  "$project_dir/packages/devario-aqueous-desktop/greetd-config.toml"
-  "$project_dir/packages/devario-aqueous-desktop/greetd-gpu-driver.conf"
+  "$profile_dir/airootfs/etc/xdg/aqueous/session.toml"
+  "$project_dir/packages/devario-system-integration/devario-gpu-driver.service"
+  "$project_dir/packages/devario-system-integration/gpu-driver-setup"
+  "$project_dir/packages/devario-system-integration/greetd-config.toml"
+  "$project_dir/packages/devario-system-integration/greetd-gpu-driver.conf"
   "$project_dir/packages/devario-keyring/PKGBUILD"
   "$project_dir/packages/devario-keyring/devario.gpg"
   "$project_dir/packages/devario-keyring/devario-trusted"
@@ -283,14 +282,13 @@ done < <(
   printf '%s\n' "$project_dir/scripts/lib/edition.sh"
   printf '%s\n' "$profile_dir/late-airootfs/etc/skel/.bashrc"
   printf '%s\n' "$project_dir/packages/devario-filesystem/profile"
-  printf '%s\n' "$profile_dir/airootfs/etc/xdg/uwsm/env.d/60-devario-gpu.sh"
+  printf '%s\n' "$project_dir/packages/devario-system-integration/60-devario-gpu.sh"
   for boot_helper in kernel.sh kernel-command-line initramfs-update boot-update systemd-boot-update kernel-reboot-notify module-setup.sh live-root.sh install-root.sh verify-live-image; do
     printf '%s\n' "$project_dir/packages/devario-boot/$boot_helper"
   done
   printf '%s\n' "$profile_dir/airootfs/usr/lib/devario/prepare-target-kernel"
   printf '%s\n' "$profile_dir/airootfs/usr/lib/devario/acceptance-self-check"
-  printf '%s\n' "$project_dir/packages/devario-aqueous-desktop/gpu-driver-setup"
-  printf '%s\n' "$project_dir/packages/devario-aqueous-desktop/enable-bluetooth-default"
+  printf '%s\n' "$project_dir/packages/devario-system-integration/gpu-driver-setup"
   printf '%s\n' "$project_dir/tests/fixtures/gpu-driver-setup/mock-modprobe"
   printf '%s\n' "$project_dir/tests/test-gpu-driver-setup.sh"
   printf '%s\n' "$project_dir/tests/test-prepare-target-kernel.sh"
@@ -346,9 +344,6 @@ fi
 if ! DEVARIO_PROFILE_DIR="$profile_dir" python3 "$project_dir/tests/test-pearl-desktop.py"; then
   fail "Pearl desktop and live login integration tests failed"
 fi
-if ! python3 "$project_dir/tests/test-bluetooth-default.py"; then
-  fail "Bluetooth default migration tests failed"
-fi
 if ! python3 "$project_dir/tests/test-qemu-graphics.py"; then
   fail "QEMU Venus setup behavior tests failed"
 fi
@@ -361,10 +356,10 @@ fi
 if ! python3 "$project_dir/tests/test-devario-report.py"; then
   fail "Devario report behavior and packaging tests failed"
 fi
-if ! python3 "$project_dir/tests/test-egpu.py"; then
-  fail "eGPU session, hot-plug and packaging tests failed"
+if ! DEVARIO_PROFILE_DIR="$profile_dir" python3 "$project_dir/tests/test-egpu.py"; then
+  fail "eGPU session, hot-plug and profile tests failed"
 fi
-if ! bash "$project_dir/tests/test-gpu-driver-setup.sh"; then
+if ! DEVARIO_PROFILE_DIR="$profile_dir" bash "$project_dir/tests/test-gpu-driver-setup.sh"; then
   fail "GPU driver setup behavior tests failed"
 fi
 if ! DEVARIO_PROFILE_DIR="$profile_dir" \
@@ -482,10 +477,10 @@ package_is_listed() {
 for required_package in \
   aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous \
   calamares ckbcomp devario-desktop rtkit sof-firmware alsa-ucm-conf \
-  devario-base devario-boot devario-dracut devario-keyring greetd systemd pearl pearl-greeter shelly fastfetch fish \
+  devario-system-integration devario-base devario-boot devario-dracut devario-keyring greetd systemd pearl pearl-greeter shelly fastfetch fish \
   chafa imagemagick ghostty gnome-keyring seahorse scx-scheds scx-tools upower power-profiles-daemon adw-gtk3 papirus-icon-theme vimix-cursors \
   strace ripgrep vulkan-tools mesa-utils wayland-utils usbutils lsof nvme-cli netcat matugen \
-  linux-devario linux-devario-headers nvidia-open-dkms nvidia-utils \
+  linux-devario linux-devario-headers bolt boltctl python-pyudev nvidia-open-dkms nvidia-utils \
   vulkan-intel vulkan-radeon vulkan-swrast vulkan-virtio xorg-xwayland; do
   if ! package_is_listed "$required_package"; then
     fail "packages.x86_64 does not include $required_package"
@@ -504,9 +499,9 @@ done
 declare -A expected_pkgnames=(
   [calamares]=calamares
   [ckbcomp]=ckbcomp
-  [devario-aqueous-desktop]=devario-aqueous-desktop
   [devario-filesystem]=devario-filesystem
   [seafoam-keyring]=seafoam-keyring
+  [devario-system-integration]=devario-system-integration
   [devario-base]=devario-base
   [devario-boot]=devario-boot
   [devario-keyring]=devario-keyring
@@ -551,61 +546,14 @@ if ! grep -Fq "'0001-devario-wayland-runtime.patch'" "$calamares_pkgbuild" \
   fail "the Calamares package does not apply the Devario runtime patch"
 fi
 
-declare -A pinned_desktop_sources=(
-  ["packages/devario-aqueous-desktop/graphics-session"]='79f25aad3be3af1214c3453c18dced5b8a0cc90087374752f59ba6d7d95eb02e'
-  ["packages/devario-aqueous-desktop/61-devario-virtio.sh"]='4670c72c1612df9e7a0b9ccb5e61cb9d224d7e33a30b8029ad8a6853b249442e'
-  ["packages/devario-aqueous-desktop/devario-gpu-driver.service"]='ec8e672fb2e7a451bd97ca9ccbc4ade0a91a7f0e097a5e3a6ce99ec144871807'
-  ["packages/devario-aqueous-desktop/gpu-driver-setup"]='455389932d08ed61668fdf010debf46ff7a282e54142019a7a52c171ee672d34'
-  ["packages/devario-aqueous-desktop/greetd-config.toml"]='ef1c8b33c7a25969f2268588ca6f100c4905f46b238ff2998ef26f91fdfb1386'
-  ["packages/devario-aqueous-desktop/greetd-gpu-driver.conf"]='271e59b1fe07474aa8626ff739832b255827f5302fbde690d0ed8fd1a5d94bb7'
-)
-for pinned_path in "${!pinned_desktop_sources[@]}"; do
-  actual_sha256="$(sha256sum "$project_dir/$pinned_path")"
-  actual_sha256="${actual_sha256%% *}"
-  if [[ "$actual_sha256" != "${pinned_desktop_sources[$pinned_path]}" ]]; then
-    fail "$pinned_path failed its pinned SHA-256 checksum"
-  fi
-done
-
-for desktop_recipe in devario-aqueous-desktop; do
-  if grep -Eq "^[[:space:]]*['\"]?SKIP['\"]?([[:space:]]|$)" \
-    "$project_dir/packages/$desktop_recipe/PKGBUILD"; then
-    fail "$desktop_recipe contains an unchecked source"
-  fi
-done
-
-desktop_meta="$project_dir/packages/devario-aqueous-desktop/PKGBUILD"
-for desktop_dependency in \
-  aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous pearl pearl-greeter greetd \
-  linux-devario-headers bolt boltctl python-pyudev; do
-  if ! grep -Eq "['\"]${desktop_dependency}([<>=][^'\"]*)?['\"]" "$desktop_meta"; then
-    fail "the Devario desktop metapackage must depend on $desktop_dependency"
-  fi
-done
-
-# NVIDIA remains explicitly present on the live ISO, but is optional in the
-# installed desktop: Calamares removes it on machines without NVIDIA hardware.
-# Check the actual dependency arrays rather than any occurrence in the PKGBUILD.
-desktop_hard_dependencies="$(sed -n '/^[[:space:]]*depends=(/,/^[[:space:]]*)/p' "$desktop_meta")"
-desktop_optional_dependencies="$(sed -n '/^[[:space:]]*optdepends=(/,/^[[:space:]]*)/p' "$desktop_meta")"
-if ! grep -Eq "['\"]rtkit([<>=][^'\"]*)?['\"]" <<< "$desktop_hard_dependencies"; then
-  fail "the Devario desktop metapackage must hard-depend on rtkit for realtime audio"
-fi
-for nvidia_package in nvidia-open-dkms nvidia-utils; do
-  if ! grep -Eq "['\"]${nvidia_package}:[[:space:]]" <<< "$desktop_optional_dependencies"; then
-    fail "the Devario desktop metapackage must list $nvidia_package as an optional dependency"
-  fi
-  if grep -Eq "['\"]${nvidia_package}([<>=][^'\"]*)?['\"]" <<< "$desktop_hard_dependencies"; then
-    fail "the Devario desktop metapackage must not hard-depend on $nvidia_package"
-  fi
-done
-if grep -Eq "['\"]vulkan-nouveau([<>=][^'\"]*)?['\"]" "$desktop_meta"; then
-  fail "the NVIDIA-only desktop metapackage must not depend on vulkan-nouveau"
+# Check the package's source checksums, staged paths and overlay ownership.
+if ! python3 "$project_dir/tests/test-system-integration.py"; then
+  fail "system integration packaging or migration tests failed"
 fi
 
-gpu_driver_setup="$project_dir/packages/devario-aqueous-desktop/gpu-driver-setup"
-gpu_driver_unit="$project_dir/packages/devario-aqueous-desktop/devario-gpu-driver.service"
-gpu_driver_dropin="$project_dir/packages/devario-aqueous-desktop/greetd-gpu-driver.conf"
+gpu_driver_setup="$project_dir/packages/devario-system-integration/gpu-driver-setup"
+gpu_driver_unit="$project_dir/packages/devario-system-integration/devario-gpu-driver.service"
+gpu_driver_dropin="$project_dir/packages/devario-system-integration/greetd-gpu-driver.conf"
 for required_gpu_setup_text in \
   '"$vendor" == 0x10de' \
   '"$class" == 0x03*' \
@@ -953,7 +901,7 @@ systemd_boot_config="$profile_dir/airootfs/etc/calamares/modules/systemd_boot.co
 systemd_boot_update="$project_dir/packages/devario-boot/systemd-boot-update"
 systemd_boot_hook="$project_dir/packages/devario-boot/95-devario-boot.hook"
 live_greetd_config="$profile_dir/late-airootfs/etc/greetd/config.toml"
-installed_greetd_config="$project_dir/packages/devario-aqueous-desktop/greetd-config.toml"
+installed_greetd_config="$project_dir/packages/devario-system-integration/greetd-config.toml"
 live_session_wrapper="$profile_dir/airootfs/usr/local/bin/devario-aqueous-live-session"
 live_installer_desktop="$profile_dir/airootfs/usr/share/applications/install-devario.desktop"
 live_installer_polkit="$profile_dir/airootfs/etc/polkit-1/rules.d/49-devario-live-installer.rules"
@@ -1443,7 +1391,7 @@ if command -v shelly >/dev/null 2>&1 && grep -Eq "^\[devario-core\]" /etc/shelly
       [[ -n "$package_name" && "$package_name" != \#* ]] || continue
       case "$package_name" in
         calamares|ckbcomp|\
-        devario-filesystem|seafoam-keyring|devario-aqueous-desktop|devario-base|devario-boot|devario-keyring|\
+        devario-filesystem|seafoam-keyring|devario-base|devario-boot|devario-keyring|devario-system-integration|\
         devario-managed-keyring)
           continue
           ;;
@@ -1499,7 +1447,7 @@ if command -v bsdtar >/dev/null 2>&1; then
   if (( ${#devario_artifacts[@]} )); then
     for expected_artifact_package in \
       calamares ckbcomp \
-      devario-filesystem devario-desktop devario-base devario-boot devario-dracut devario-keyring \
+      devario-filesystem devario-desktop devario-system-integration devario-base devario-boot devario-dracut devario-keyring \
       linux-devario linux-devario-headers; do
       expected_artifacts=(
         "$project_dir"/repo/core/"$expected_artifact_package"-[0-9]*.pkg.tar.zst

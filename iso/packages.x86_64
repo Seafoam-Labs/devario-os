@@ -24,6 +24,7 @@ devario-desktop
 devario-dracut
 devario-filesystem
 devario-keyring
+devario-system-integration
 devario-plymouth-theme
 devario-welcome
 dmidecode

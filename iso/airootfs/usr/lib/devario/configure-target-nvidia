@@ -238,8 +238,8 @@ def remove_unused_nvidia():
         except subprocess.CalledProcessError as error:
             raise RuntimeError(
                 "RLPM could not remove the NVIDIA packages. Ensure the ISO includes "
-                "devario-aqueous-desktop 1-15 or newer with NVIDIA as optional "
-                "rather than hard dependencies; rebuild the metapackage and ISO before retrying."
+                "devario-desktop without hard NVIDIA dependencies; check the dependency "
+                "error and rebuild the metapackage and ISO before retrying."
             ) from error
         after = installed_packages(env=env)
         remaining = [name for name in names if name in after]

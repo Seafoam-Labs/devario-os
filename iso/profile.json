@@ -14,11 +14,7 @@
     "/usr/lib/devario/configure-target-keyboard": "755",
     "/usr/lib/devario/check-target-locales": "755",
     "/usr/lib/devario/update-target-packages": "755",
-    "/usr/lib/devario/gpu-driver-setup": "755",
     "/usr/lib/devario/desktop-self-check": "755",
-    "/usr/lib/devario/graphics-session": "755",
-    "/usr/local/bin/devario-aqueous-live-session": "755",
-    "/usr/lib/devario/gpu-hotplug": "755",
-    "/usr/bin/devario-gpu-run": "755"
+    "/usr/local/bin/devario-aqueous-live-session": "755"
   }
 }

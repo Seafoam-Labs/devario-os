@@ -35,11 +35,13 @@ change does not introduce automatic Nouveau fallback.
 
 ## Required release/build ordering
 
-**Rebuild and publish `devario-aqueous-desktop` with `pkgrel=15` first.**
-Make sure the live ISO uses this new package; the *old* package declares
-NVIDIA as hard dependencies and the RLPM removal must fail rather than
-silently corrupt the dependency graph. The ISO must continue to explicitly
-include `nvidia-open-dkms` and `nvidia-utils` in `iso/packages.x86_64`.
+Use the published `devario-desktop` from Aqueous. Its dependency closure must
+allow NVIDIA packages to be removed on non-NVIDIA targets; RLPM must reject
+removal if any installed package still requires them. The ISO must continue
+to explicitly include `nvidia-open-dkms` and `nvidia-utils` in
+`iso/packages.x86_64`. GPU and greeter configuration comes from `devario-system-integration`.
+Publish it before the desktop release that depends on it; existing ISO installs
+need the [one-time adoption](../packages/devario-system-integration/README.md#existing-installations-one-time-adoption).
 
 This patch does **not** change Dracut boot-image generation. The existing
 `devario-boot` hooks and `boot-update` remain responsible for that step.

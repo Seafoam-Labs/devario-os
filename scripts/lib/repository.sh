@@ -466,7 +466,7 @@ devario_inventory_database() {
 
 devario_is_local_installer_package() {
   case "$1" in
-    calamares|ckbcomp|devario-filesystem|devario-keyring|devario-boot|devario-base) return 0 ;;
+    calamares|ckbcomp|devario-filesystem|devario-keyring|devario-boot|devario-base|devario-system-integration) return 0 ;;
     *) return 1 ;;
   esac
 }

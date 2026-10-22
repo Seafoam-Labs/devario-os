@@ -110,7 +110,7 @@ class CoreBuilderTests(unittest.TestCase):
         self.assertEqual(install[-6:], ("gcc=1-1", "glibc=1-1", "binutils=1-1",
                                         "gcc>=1", "glibc", "binutils"))
         builds = [call for call in calls if "build" in call]
-        self.assertEqual(len(builds), 6)
+        self.assertEqual(len(builds), len(builder.RECIPES))
         for call in builds:
             self.assertEqual(call[0], "systemd-nspawn")
             self.assertIn("--user=devario-build", call)

@@ -227,7 +227,7 @@ def main():
             merge_database(sources, artifacts, kind, canonical)
             (stage / f'devario-core.{kind}').symlink_to(canonical.name)
         # The local index is regenerated, while every downloaded package retains
-        # its required production signature. The six installer exceptions apply later.
+        # its required production signature. The local installer exceptions apply later.
         trust('devario_verify_repository "$3" devario-core "$2" development local-installer', stage)
         manifest = dict(repositories=[dict(name=s['name'], url=s['url'],
                         databaseSha256=hashlib.sha256(s['db'].read_bytes()).hexdigest(),

@@ -14,6 +14,13 @@ from unittest import mock
 
 PROJECT = Path(__file__).resolve().parents[1]
 PROFILE = Path(os.environ.get('DEVARIO_PROFILE_DIR', PROJECT / 'iso'))
+PACKAGE = PROJECT / 'packages/devario-system-integration'
+
+
+def stage_integration(root):
+    subprocess.run(['bash', '-eu', '-c',
+                    'source "$1/PKGBUILD"; srcdir=$1; pkgdir=$2; package',
+                    'stage', str(PACKAGE), str(root)], check=True)
 
 
 class LiveDesktopShortcutTests(unittest.TestCase):
@@ -136,7 +143,7 @@ class PearlDesktopTests(unittest.TestCase):
             home = Path(temporary)
             config = home / '.config'
             env = dict(os.environ, HOME=str(home), XDG_CONFIG_HOME=str(config), LC_ALL='C')
-            script = PROFILE / 'airootfs/etc/xdg/uwsm/env.d/55-devario-user-dirs.sh'
+            script = PACKAGE / '55-devario-user-dirs.sh'
             subprocess.run(['sh', str(script)], env=env, check=True)
             desktop = subprocess.check_output(['/usr/bin/xdg-user-dir', 'DESKTOP'], env=env, text=True).strip()
             self.assertEqual(Path(desktop), home / 'Desktop')
@@ -154,7 +161,7 @@ class PearlDesktopTests(unittest.TestCase):
     def test_desktop_defaults_and_live_shortcut_lifecycle(self):
         preferences = json.loads((PROFILE / 'late-airootfs/etc/skel/.config/pearl/preferences.json').read_text())
         self.assertTrue(preferences['desktop_icons']['enabled'])
-        user_dirs = PROFILE / 'airootfs/etc/xdg/uwsm/env.d/55-devario-user-dirs.sh'
+        user_dirs = PACKAGE / '55-devario-user-dirs.sh'
         self.assertIn('/usr/bin/xdg-user-dirs-update', user_dirs.read_text())
         wrapper = (PROFILE / 'airootfs/usr/local/bin/devario-aqueous-live-session').read_text()
         helper = '/usr/lib/devario/prepare-live-desktop'
@@ -171,7 +178,7 @@ class PearlDesktopTests(unittest.TestCase):
 
     def test_virtio_allocator_excludes_native_and_mixed_gpus(self):
         graphics = types.ModuleType('graphics')
-        exec((PROFILE / 'airootfs/usr/lib/devario/graphics-session').read_text(), graphics.__dict__)
+        exec((PACKAGE / 'graphics-session').read_text(), graphics.__dict__)
         cases = [([], False), (['virtio_gpu'], True),
                  (['virtio-pci'], True),
                  (['simple-framebuffer', 'virtio_gpu'], True),
@@ -190,7 +197,7 @@ class PearlDesktopTests(unittest.TestCase):
                 self.assertEqual(graphics.virtio_only(root), expected)
 
     def test_session_does_not_freeze_driver_availability_at_login(self):
-        source = (PROFILE / 'airootfs/etc/xdg/uwsm/env.d/60-devario-gpu.sh').read_text()
+        source = (PACKAGE / '60-devario-gpu.sh').read_text()
         # Run the real detector and sourced session script against fixture paths.
         cases = [
             ('intel', [('0x8086', '0x030000')], True, True),
@@ -206,7 +213,7 @@ class PearlDesktopTests(unittest.TestCase):
             with self.subTest(name=name), tempfile.TemporaryDirectory(prefix='devario-session-gpu-') as temporary:
                 root = Path(temporary)
                 helper = root / 'gpu-driver-setup'
-                helper.write_bytes((PROFILE / 'airootfs/usr/lib/devario/gpu-driver-setup').read_bytes())
+                helper.write_bytes((PACKAGE / 'gpu-driver-setup').read_bytes())
                 helper.chmod(0o755)
                 pci = root / 'pci'
                 if devices is not None:
@@ -239,6 +246,7 @@ class PearlDesktopTests(unittest.TestCase):
                 code = source.extractfile('devario-iso-builder/builder.py').read()
             builder = types.ModuleType('builder')
             exec(compile(code, 'builder.py', 'exec'), builder.__dict__)
+            stage_integration(root)
             builder.overlay(PROFILE / 'airootfs', root)
             helper_path = '/usr/lib/devario/gpu-driver-setup'
             helper = root / helper_path.lstrip('/')
@@ -264,6 +272,7 @@ class PearlDesktopTests(unittest.TestCase):
                 code = source.extractfile('devario-iso-builder/builder.py').read()
             builder = types.ModuleType('builder')
             exec(compile(code, 'builder.py', 'exec'), builder.__dict__)
+            stage_integration(root)
             builder.overlay(PROFILE / 'airootfs', root)
             self.assertFalse((root / 'etc/systemd/system/default.target').exists())
             selection = tomllib.loads((root / 'etc/xdg/aqueous/session.toml').read_text())

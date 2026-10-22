@@ -21,6 +21,7 @@ devario-boot
 devario-dracut
 devario-filesystem
 devario-keyring
+devario-system-integration
 devario-plymouth-theme
 linux-devario
 linux-devario-headers

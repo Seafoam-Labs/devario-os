@@ -139,8 +139,7 @@ GSettings default, compiled by the existing GLib transaction hook. This package
 update delivers the default to existing installations. The ISO overlays select
 the same theme for fresh installations. Explicit user theme choices take
 precedence; log out and back
-in after upgrading to refresh running applications. The legacy
-`devario-aqueous-desktop` 1-16 package also requires the updated Papirus package.
+in after upgrading to refresh running applications.
 
 Fastfetch uses a persistent system default at `/etc/xdg/fastfetch/config.jsonc`,
 linked to the shared Devario configuration and fish logo under
@@ -287,8 +286,7 @@ the Mesa device-select layer when installed. Selection
 applies to the newly launched process, not an already-running application or
 compositor. Physical hot-plug, external-monitor, suspend/resume, and removal
 acceptance testing is still required before claiming seamless eGPU support.
-Build and publish `bolt`, `boltctl`, `python-pyudev`, and
-`devario-aqueous-desktop` 1-15 or newer when using the legacy desktop package.
+Build and publish `bolt`, `boltctl`, and `python-pyudev` before rebuilding the ISO.
 
 The live ISO and installed system use Plymouth with the Devario theme. The
 late image overlay selects `Theme=devario` in `/etc/plymouth/plymouthd.conf`,
@@ -406,9 +404,12 @@ current base recipe.
 Rebuild `devario-base` 3-15 and the ISO to include all eight repository defaults.
 
 The desktop comes from `devario-core/devario-desktop`, with stable Aqueous and
-`pearl-greeter`. The ISO profile retains Devario's session, greeter, and GPU
-configuration; the legacy local `devario-aqueous-desktop` recipe is no longer
-in the default build order.
+`pearl-greeter`. Starting with 1.0.5-2, `devario-desktop` requires
+`devario-system-integration`, which owns GPU services, helpers and OS desktop
+configuration. The ISO obtains those files from the package. Existing ISO
+installations need the [one-time file ownership migration](packages/devario-system-integration/README.md#existing-installations-one-time-adoption)
+before their first upgrade. Publish integration 1-1 before Aqueous 1.0.5-2,
+then rebuild the ISO. Future integration changes update through Shelly.
 
 ### Intel onboard audio firmware
 
@@ -454,14 +455,14 @@ in the new boot. A zero process realtime-priority limit alone is not a failure:
 RTKit grants thread priorities through D-Bus.
 
 For automatic delivery to existing installations, rebuild and publish the six
-`aqueous-desktop` outputs at `1.0.4-3` from
+`aqueous-desktop` outputs at `1.0.5-2` from
 [Aqueous's active recipe](https://github.com/Seafoam-Labs/Aqueous/tree/main/packaging/devario/aqueous-desktop).
-Its `devario-desktop` output now requires `rtkit`. Also publish
-`devario-aqueous-desktop` `1-17` for installations using the legacy package.
+Its `devario-desktop` output requires `rtkit` and `devario-system-integration`.
 Ensure `rtkit` and its dependencies are available in the signed repository;
 its recipe is `devario-custom-packagbuilds/devario-core/rtkit/PKGBUILD`.
-After publication, `sudo shelly upgrade standard` installs the new dependency
-for either desktop package. Reboot and repeat the checks above. Rebuild the ISO
+Complete the [one-time integration migration](packages/devario-system-integration/README.md#existing-installations-one-time-adoption)
+before the first upgrade to this desktop release. After adoption,
+`sudo shelly upgrade standard` delivers later package updates. Reboot and repeat the checks above. Rebuild the ISO
 with the updated repository for live sessions and fresh installations.
 
 Release verification must cover both an upgrade of an affected installation
@@ -571,7 +572,7 @@ The script installs/upgrades host tools through Shelly, prepares the pinned
 Python validation environment, validates the OS sources, downloads and verifies
 the signed metadata from every repository in `repositories/defaults.json`, resolves
 ISO and installer build dependencies in repository order, and downloads the
-required signed packages. It builds the six local installer packages in an isolated
+required signed packages. It builds the seven local installer packages in an isolated
 root populated from that verified snapshot, audits the
 resulting package set, assembles the ISO with sudo, and verifies its SHA-256
 checksum. A configured Shelly installation, sudo access, and the build host
@@ -606,7 +607,7 @@ assembler, with core packages taking precedence over duplicate names in other
 repositories. It contains the full core snapshot plus runtime and build dependencies
 selected from the other repositories. Original signed metadata and package origins
 are retained in `core-sources/`; package signatures remain mandatory. The combined
-local database is regenerated, just as when adding the six local installer packages.
+local database is regenerated, just as when adding the seven local installer packages.
 Controlled release tooling continues to use its explicitly locked inputs.
 
 Missing runtime or build dependencies stop the run before compilation and are listed
@@ -626,7 +627,7 @@ image work is retained there too, including on failure. Downloads reuse
 package builds, and unpacked live filesystem. Retries use a fresh run directory,
 preserving previous snapshots and ISOs. An existing `--run-dir` is rejected.
 
-To reuse a staged core snapshot and six prebuilt installer packages:
+To reuse a staged core snapshot and seven prebuilt installer packages:
 
 ```sh
 ./build-iso.sh --repo-dir /path/to/repo/core --installer-dir /path/to/artifacts
@@ -637,7 +638,7 @@ both the download URL and the installed system's runtime repository URL.
 `--skip-deps` checks installed tools without upgrading them, and `--dry-run`
 prints the workflow without changing anything. See `--help` for other options.
 Runtime packages such as the kernel and desktop must already be published as
-signed artifacts; the script builds the six OS-owned packages from `packages/`.
+signed artifacts; the script builds the seven OS-owned packages from `packages/`.
 Controlled release signing/publication and VM boot acceptance remain separate
 workflows. The root `build-iso.sh` orchestrates the entire local build;
 `scripts/build-iso.sh` is the assembly step used by it.
@@ -653,12 +654,12 @@ python3 scripts/build-packages-core.py --repo repo/core --work work/local-packag
 ```
 
 This builds Calamares, `ckbcomp`, `devario-filesystem`, `devario-base`,
-`devario-boot`, and `devario-keyring`. These six local ISO inputs and the regenerated build
+`devario-boot`, `devario-keyring`, and `devario-system-integration`. These seven local ISO inputs and the regenerated build
 database do not require signing. Downloaded packages retain their signature
 checks. The kernel, headers, dracut, Shelly, Aqueous, `devario-desktop`, Pearl,
 and `pearl-greeter` come from `devario-core`:
 
-If those six archives have already been built, merge their directory with
+If those seven archives have already been built, merge their directory with
 `./scripts/stage-installer-packages.sh /path/to/artifacts` instead. No local
 signing key is needed for this workflow. Controlled release builds retain the
 separate signing requirements described below.
@@ -715,7 +716,7 @@ Validate an external edition explicitly:
 ```
 
 Build the ISO using the pinned Devario builder. The wrapper verifies the local
-`devario-core` repository with the six-package installer exception, extracts the Devario
+`devario-core` repository with the seven-package installer exception, extracts the Devario
 Shelly binary, and initializes a temporary verification keyring outside the live
 root. The declarative profile lives in `iso/profile.json`. Supply the complete
 repository through `DEVARIO_CORE_REPO_DIR`.
@@ -785,7 +786,7 @@ installed system to use it with `Optional TrustAll`. That mode works offline but
 temporary repository used only while constructing the image has `SigLevel = Never`, because the build host does not own
 Devario's trust root; this does not become the installed configuration.
 
-The local Community workflow builds the six installer packages with Shelly's
+The local Community workflow builds the seven installer packages with Shelly's
 native builder. Publication additionally requires signed packages and repository
 metadata, the production public keyring, and HTTPS repository endpoints. The
 local build's unsigned installer-package exception is limited to ISO construction.
@@ -1026,7 +1027,6 @@ packages/shelly/                 Documentation for the repository-supplied Shell
 packages/devario-base/           Base dependencies, Shelly configuration, and storage migration
 packages/devario-keyring/        Devario public package-signing keys
 docs/KERNEL-PACKAGING.md         External kernel build requirements
-packages/devario-aqueous-desktop/ Complete desktop dependency set and target greetd template
 repo/core/                       Generated core-only local binary repository
 repo/managed/                    Reserved physical boundary for managed artifacts
 scripts/                         Package, validation, and ISO build entry points

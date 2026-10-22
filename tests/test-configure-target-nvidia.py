@@ -50,7 +50,7 @@ class NvidiaTests(unittest.TestCase):
                 nvidia.check_support([DEVICE, {"address": "0000:02:00.0", "ids": ids}], self.support)
 
     def test_detection_reuses_real_detector(self):
-        detector = PROJECT / "packages/devario-aqueous-desktop/gpu-driver-setup"
+        detector = PROJECT / "packages/devario-system-integration/gpu-driver-setup"
         real_run = subprocess.run
 
         def run(args, **kwargs):
@@ -314,19 +314,13 @@ class NvidiaTests(unittest.TestCase):
             self.assertEqual(config["script"], [nvidia.HELPER + (" --preflight" if chroot else " --configure")])
         permissions = json.loads((PROFILE / "profile.json").read_text())["permissions"]
         self.assertEqual(permissions[nvidia.HELPER], "755")
-        recipe = (PROJECT / "packages/devario-aqueous-desktop/PKGBUILD").read_text()
-        self.assertIn("optdepends=(", recipe)
-        hard_dependencies, optional_dependencies = recipe.split("optdepends=(", 1)
-        for name in ("nvidia-open-dkms", "nvidia-utils"):
-            self.assertNotIn(f"'{name}=", hard_dependencies)
-            self.assertIn(f"'{name}:", optional_dependencies)
-        # 1-14 on main still declared hard NVIDIA dependencies.
-        self.assertGreaterEqual(int(recipe.split("pkgrel=", 1)[1].splitlines()[0]), 15)
+        packages = set((PROFILE / "packages.x86_64").read_text().splitlines())
+        self.assertTrue({"devario-desktop", "nvidia-open-dkms", "nvidia-utils"} <= packages)
 
     def test_local_package_checksums(self):
         import hashlib
         # Kernel/dracut recipes are validated by their external package build.
-        for name in ("devario-boot", "devario-aqueous-desktop"):
+        for name in ("devario-boot",):
             folder = PROJECT / "packages" / name
             # Read recipe metadata; this does not execute its build functions.
             metadata = subprocess.check_output([

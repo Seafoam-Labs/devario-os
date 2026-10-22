@@ -1,0 +1,10 @@
+post_install() {
+  # Enable for the next boot; never restart the active graphical session.
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  systemctl enable devario-gpu-hotplug.service
+}
+
+post_upgrade() {
+  # Preserve an administrator's enable/disable choice on later upgrades.
+  systemctl daemon-reload >/dev/null 2>&1 || true
+}

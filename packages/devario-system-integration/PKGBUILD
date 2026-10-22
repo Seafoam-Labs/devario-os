@@ -1,0 +1,59 @@
+# Maintainer: Devario maintainers
+pkgname=devario-system-integration
+pkgver=1
+pkgrel=1
+pkgdesc="Devario GPU services and desktop system integration"
+arch=('any')
+url="https://github.com/Seafoam-Labs/devario-os"
+license=('GPL-3.0-or-later')
+depends=('bash' 'coreutils' 'util-linux' 'kmod' 'systemd' 'python' 'python-pyudev' 'xdg-user-dirs')
+# devario-desktop keeps ownership of the desktop selection and dependencies.
+conflicts=('devario-aqueous-desktop')
+replaces=('devario-aqueous-desktop')
+backup=('etc/xdg/uwsm/env.d/55-devario-user-dirs.sh'
+        'etc/xdg/uwsm/env.d/60-devario-gpu.sh'
+        'etc/xdg/uwsm/env.d/61-devario-virtio.sh')
+install=devario-system-integration.install
+source=(
+  'files.tsv'
+  'devario-system-integration.install'
+  'gpu-driver-setup'
+  'gpu-hotplug'
+  'graphics-session'
+  'devario-gpu-run'
+  'devario-gpu-driver.service'
+  'devario-gpu-hotplug.service'
+  'greetd-gpu-driver.conf'
+  '30-plymouth.conf'
+  '20-devario-gpu.conf'
+  'devario-egpu.conf'
+  '55-devario-user-dirs.sh'
+  '60-devario-gpu.sh'
+  '61-devario-virtio.sh'
+  'greetd-config.toml'
+)
+sha256sums=(
+  '322996e9b1849fcadddb9dd4b2823df9004fb956340ca9ad02d821c5c0a45bcb'
+  'de7deb31389698de4664dd761732db68ca4860bc2113972f5c5c72d82b306792'
+  '455389932d08ed61668fdf010debf46ff7a282e54142019a7a52c171ee672d34'
+  '6d91c86fc41465665fb01ae6669ec03b03e3aabf948db7a63af1f92a9244ef6d'
+  '79f25aad3be3af1214c3453c18dced5b8a0cc90087374752f59ba6d7d95eb02e'
+  '06d15fdb2a477256f2abcd5e98bf32ac68527134b5870b30346285f442e72ec7'
+  'ec8e672fb2e7a451bd97ca9ccbc4ade0a91a7f0e097a5e3a6ce99ec144871807'
+  '84543e1657e7e36205ffabbaaad0575a6c895b1c6f7b464724c0d94b5bb55bf6'
+  '271e59b1fe07474aa8626ff739832b255827f5302fbde690d0ed8fd1a5d94bb7'
+  '35eee6aedf0ce385f78827ab6f0daa621bb49e14ce099fe07c01168ed7127f6d'
+  '0051ed83f1263fdbd1728a5137c2b0264e8841d2d5ffe5eb19c3677de5769b80'
+  'a445b985551fa6ec6f26379726f6780690ecc08491fd6deacaa26fd307ea72ec'
+  '2aac48dd731fb34a41dc0e86c8d7be1be2a2e435a2bc2fe66358cf95693db0c0'
+  '5256d83bdff4938902d57f1518330eea82c9d62b497ecb864cc2e17ce7b06a26'
+  '4670c72c1612df9e7a0b9ccb5e61cb9d224d7e33a30b8029ad8a6853b249442e'
+  'ef1c8b33c7a25969f2268588ca6f100c4905f46b238ff2998ef26f91fdfb1386'
+)
+
+package() {
+  local mode source_file destination
+  while IFS=$'\t' read -r mode source_file destination; do
+    install -Dm"$mode" "$srcdir/$source_file" "$pkgdir/$destination"
+  done < "$srcdir/files.tsv"
+}

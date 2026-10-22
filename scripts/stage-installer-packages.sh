@@ -5,7 +5,7 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(cd -- "$script_dir/.." && pwd)"
 usage() {
   echo 'Usage: ./scripts/stage-installer-packages.sh DIRECTORY'
-  echo 'Merge the six locally built OS packages into repo/core without signing them.'
+  echo 'Merge the seven locally built OS packages into repo/core without signing them.'
 }
 if (( $# == 1 )) && [[ "$1" == --help ]]; then usage; exit 0; fi
 if (( $# != 1 )); then usage >&2; exit 2; fi
@@ -14,7 +14,7 @@ repo_dir="$(realpath -e -- "${DEVARIO_CORE_REPO_DIR:-$project_dir/repo/core}")"
 keyring_dir="${DEVARIO_CORE_KEYRING_DIR:-$project_dir/packages/devario-keyring}"
 # shellcheck source=lib/repository.sh
 source "$script_dir/lib/repository.sh"
-expected=(calamares ckbcomp devario-filesystem devario-keyring devario-boot devario-base)
+expected=(calamares ckbcomp devario-filesystem devario-keyring devario-boot devario-base devario-system-integration)
 declare -A artifacts=()
 shopt -s nullglob
 for artifact in "$artifacts_dir"/*.pkg.tar.zst; do

@@ -70,7 +70,7 @@ if devario_verify_repository "$repository" devario-core \
   fail 'a repository database with a substituted package digest was accepted'
 fi
 
-# Local ISO mode accepts only the six OS-owned names without signatures.
+# Local ISO mode accepts only the seven OS-owned names without signatures.
 write_desc "$digest"
 bsdtar -caf "$repository/devario-core.db.tar.zst" -C "$database_root" fixture-1-1/desc
 rm -f "$repository"/*.sig
@@ -114,7 +114,7 @@ if devario_verify_repository "$repository" devario-core \
     >"$test_root/stdout" 2>"$test_root/stderr"; then
   fail 'local installer exception was accepted for controlled production inputs'
 fi
-for name in calamares ckbcomp devario-filesystem devario-keyring devario-boot devario-base; do
+for name in calamares ckbcomp devario-filesystem devario-keyring devario-boot devario-base devario-system-integration; do
   devario_is_local_installer_package "$name" || fail "missing local installer exception: $name"
 done
 for name in shelly systemd devario-desktop calamares-extra; do

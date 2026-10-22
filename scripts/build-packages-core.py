@@ -13,7 +13,7 @@ import sys
 import tarfile
 
 PROJECT = Path(__file__).resolve().parents[1]
-RECIPES = ("devario-filesystem", "devario-keyring", "devario-boot", "devario-base", "ckbcomp", "calamares")
+RECIPES = ("devario-filesystem", "devario-keyring", "devario-boot", "devario-base", "devario-system-integration", "ckbcomp", "calamares")
 PACKAGER = "ZoeyErinBauer <40698010+ZoeyErinBauer@users.noreply.github.com>"
 # Explicit tools avoid the base-devel metapackage's external package-manager
 # dependency. All names, including the compiler and libc, resolve in core only.
@@ -40,7 +40,7 @@ def dependencies(metadata):
     for recipe, text in metadata.items():
         # Identity/metapackages are data-only; their runtime dependencies belong
         # in the ISO, not in the compiler root. This matches build-packages.sh.
-        if recipe in ("devario-filesystem", "devario-keyring", "devario-base"):
+        if recipe in ("devario-filesystem", "devario-keyring", "devario-base", "devario-system-integration"):
             continue
         for line in text.splitlines():
             match = re.fullmatch(r"\s*(?:depends|makedepends|checkdepends)(?:_x86_64)? = (\S+)", line)
@@ -67,7 +67,7 @@ HookDirMode = Replace
 HookDir = {root}/usr/share/rlpm/hooks
 HookDir = {root}/etc/shelly.d/hooks
 # The wrapper verifies this complete local snapshot before provisioning.
-# This also permits the six explicitly allowed local installer archives.
+# This also permits the explicitly allowed local installer archives.
 SigLevel = Never
 LocalFileSigLevel = Never
 ParallelDownloads = 5

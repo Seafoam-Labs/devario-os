@@ -5,7 +5,8 @@ unset LD_PRELOAD
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(cd -- "$script_dir/.." && pwd)"
-gpu_setup="$project_dir/packages/devario-aqueous-desktop/gpu-driver-setup"
+profile_dir="${DEVARIO_PROFILE_DIR:-$project_dir/iso}"
+gpu_setup="$project_dir/packages/devario-system-integration/gpu-driver-setup"
 mock_modprobe="$script_dir/fixtures/gpu-driver-setup/mock-modprobe"
 test_root="$(mktemp -d /tmp/devario-gpu-driver-test.XXXXXX)"
 

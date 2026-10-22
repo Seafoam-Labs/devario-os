@@ -21,6 +21,7 @@ package_order=(
   devario-keyring
   devario-base
   devario-boot
+  devario-system-integration
   ckbcomp
   calamares
 )
@@ -211,11 +212,11 @@ collect_build_dependencies() {
   local package_name package_dir package_srcinfo
 
   for package_name in "${selected_package_order[@]}"; do
-    if [[ "$package_name" == devario-base \
+    if [[ "$package_name" == devario-system-integration \
+      || "$package_name" == devario-base \
       || "$package_name" == devario-keyring \
       || "$package_name" == seafoam-keyring \
-      || "$package_name" == devario-filesystem \
-      || "$package_name" == devario-aqueous-desktop ]]; then
+      || "$package_name" == devario-filesystem ]]; then
       continue
     fi
     package_dir="$project_dir/packages/$package_name"

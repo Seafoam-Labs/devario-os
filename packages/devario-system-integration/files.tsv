@@ -1,0 +1,14 @@
+755	gpu-driver-setup	usr/lib/devario/gpu-driver-setup
+755	gpu-hotplug	usr/lib/devario/gpu-hotplug
+755	graphics-session	usr/lib/devario/graphics-session
+755	devario-gpu-run	usr/bin/devario-gpu-run
+644	devario-gpu-driver.service	usr/lib/systemd/system/devario-gpu-driver.service
+644	devario-gpu-hotplug.service	usr/lib/systemd/system/devario-gpu-hotplug.service
+644	greetd-gpu-driver.conf	usr/lib/systemd/system/pearl-greeter.service.d/20-devario-gpu-driver.conf
+644	30-plymouth.conf	usr/lib/systemd/system/pearl-greeter.service.d/30-plymouth.conf
+644	20-devario-gpu.conf	usr/lib/systemd/user/wayland-wm@aqueous\x2dwm.service.d/20-devario-gpu.conf
+644	devario-egpu.conf	usr/lib/modprobe.d/devario-egpu.conf
+644	55-devario-user-dirs.sh	etc/xdg/uwsm/env.d/55-devario-user-dirs.sh
+644	60-devario-gpu.sh	etc/xdg/uwsm/env.d/60-devario-gpu.sh
+644	61-devario-virtio.sh	etc/xdg/uwsm/env.d/61-devario-virtio.sh
+644	greetd-config.toml	usr/share/devario/greetd/config.toml
