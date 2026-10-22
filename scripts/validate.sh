@@ -481,7 +481,7 @@ package_is_listed() {
 
 for required_package in \
   aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous \
-  calamares ckbcomp devario-desktop rtkit \
+  calamares ckbcomp devario-desktop rtkit sof-firmware alsa-ucm-conf \
   devario-base devario-boot devario-dracut devario-keyring greetd systemd pearl pearl-greeter shelly fastfetch fish \
   chafa imagemagick ghostty gnome-keyring seahorse scx-scheds scx-tools upower power-profiles-daemon adw-gtk3 papirus-icon-theme vimix-cursors \
   strace ripgrep vulkan-tools mesa-utils wayland-utils usbutils lsof nvme-cli netcat matugen \
@@ -990,6 +990,15 @@ fi
 if ! grep -Fqx '  shell: /usr/bin/fish' "$profile_dir/airootfs/etc/calamares/modules/users.conf"; then
   fail "Calamares must create user accounts with Fish as their login shell"
 fi
+base_hard_dependencies="$(sed -n '/^[[:space:]]*depends=(/,/^[[:space:]]*)/p' "$project_dir/packages/devario-base/PKGBUILD")"
+for audio_dependency in sof-firmware alsa-ucm-conf; do
+  if ! grep -Fqx "  '$audio_dependency'" <<< "$base_hard_dependencies"; then
+    fail "devario-base must require $audio_dependency for onboard audio on existing installations"
+  fi
+  if ! grep -Fxq "$audio_dependency" "$project_dir/repository-packages.x86_64"; then
+    fail "the repository package checklist must include $audio_dependency"
+  fi
+done
 for shell_dependency in fish 'shadow>=4.20.0.arch1-3'; do
   if ! grep -Fqx "  '$shell_dependency'" "$project_dir/packages/devario-base/PKGBUILD"; then
     fail "devario-base must require $shell_dependency for the default user shell"

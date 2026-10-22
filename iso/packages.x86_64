@@ -1,5 +1,6 @@
 accountsservice
 adw-gtk3
+alsa-ucm-conf
 alsa-utils
 amd-ucode
 aqueous-core
@@ -88,6 +89,7 @@ scx-tools
 seahorse
 shelly
 shelly-cli
+sof-firmware
 squashfs-tools
 strace
 sudo

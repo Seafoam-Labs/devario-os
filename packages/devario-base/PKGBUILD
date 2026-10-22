@@ -2,7 +2,7 @@
 
 pkgname=devario-base
 pkgver=3
-pkgrel=17
+pkgrel=18
 pkgdesc="Minimal package set defining a base Devario installation"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -44,6 +44,8 @@ depends=(
   'inxi'
   'python'
   'sudo'
+  'sof-firmware'
+  'alsa-ucm-conf'
 )
 optdepends=('linux-devario: bare-metal support')
 provides=("base=${pkgver}")

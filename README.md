@@ -410,6 +410,20 @@ The desktop comes from `devario-core/devario-desktop`, with stable Aqueous and
 configuration; the legacy local `devario-aqueous-desktop` recipe is no longer
 in the default build order.
 
+### Intel onboard audio firmware
+
+The ISO and `devario-base` 3-18 require `sof-firmware` and `alsa-ucm-conf`.
+These supply the DSP firmware, topology files, and ALSA use-case configuration
+needed by supported Intel onboard audio devices. Missing SOF files prevented
+the ASUS V16 V3607VH's onboard audio from initializing; installing these packages
+and rebooting resolved the reported issue.
+
+Build and publish `devario-base` 3-18 with both dependencies available in the
+repository, then rebuild the ISO. Existing users receive the dependencies with
+`sudo shelly upgrade standard` and should reboot afterward. For an immediate
+repair, run `sudo shelly install standard sof-firmware alsa-ucm-conf` and reboot.
+Verify that `aplay -l` lists onboard audio and `wpctl status` shows its devices.
+
 ### Realtime audio and existing installations
 
 The default desktop and ISO require `rtkit` so PipeWire can request realtime
