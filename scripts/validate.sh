@@ -484,7 +484,7 @@ for required_package in \
   aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous \
   calamares ckbcomp devario-desktop rtkit sof-firmware alsa-ucm-conf \
   devario-system-integration devario-base devario-boot devario-dracut devario-keyring greetd systemd pearl pearl-greeter shelly fastfetch fish \
-  chafa imagemagick ghostty gnome-keyring seahorse scx-scheds scx-tools upower power-profiles-daemon adw-gtk3 papirus-icon-theme vimix-cursors \
+  chafa imagemagick ghostty gnome-keyring seahorse scx-scheds upower power-profiles-daemon adw-gtk3 papirus-icon-theme vimix-cursors \
   strace ripgrep vulkan-tools mesa-utils wayland-utils usbutils lsof nvme-cli netcat matugen \
   linux-devario linux-devario-headers bolt boltctl python-pyudev nvidia-open-dkms nvidia-utils \
   vulkan-intel vulkan-radeon vulkan-swrast vulkan-virtio xorg-xwayland; do
@@ -493,10 +493,11 @@ for required_package in \
   fi
 done
 
+# scx-scheds now owns the scheduler tools and conflicts with the old scx-tools.
 for forbidden_package in \
   noctalia noctalia-greeter aqueous-noctalia aqueous-integration-noctalia aqueous-shell-noctalia \
   devario-alpm-runtime mkinitcpio mkinitcpio-archiso pacman base linux grub os-prober lightdm lightdm-gtk-greeter xfce4 xfce4-goodies \
-  xorg-server xorg-xinit greetd-agreety greetd-tuigreet vulkan-nouveau; do
+  xorg-server xorg-xinit greetd-agreety greetd-tuigreet vulkan-nouveau scx-tools; do
   if package_is_listed "$forbidden_package"; then
     fail "packages.x86_64 must not include $forbidden_package"
   fi
@@ -916,7 +917,7 @@ fastfetch_config="$profile_dir/late-airootfs/usr/share/devario/fastfetch/config.
 live_sysusers="$profile_dir/late-airootfs/usr/lib/sysusers.d/devario-live.conf"
 live_tmpfiles="$profile_dir/late-airootfs/usr/lib/tmpfiles.d/devario-live.conf"
 
-for boot_service in bluetooth.service upower.service power-profiles-daemon.service scx_loader.service; do
+for boot_service in bluetooth.service upower.service power-profiles-daemon.service scx.service; do
   if ! grep -F 'Wants=' "$live_target" | grep -Fwq "$boot_service" \
     || ! grep -F 'After=' "$live_target" | grep -Fwq "$boot_service"; then
     fail "the live readiness target must start and order $boot_service"

@@ -20,7 +20,7 @@ ln -sT -- ../../../usr/lib/systemd/system/bluetooth.service \
   "$profile_dir/late-airootfs/etc/systemd/system/dbus-org.bluez.service"
 ln -sT -- ../../../../usr/lib/systemd/system/devario-gpu-hotplug.service \
   "$profile_dir/late-airootfs/etc/systemd/system/multi-user.target.wants/devario-gpu-hotplug.service"
-ln -sT -- ../../../../usr/lib/systemd/system/scx_loader.service \
-  "$profile_dir/late-airootfs/etc/systemd/system/multi-user.target.wants/scx_loader.service"
+ln -sT -- ../../../../usr/lib/systemd/system/scx.service \
+  "$profile_dir/late-airootfs/etc/systemd/system/multi-user.target.wants/scx.service"
 ln -sT -- ../../../../usr/lib/systemd/system/upower.service \
   "$profile_dir/late-airootfs/etc/systemd/system/graphical.target.wants/upower.service"
