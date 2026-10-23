@@ -624,6 +624,7 @@ vulkan-tools
 wayland
 wayland-protocols
 wayland-utils
+webrtc-audio-processing
 webrtc-audio-processing-1
 wireplumber
 wl-clipboard
