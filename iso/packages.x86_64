@@ -82,6 +82,7 @@ pwvucontrol
 python
 python-pyudev
 qt6-imageformats
+qtengine
 ripgrep
 rsync
 rtkit
