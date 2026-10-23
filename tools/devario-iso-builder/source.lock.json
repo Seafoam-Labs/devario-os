@@ -3,6 +3,6 @@
   "repository": "https://github.com/Seafoam-Labs/devario-iso-builder",
   "revision": "084ffe6c3d45a98e131f83558f0e43467691b05e",
   "archive": "devario-iso-builder.tar.gz",
-  "sha256": "82b05f4e1abecdbb50107d97ed637b949709dc58c0a1f7abf97bd052b5147e71",
-  "localPatchSha256": "002f7e16b57ffa1e185f099575a17c664f603e3d58f41092063080edb767e57a"
+  "sha256": "6379828633e06bf13820a76467ef7ef0accc7fbe1cf0dfe1ad08d2dbc8f53d23",
+  "localPatchSha256": "242d6fd5a12beacbf13f31bd2e80dc71d76cf2b249354991d4206a97f9a071f9"
 }
