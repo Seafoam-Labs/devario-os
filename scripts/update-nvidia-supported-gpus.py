@@ -14,6 +14,8 @@ def extract(readme, version):
     text = readme.decode("utf-8")
     if not re.search(r"\bversion\s+" + re.escape(version) + r"\.", text):
         raise ValueError("README version does not match the requested driver")
+    if "## Compatible GPUs\n" not in text:
+        raise ValueError("README has no compatible GPU table")
     section = text.split("## Compatible GPUs\n", 1)[1].split("\n## ", 1)[0]
     devices = set()
     for line in section.splitlines():

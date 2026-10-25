@@ -27,6 +27,8 @@ Target = amd-ucode
 Target = intel-ucode
 Target = nvidia-open-dkms
 Target = nvidia-utils
+Target = nvidia-580xx-dkms
+Target = nvidia-580xx-utils
 Target = linux-devario-headers
 Target = linux-devario-lts-headers
 

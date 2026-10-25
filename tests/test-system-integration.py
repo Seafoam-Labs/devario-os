@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Verify package payload ownership and recovery during legacy overlay adoption."""
 import importlib.util
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -15,6 +16,27 @@ spec.loader.exec_module(migration)
 
 
 class PackageTests(unittest.TestCase):
+    def test_declared_migrations_cover_exact_payload_and_preserve_backup_policy(self):
+        raw = subprocess.check_output(['bash', '-eu', '-c', '''
+            source "$1"
+            printf '%s\\0' "${shelly_migrate[@]}"
+            ''', 'metadata', str(PACKAGE / 'PKGBUILD')])
+        declarations = [json.loads(value) for value in raw.split(b'\0') if value]
+        paths = [entry['path'] for entry in declarations]
+        self.assertEqual(len(paths), len(set(paths)))
+        self.assertEqual(set(paths), set(migration.destinations(PACKAGE / 'files.tsv')))
+        # The systemd unit name contains a literal backslash, not a JSON escape.
+        self.assertIn(r'usr/lib/systemd/user/wayland-wm@aqueous\x2dwm.service.d/20-devario-gpu.conf', paths)
+        metadata = (PACKAGE / '.SRCINFO').read_text().splitlines()
+        recorded = [json.loads(line.split(' = ', 1)[1]) for line in metadata
+                    if line.strip().startswith('shelly_migrate = ')]
+        self.assertEqual(recorded, declarations)
+        backups = {line.split(' = ', 1)[1] for line in metadata if line.strip().startswith('backup = ')}
+        for entry in declarations:
+            self.assertEqual(entry['from'], 'unowned')
+            self.assertIs(entry['optional'], True)
+            self.assertEqual(entry.get('backup', False), entry['path'] in backups)
+
     def test_sources_and_real_staged_payload(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

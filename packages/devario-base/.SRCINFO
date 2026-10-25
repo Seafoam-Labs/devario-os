@@ -1,7 +1,7 @@
 pkgbase = devario-base
 	pkgdesc = Minimal package set defining a base Devario installation
 	pkgver = 3
-	pkgrel = 17
+	pkgrel = 18
 	url = https://github.com/Seafoam-Labs/devario-os
 	arch = any
 	license = GPL-3.0-or-later
@@ -38,6 +38,8 @@ pkgbase = devario-base
 	depends = inxi
 	depends = python
 	depends = sudo
+	depends = sof-firmware
+	depends = alsa-ucm-conf
 	optdepends = linux-devario: bare-metal support
 	provides = base=3
 	conflicts = base

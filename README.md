@@ -220,27 +220,29 @@ to permit SSH when needed, and `sudo ufw status verbose` to inspect the policy.
 Configuration is staged as files; building or installing the image does not
 run UFW against the build host or live session's firewall.
 
-The live and installed filesystems include `nvidia-open-dkms`, `nvidia-utils`,
-and the Devario kernel headers. The desktop metapackage requires NVIDIA
-**615.71.09** for both driver packages. Before partitioning, Calamares detects
-NVIDIA display controllers and checks them against that release's open-driver
-PCI support table, including subsystem IDs. It verifies the packages, headers,
-DKMS sources, and firmware in the pristine installation payload. Unknown or
-unsupported NVIDIA hardware stops installation with a diagnostic.
+The live filesystem includes `nvidia-open-dkms`, `nvidia-utils`, and the Devario
+kernel headers. ISO staging generates the open-driver PCI support table,
+including subsystem IDs, from the exact signed DKMS package selected in the
+repository snapshot and requires matching driver/library versions. The
+checked-in table is a reference snapshot; staging replaces it on every build.
+Before partitioning, Calamares detects NVIDIA display controllers and verifies
+the selected payload and headers in the pristine installation image. Hardware
+outside the open driver's support table uses the cached CachyOS-based proprietary
+580 driver when it supports all detected controllers; otherwise installation stops with
+a diagnostic. See [NVIDIA install policy](docs/nvidia-install-policy.md).
 
 After copying the offline image, Calamares verifies or builds the modules for
 the target kernel and enables `NVIDIA_EARLY_KMS="true"` in the target's
 `/etc/devario-dracut.conf`. The active Devario boot builder includes and requests
 early loading of all four NVIDIA modules in both normal and fallback images,
 with firmware and modesetting configuration checked before publication.
-Installations without a connected NVIDIA GPU also verify the pristine payload
-and verify or build the target's NVIDIA modules, so a later eGPU connection
-does not need a compiler or network download. They retain the disabled early-KMS
-default. After the installation upgrade, Calamares verifies the resulting
+Installations without a connected NVIDIA GPU skip NVIDIA preflight, remove
+the copied NVIDIA driver packages from the target, and disable early KMS.
+After the installation upgrade, Calamares verifies the resulting
 driver version against the compatible-GPU table in the signed DKMS package's
 `/usr/src/nvidia-<version>/README.md`, checks the matching utilities, headers,
 sources and firmware, and verifies or rebuilds the target modules again.
-The initial payload checks continue to use the ISO's reviewed support table.
+The initial payload checks use the support table generated during ISO staging.
 
 A boot service also detects NVIDIA PCI display
 controllers through sysfs, loads `nvidia_drm` with modesetting before greetd,
@@ -408,8 +410,10 @@ The desktop comes from `devario-core/devario-desktop`, with stable Aqueous and
 `devario-system-integration`, which owns GPU services, helpers and OS desktop
 configuration. The ISO obtains those files from the package. Existing ISO
 installations need the [one-time file ownership migration](packages/devario-system-integration/README.md#existing-installations-one-time-adoption)
-before their first upgrade. Publish integration 1-1 before Aqueous 1.0.5-2,
-then rebuild the ISO. Future integration changes update through Shelly.
+using integration 1-3 and Shelly CLI 3.1.9 or later with RLPM. Update Shelly
+first, then install integration normally to preserve unowned ISO files in place.
+Publish integration before Aqueous 1.0.5-2, then rebuild the ISO. Future integration
+changes update through Shelly.
 
 ### Intel onboard audio firmware
 

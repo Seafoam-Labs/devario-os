@@ -80,6 +80,9 @@ note() {
 required_files=(
   "$project_dir/scripts/stage-image-links.sh"
   "$project_dir/scripts/stage-iso-repositories.py"
+  "$project_dir/scripts/stage-nvidia-payload.py"
+  "$project_dir/scripts/update-nvidia-supported-gpus.py"
+  "$project_dir/tests/test-stage-nvidia-payload.py"
   "$profile_dir/profile.json"
   "$profile_dir/packages.x86_64"
   "$profile_dir/shelly.build.conf"
@@ -369,6 +372,9 @@ if ! DEVARIO_PROFILE_DIR="$profile_dir" \
   python3 "$project_dir/tests/test-configure-target-nvidia.py"; then
   fail "Calamares NVIDIA installation behavior tests failed"
 fi
+if ! python3 "$project_dir/tests/test-stage-nvidia-payload.py"; then
+  fail "NVIDIA offline payload staging tests failed"
+fi
 if [[ -n "${DEVARIO_NVIDIA_TEST_ROOT:-}" ]] && ! DEVARIO_PROFILE_DIR="$profile_dir" \
   python3 "$project_dir/tests/test-nvidia-preflight-image.py" "$DEVARIO_NVIDIA_TEST_ROOT"; then
   fail "Calamares NVIDIA preflight image integration tests failed"
@@ -484,9 +490,10 @@ for required_package in \
   aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous \
   calamares ckbcomp devario-desktop rtkit sof-firmware alsa-ucm-conf \
   devario-system-integration devario-base devario-boot devario-dracut devario-keyring greetd systemd pearl pearl-greeter shelly fastfetch fish \
-  chafa imagemagick ghostty gnome-keyring seahorse scx-scheds upower power-profiles-daemon adw-gtk3 papirus-icon-theme vimix-cursors \
+  chafa imagemagick libzip ghostty gnome-keyring seahorse scx-scheds upower power-profiles-daemon adw-gtk3 papirus-icon-theme vimix-cursors \
   strace ripgrep vulkan-tools mesa-utils wayland-utils usbutils lsof nvme-cli netcat matugen \
   linux-devario linux-devario-headers bolt boltctl python-pyudev nvidia-open-dkms nvidia-utils \
+  lib32-gcc-libs lib32-libglvnd lib32-zlib ocl-icd \
   vulkan-intel vulkan-radeon vulkan-swrast vulkan-virtio xorg-xwayland; do
   if ! package_is_listed "$required_package"; then
     fail "packages.x86_64 does not include $required_package"
@@ -496,6 +503,7 @@ done
 # scx-scheds now owns the scheduler tools and conflicts with the old scx-tools.
 for forbidden_package in \
   noctalia noctalia-greeter aqueous-noctalia aqueous-integration-noctalia aqueous-shell-noctalia \
+  nvidia-580xx-dkms nvidia-580xx-open-dkms nvidia-580xx-utils opencl-nvidia-580xx lib32-nvidia-580xx-utils lib32-opencl-nvidia-580xx \
   devario-alpm-runtime mkinitcpio mkinitcpio-archiso pacman base linux grub os-prober lightdm lightdm-gtk-greeter xfce4 xfce4-goodies \
   xorg-server xorg-xinit greetd-agreety greetd-tuigreet vulkan-nouveau scx-tools; do
   if package_is_listed "$forbidden_package"; then
