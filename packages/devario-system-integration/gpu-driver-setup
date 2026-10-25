@@ -100,7 +100,7 @@ setup_driver() {
     # DRM module here makes driver readiness deterministic before greetd starts.
     if ! "$modprobe_command" nvidia_drm modeset=1; then
         write_state unavailable
-        log "NVIDIA hardware detected, but the open kernel module could not be loaded."
+        log "NVIDIA hardware detected, but the kernel module could not be loaded."
         return 0
     fi
 
@@ -119,13 +119,13 @@ setup_driver() {
 
     case "$state" in
         nvidia)
-            log "NVIDIA open driver is active."
+            log "NVIDIA driver is active."
             ;;
         partial)
-            log "NVIDIA open driver claimed only some detected display controllers."
+            log "NVIDIA driver claimed only some detected display controllers."
             ;;
         unavailable)
-            log "NVIDIA hardware detected, but no display controller is bound to the open driver."
+            log "NVIDIA hardware detected, but no display controller is bound to the NVIDIA driver."
             ;;
     esac
 }

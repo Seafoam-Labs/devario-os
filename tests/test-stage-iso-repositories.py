@@ -24,6 +24,17 @@ def source(name, packages):
 
 
 class RepositorySelectionTests(unittest.TestCase):
+    def test_offline_alternative_is_downloaded_without_entering_live_package_set(self):
+        sources = [source('devario-core', [package('nvidia-open-dkms'), package('dkms')]),
+                   source('devario-libs', [package('nvidia-580xx-dkms', 'devario-libs',
+                                                   ['nvidia-580xx-utils', 'dkms']),
+                                          package('nvidia-580xx-utils', 'devario-libs')])]
+        artifacts, selected, missing = stage.select_packages(sources, ['nvidia-open-dkms'], [], [],
+                                                              offline=['nvidia-580xx-dkms', 'nvidia-580xx-utils'])
+        self.assertFalse(missing)
+        self.assertEqual(set(selected), {'nvidia-open-dkms'})
+        self.assertEqual(set(artifacts), {'nvidia-open-dkms', 'dkms', 'nvidia-580xx-dkms', 'nvidia-580xx-utils'})
+
     def test_resolves_recursive_runtime_and_build_dependencies_across_repositories(self):
         sources = [source('devario-core', [package('app', depends=['images']), package('bootstrap')]),
                    source('devario-entertainment', [package('images', 'devario-entertainment', ['codec']),

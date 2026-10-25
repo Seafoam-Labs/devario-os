@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Configure supported NVIDIA hardware, or prune NVIDIA from non-NVIDIA targets."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,9 @@ import tempfile
 
 HELPER = "/usr/lib/devario/configure-target-nvidia"
 SUPPORT = Path("/usr/share/devario/nvidia-supported-gpus.json")
+LEGACY_PAYLOAD = Path("/usr/share/devario/nvidia-580xx")
+OPEN_PACKAGES = ("nvidia-open-dkms", "nvidia-utils")
+LEGACY_PACKAGES = ("nvidia-580xx-dkms", "nvidia-580xx-utils")
 MODULES = ("nvidia", "nvidia_modeset", "nvidia_uvm", "nvidia_drm")
 FIRMWARE = ("gsp_tu10x.bin", "gsp_ga10x.bin", "ucodes_tu10x.bin", "ucodes_ga10x.bin")
 
@@ -57,8 +61,100 @@ def check_support(devices, support):
             raise RuntimeError("Malformed PCI device information")
         if ids[0] not in supported and " ".join(ids) not in supported:
             raise RuntimeError(f"Unsupported NVIDIA GPU {device['address']} ({' '.join(ids)}): "
-                               f"not supported by the {support['driverVersion']} open driver")
+                               f"not supported by the {support['driverVersion']} driver")
         log(f"supported GPU {device['address']} ({' '.join(ids)})")
+
+
+def proprietary_support(text, version, metadata):
+    """Use NVIDIA's feature flags, not product names or PCI ID ranges."""
+    if not re.fullmatch(r"580\.\d+\.\d+", version) or f"the {version} driver" not in text:
+        raise RuntimeError("NVIDIA 580 support table does not match the driver version")
+    devices = set()
+    for chip in metadata["chips"]:
+        features = chip["features"]
+        if chip.get("legacybranch") or ("kernelopen" in features and "gsp_proprietary_supported" not in features):
+            continue
+        fields = ("devid", "subvendorid", "subdevid") if "subdevid" in chip or "subvendorid" in chip else ("devid",)
+        ids = [chip[field].lower() for field in fields]
+        if any(not re.fullmatch(r"0x[0-9a-f]{4}", value) for value in ids):
+            raise RuntimeError("Malformed NVIDIA 580 supported GPU metadata")
+        devices.add(" ".join(value[2:] for value in ids))
+    if not devices:
+        raise RuntimeError("NVIDIA 580 compatible GPU table is empty")
+    return {"driverVersion": version, "pciIds": sorted(devices)}
+
+
+def select_support(devices, root):
+    support = json.loads((root / SUPPORT.relative_to("/")).read_text())
+    try:
+        check_support(devices, support)
+        return support
+    except RuntimeError:
+        manifest = root / LEGACY_PAYLOAD.relative_to("/") / "manifest.json"
+        if not manifest.is_file():
+            raise RuntimeError("NVIDIA hardware needs an alternative driver, but the ISO is missing "
+                               "the NVIDIA 580 offline payload; rebuild the ISO")
+        legacy = json.loads(manifest.read_text())
+        try:
+            check_support(devices, legacy)
+        except RuntimeError as error:
+            raise RuntimeError("Unsupported NVIDIA GPU combination: neither the open driver nor "
+                               "the proprietary 580 driver supports all detected controllers") from error
+        return legacy
+
+
+def legacy_archives(root, support):
+    directory = root / LEGACY_PAYLOAD.relative_to("/")
+    archives = []
+    if set(support["packages"]) != set(LEGACY_PACKAGES):
+        raise RuntimeError("Incomplete NVIDIA 580 package manifest")
+    for name in LEGACY_PACKAGES:
+        entry = support["packages"][name]
+        filename = entry["filename"]
+        if Path(filename).name != filename or not filename.startswith(name + "-"):
+            raise RuntimeError("Invalid NVIDIA 580 archive filename")
+        archive = directory / filename
+        for path, digest in ((archive, entry["sha256"]),
+                             (Path(str(archive) + ".sig"), entry["signatureSha256"])):
+            with path.open("rb") as stream:
+                actual = hashlib.file_digest(stream, "sha256").hexdigest()
+            if actual != digest:
+                raise RuntimeError(f"NVIDIA 580 payload checksum mismatch: {path}")
+        archives.append(str(archive))
+    return archives
+
+
+def install_legacy(support):
+    archives = legacy_archives(Path("/"), support)
+    with tempfile.TemporaryDirectory(prefix="devario-nvidia-rlpm-") as directory:
+        conf = Path(directory) / "shelly"
+        conf.mkdir(mode=0o700)
+        (conf / "config.json").write_text('{"NativePackageBackend":"rlpm"}\n')
+        env = dict(os.environ, XDG_CONFIG_HOME=directory)
+        before = installed_packages(env=env)
+        if all(name in before for name in LEGACY_PACKAGES) and not any(name in before for name in OPEN_PACKAGES):
+            return
+        # Shelly's safe noninteractive defaults decline conflict replacement.
+        # Remove only the copied live driver, with dependency checks intact.
+        disable_kms()
+        present = [name for name in OPEN_PACKAGES if name in before]
+        subprocess.run(["shelly", "keyring", "init"], env=env, check=True)
+        try:
+            subprocess.run(["shelly", "keyring", "populate", "devario-core"], env=env, check=True)
+            if present:
+                subprocess.run(["shelly", "remove", "standard", *present,
+                                "--no-cascade", "--no-confirm"],
+                               env=env, stdin=subprocess.DEVNULL, check=True)
+            log("installing the proprietary NVIDIA 580 driver from the ISO")
+            subprocess.run(["shelly", "install", "standard", *archives, "--no-confirm"],
+                           env=env, stdin=subprocess.DEVNULL, check=True)
+            after = installed_packages(env=env)
+            check_packages(support["driverVersion"], after, legacy=True)
+            if any(name in after for name in OPEN_PACKAGES):
+                raise RuntimeError("The incompatible live NVIDIA driver remains installed")
+        finally:
+            subprocess.run(["gpgconf", "--homedir", "/etc/shelly.d/gnupg", "--kill", "all"],
+                           env=env, check=True)
 
 
 def installed_packages(env=None):
@@ -70,14 +166,15 @@ def installed_packages(env=None):
     return {p["Name"]: p["Version"] for p in inventory}
 
 
-def check_packages(version, packages=None):
+def check_packages(version, packages=None, legacy=False):
     if packages is None:
         packages = installed_packages()
-    for name in ("nvidia-open-dkms", "nvidia-utils", "dkms", "gcc", "make", "patch"):
+    names = LEGACY_PACKAGES if legacy else OPEN_PACKAGES
+    for name in (*names, "dkms", "gcc", "make", "patch"):
         if name not in packages:
             raise RuntimeError(f"Offline installation payload is missing {name}")
         log(f"{name} {packages[name]}")
-    for name in ("nvidia-open-dkms", "nvidia-utils"):
+    for name in names:
         upstream = packages[name].split(":")[-1].rsplit("-", 1)[0]
         if upstream != version:
             raise RuntimeError(f"{name} must be {version}, found {packages[name]}")
@@ -85,6 +182,12 @@ def check_packages(version, packages=None):
 
 
 def updated_support(root, packages):
+    if "nvidia-580xx-dkms" in packages:
+        if any(name in packages for name in OPEN_PACKAGES):
+            raise RuntimeError("Conflicting NVIDIA driver branches are installed")
+        version = packages["nvidia-580xx-dkms"].split(":")[-1].rsplit("-", 1)[0]
+        return proprietary_support((root / "usr/share/doc/nvidia/html/supportedchips.html").read_text(), version,
+                                   json.loads((root / "usr/share/doc/nvidia/supported-gpus.json").read_text()))
     # The signed nvidia-open-dkms package carries the upstream support table
     # with its source. Never apply the ISO's older table to a newer driver.
     version = packages.get("nvidia-open-dkms", "").split(":")[-1].rsplit("-", 1)[0]
@@ -108,13 +211,25 @@ def updated_support(root, packages):
     return {"driverVersion": version, "pciIds": sorted(devices)}
 
 
-def check_payload(devices, root=Path("/"), updated=False):
+def check_payload(devices, root=Path("/"), updated=False, install=False, preflight=False):
     packages = installed_packages() if updated else None
     support = (updated_support(root, packages) if updated else
-               json.loads((root / SUPPORT.relative_to("/")).read_text()))
+               select_support(devices, root))
     version = support["driverVersion"]
+    legacy = version.startswith("580.")
     check_support(devices, support)
-    packages = check_packages(version, packages)
+    if legacy and preflight:
+        legacy_archives(root, support)
+        # The build validates the archived sources, firmware and dependency
+        # closure. The pristine root still has the live open driver installed.
+        packages = installed_packages()
+        for name in ("dkms", "gcc", "make", "patch"):
+            if name not in packages:
+                raise RuntimeError(f"Offline installation payload is missing {name}")
+    else:
+        if legacy and install:
+            install_legacy(support)
+        packages = check_packages(version, packages, legacy=legacy)
     # Use exactly the same kernel selection contract as prepare-target-kernel
     # and boot-update. No uname or assumptions about the running live kernel.
     kernel = output("bash", "-eu", "-c",
@@ -131,9 +246,12 @@ def check_payload(devices, root=Path("/"), updated=False):
     build = root / "usr/lib/modules" / kernel / "build"
     if not (build / "Makefile").is_file() or (build / "include/config/kernel.release").read_text().strip() != kernel:
         raise RuntimeError(f"Headers do not match target kernel {kernel}")
+    if legacy and preflight:
+        log(f"verified offline NVIDIA 580 archives for target kernel {kernel}")
+        return kernel, version
     if not (root / f"usr/src/nvidia-{version}/dkms.conf").is_file():
         raise RuntimeError(f"Missing NVIDIA {version} DKMS sources")
-    for firmware in FIRMWARE:
+    for firmware in (FIRMWARE[:2] if legacy else FIRMWARE):
         base = root / f"usr/lib/firmware/nvidia/{version}/{firmware}"
         if not any(Path(str(base) + suffix).is_file() for suffix in ("", ".zst", ".xz")):
             raise RuntimeError(f"Missing NVIDIA firmware {base}")
@@ -148,7 +266,8 @@ def modules_ready(kernel, version):
                 return False
             if output("modinfo", "-k", kernel, "-F", "vermagic", module).split()[0] != kernel:
                 return False
-        return output("modinfo", "-k", kernel, "-F", "license", "nvidia") == "Dual MIT/GPL"
+        license_name = "NVIDIA" if version.startswith("580.") else "Dual MIT/GPL"
+        return output("modinfo", "-k", kernel, "-F", "license", "nvidia") == license_name
     except (subprocess.CalledProcessError, IndexError):
         return False
 
@@ -212,7 +331,7 @@ def disable_kms(config=Path("/etc/devario-dracut.conf"),
 def remove_unused_nvidia():
     # Installed files come from unpackfs. Use the native RLPM transaction,
     # never unlink package payloads or modify Shelly's database by hand.
-    names = ("nvidia-open-dkms", "nvidia-utils")
+    names = OPEN_PACKAGES + LEGACY_PACKAGES
     # Force the same native backend for BOTH inventories and the transaction.
     # Do not mutate the user's persistent Shelly configuration.
     with tempfile.TemporaryDirectory(prefix="devario-nvidia-rlpm-") as directory:
@@ -255,7 +374,7 @@ def configure(devices, updated=False):
         disable_kms()
         remove_unused_nvidia()
         return
-    kernel, version = check_payload(devices, updated=True) if updated else check_payload(devices)
+    kernel, version = check_payload(devices, updated=True) if updated else check_payload(devices, install=True)
     if not modules_ready(kernel, version):
         log(f"building NVIDIA {version} modules for {kernel}; DKMS logs are in /var/lib/dkms")
         subprocess.run(["dkms", "autoinstall", "-k", kernel], check=True)
@@ -297,7 +416,7 @@ def main():
         modes.add_argument(f"--{name}", action="store_const", const=name, dest="mode")
     mode = parser.parse_args().mode or "configure"
     if mode == "check-payload":
-        check_payload(json.load(sys.stdin))
+        check_payload(json.load(sys.stdin), preflight=True)
         return
     devices = detect()
     if mode == "preflight":

@@ -80,6 +80,8 @@ note() {
 required_files=(
   "$project_dir/scripts/stage-image-links.sh"
   "$project_dir/scripts/stage-iso-repositories.py"
+  "$project_dir/scripts/stage-nvidia-payload.py"
+  "$project_dir/tests/test-stage-nvidia-payload.py"
   "$profile_dir/profile.json"
   "$profile_dir/packages.x86_64"
   "$profile_dir/shelly.build.conf"
@@ -368,6 +370,9 @@ fi
 if ! DEVARIO_PROFILE_DIR="$profile_dir" \
   python3 "$project_dir/tests/test-configure-target-nvidia.py"; then
   fail "Calamares NVIDIA installation behavior tests failed"
+fi
+if ! python3 "$project_dir/tests/test-stage-nvidia-payload.py"; then
+  fail "NVIDIA offline payload staging tests failed"
 fi
 if [[ -n "${DEVARIO_NVIDIA_TEST_ROOT:-}" ]] && ! DEVARIO_PROFILE_DIR="$profile_dir" \
   python3 "$project_dir/tests/test-nvidia-preflight-image.py" "$DEVARIO_NVIDIA_TEST_ROOT"; then

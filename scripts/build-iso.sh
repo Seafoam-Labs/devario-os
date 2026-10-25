@@ -300,6 +300,10 @@ while IFS= read -r package_name || [[ -n "$package_name" ]]; do
   fi
 done < "$staged_profile/packages.x86_64"
 
+# Cache the mutually exclusive legacy driver without installing it into the
+# live root. Its archives inherit the verified repository's trust boundary.
+python3 "$script_dir/stage-nvidia-payload.py" "$staged_core_repo" "$staged_profile"
+
 qt_declarative_packages=("$staged_core_repo"/qt6-declarative-[0-9]*.pkg.tar.zst)
 (( ${#qt_declarative_packages[@]} == 1 )) || { echo 'Expected exactly one qt6-declarative archive.' >&2; exit 1; }
 bash "$script_dir/verify-qt-quick-package.sh" "${qt_declarative_packages[0]}"

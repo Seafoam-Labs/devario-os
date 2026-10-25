@@ -1,7 +1,7 @@
 # Maintainer: Devario maintainers
 pkgname=devario-system-integration
 pkgver=1
-pkgrel=1
+pkgrel=2
 pkgdesc="Devario GPU services and desktop system integration"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -35,7 +35,7 @@ source=(
 sha256sums=(
   '322996e9b1849fcadddb9dd4b2823df9004fb956340ca9ad02d821c5c0a45bcb'
   'de7deb31389698de4664dd761732db68ca4860bc2113972f5c5c72d82b306792'
-  '455389932d08ed61668fdf010debf46ff7a282e54142019a7a52c171ee672d34'
+  'f78d09522fa6fedab6c7ea95b4532908ae76b0b00b542a9dc950cb072d813cfb'
   '6d91c86fc41465665fb01ae6669ec03b03e3aabf948db7a63af1f92a9244ef6d'
   '79f25aad3be3af1214c3453c18dced5b8a0cc90087374752f59ba6d7d95eb02e'
   '06d15fdb2a477256f2abcd5e98bf32ac68527134b5870b30346285f442e72ec7'

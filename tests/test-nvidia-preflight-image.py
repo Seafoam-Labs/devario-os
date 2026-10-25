@@ -122,10 +122,16 @@ class ImagePreflightTests(unittest.TestCase):
         self.assertIn("Pristine NVIDIA payload check failed", result.stdout)
 
     def test_unsupported_gpu_still_fails_clearly(self):
-        self.gpu("1b80")
+        self.gpu("ffff")
         result = self.run_helper()
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("Unsupported NVIDIA GPU", result.stdout)
+
+    def test_pascal_passes_with_offline_580_payload(self):
+        self.gpu("1b80")
+        result = self.run_helper()
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("verified offline NVIDIA 580 archives", result.stdout)
 
     def test_no_nvidia_needs_no_pristine_root(self):
         result = self.run_helper(source=False)
