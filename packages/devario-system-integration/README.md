@@ -12,11 +12,44 @@ package; it must not carry competing copies in `iso/airootfs`.
 Calamares restores the packaged installed greeter template on the target.
 Driver selection and optional NVIDIA installation policy are unchanged.
 
+## Rendering preference
+
+Release 1-4 reads `/etc/devario/gpu-policy.json` for both the greeter and the
+desktop. The default `{"render_preference":"chassis"}` prefers integrated
+graphics on portable, laptop, notebook, tablet, convertible and detachable
+chassis, and dedicated graphics on recognized desktop chassis. Virtual machines,
+missing DMI data and unknown chassis retain Aqueous's automatic selection.
+This does not rely on GPU vendor, card numbering, battery presence or dock state.
+
+Set `render_preference` to `auto`, `integrated` or `discrete` to override chassis
+detection for both sessions. The configuration is a package backup file, so
+upgrades preserve local changes. An explicit `AQUEOUS_RENDER_GPU_PREFERENCE`
+environment value takes precedence over the file; `auto` disables the chassis
+preference. Invalid or unreadable configuration safely uses `auto` and logs why.
+
+Requires an Aqueous source release containing the rendering-preference support.
+The compositor ranks Vulkan devices by their reported type, tries other hardware
+if the preferred GPU is absent or fails initialization, and retains explicit
+`WLR_RENDER_DRM_DEVICE` restrictions. Application policy remains separately
+controlled by `AQUEOUS_GPU_POLICY=follow|inherit`, with `follow` using the actual
+successful renderer. `devario-gpu-run` still selects another GPU per application.
+
+Neither helper nor compositor automatically sets `WLR_DRM_DEVICES`: doing so
+would restrict display discovery and disable wlroots GPU hotplug monitoring.
+Explicit user device lists remain supported. External monitors on another GPU
+remain eligible, and attaching a GPU does not migrate the running compositor.
+Start a new session to reevaluate rendering preferences. Inspect the greeter or
+user compositor journal for `graphics-session`, `Vulkan render preference`,
+candidate attempts and `gpu-selection` identity messages. Physical hybrid and
+desktop testing is still required before publishing a release.
+
 ## Build and release
 
 1. Deploy Shelly CLI 3.1.9 or later with `shelly_migrate` support and the RLPM backend.
-2. Build with that Shelly, sign, and publish `devario-system-integration` 1-3 in `devario-core`.
-3. Publish all six Aqueous `aqueous-desktop` 1.0.5-2 outputs together.
+2. Build with that Shelly, sign, and publish `devario-system-integration` 1-4 in `devario-core`.
+3. Build a new Aqueous source release through its normal packaging workflow and
+   publish all six desktop outputs together. The older v1.0.5 tag predates the GPU
+   preference implementation; advance the existing recipes to the new release.
 4. Rebuild the ISO with the new integration package in its staged repository.
 
 From the OS checkout, review and build with Shelly:

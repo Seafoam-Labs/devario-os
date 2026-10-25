@@ -1,10 +1,62 @@
 #!/usr/bin/python3 -I
 """Apply startup graphics workarounds only to the launched process tree."""
 import os
+import json
 from pathlib import Path
 import re
 import subprocess
 import sys
+
+
+PREFERENCE_VARIABLE = 'AQUEOUS_RENDER_GPU_PREFERENCE'
+PREFERENCES = ('auto', 'integrated', 'discrete')
+
+
+def machine_type(root=Path('/sys/class/dmi/id')):
+    """Classify only known physical chassis; never infer GPU type from vendor."""
+    try:
+        virtual = subprocess.run(['systemd-detect-virt', '--quiet'],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                 check=False, timeout=2)
+        if virtual.returncode != 1:
+            return 'unknown'
+        chassis = int((root / 'chassis_type').read_text().strip())
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return 'unknown'
+    if chassis in (8, 9, 10, 14, 30, 31, 32):
+        return 'laptop'
+    if chassis in (3, 4, 5, 6, 7, 13, 15, 16, 35, 36):
+        return 'desktop'
+    return 'unknown'
+
+
+def render_preference(environment, config=Path('/etc/devario/gpu-policy.json')):
+    """Environment overrides config; chassis policy is a soft renderer hint."""
+    requested = environment.get(PREFERENCE_VARIABLE)
+    origin = 'environment'
+    if requested is None:
+        origin = 'configuration'
+        try:
+            settings = json.loads(config.read_text())
+            requested = settings['render_preference']
+            if not isinstance(requested, str):
+                raise ValueError('render_preference must be a string')
+        except FileNotFoundError:
+            requested, origin = 'chassis', 'default'
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            print(f'graphics-session: invalid GPU policy: {error}; using auto', file=sys.stderr)
+            requested = 'auto'
+    allowed = PREFERENCES if origin == 'environment' else (*PREFERENCES, 'chassis')
+    if requested not in allowed:
+        print(f'graphics-session: invalid render preference {requested!r}; using auto', file=sys.stderr)
+        requested = 'auto'
+    chassis = machine_type() if requested == 'chassis' else 'unchecked'
+    preference = {'laptop': 'integrated', 'desktop': 'discrete'}.get(chassis, 'auto') \
+        if requested == 'chassis' else requested
+    override = environment.get('WLR_RENDER_DRM_DEVICE', 'none')
+    print(f'graphics-session: chassis={chassis} policy={requested} source={origin} '
+          f'render_preference={preference} explicit_render_device={override}', file=sys.stderr)
+    return preference
 
 
 def virtio_only(root=Path('/sys/class/drm')):
@@ -26,6 +78,7 @@ def virtio_only(root=Path('/sys/class/drm')):
 
 def startup_environment(environment):
     environment = dict(environment)
+    environment[PREFERENCE_VARIABLE] = render_preference(environment)
     mesa = '/usr/share/glvnd/egl_vendor.d/50_mesa.json'
     if Path(mesa).is_file():
         detected = subprocess.run(['/usr/lib/devario/gpu-driver-setup', '--detect'],

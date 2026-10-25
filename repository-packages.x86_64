@@ -676,3 +676,7 @@ zimg
 zix
 zlib-ng
 xdg-desktop-portal-aqueous
+
+# Native and 32-bit Vulkan client GPU selection.
+vulkan-mesa-layers
+lib32-vulkan-mesa-layers

@@ -1,7 +1,7 @@
 # Maintainer: Devario maintainers
 pkgname=devario-system-integration
 pkgver=1
-pkgrel=3
+pkgrel=4
 pkgdesc="Devario GPU services and desktop system integration"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -10,13 +10,15 @@ depends=('bash' 'coreutils' 'util-linux' 'kmod' 'systemd' 'python' 'python-pyude
 # devario-desktop keeps ownership of the desktop selection and dependencies.
 conflicts=('devario-aqueous-desktop')
 replaces=('devario-aqueous-desktop')
-backup=('etc/xdg/uwsm/env.d/55-devario-user-dirs.sh'
+backup=('etc/devario/gpu-policy.json'
+        'etc/xdg/uwsm/env.d/55-devario-user-dirs.sh'
         'etc/xdg/uwsm/env.d/60-devario-gpu.sh'
         'etc/xdg/uwsm/env.d/61-devario-virtio.sh')
 # Adopt the exact unowned files left by older ISOs, preserving their contents.
 # Missing paths install normally; later package-owned upgrades use normal policy.
 # Keep this inventory aligned with files.tsv. Requires Shelly's RLPM backend.
 shelly_migrate=(
+  '{"path":"etc/devario/gpu-policy.json","from":"unowned","optional":true,"backup":true}'
   '{"path":"usr/lib/devario/gpu-driver-setup","from":"unowned","optional":true}'
   '{"path":"usr/lib/devario/gpu-hotplug","from":"unowned","optional":true}'
   '{"path":"usr/lib/devario/graphics-session","from":"unowned","optional":true}'
@@ -34,6 +36,7 @@ shelly_migrate=(
 )
 install=devario-system-integration.install
 source=(
+  'gpu-policy.json'
   'files.tsv'
   'devario-system-integration.install'
   'gpu-driver-setup'
@@ -52,11 +55,12 @@ source=(
   'greetd-config.toml'
 )
 sha256sums=(
-  '322996e9b1849fcadddb9dd4b2823df9004fb956340ca9ad02d821c5c0a45bcb'
+  '3f919ae09602d9ab153f7a313bfb1e378d1f0640d3d9b62af61a0dd335f291d8'
+  '5efb8cd2146449ebf69de8668b7a18973c2de83bd6ee15014e40264d4a7006aa'
   'de7deb31389698de4664dd761732db68ca4860bc2113972f5c5c72d82b306792'
   'f78d09522fa6fedab6c7ea95b4532908ae76b0b00b542a9dc950cb072d813cfb'
   '6d91c86fc41465665fb01ae6669ec03b03e3aabf948db7a63af1f92a9244ef6d'
-  '79f25aad3be3af1214c3453c18dced5b8a0cc90087374752f59ba6d7d95eb02e'
+  'b86dc1909e05f8ba9cd2e17fe1c9342e8f3286f1e59979aa0953025e8e5187b4'
   '06d15fdb2a477256f2abcd5e98bf32ac68527134b5870b30346285f442e72ec7'
   'ec8e672fb2e7a451bd97ca9ccbc4ade0a91a7f0e097a5e3a6ce99ec144871807'
   '84543e1657e7e36205ffabbaaad0575a6c895b1c6f7b464724c0d94b5bb55bf6'

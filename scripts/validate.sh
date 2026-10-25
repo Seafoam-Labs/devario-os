@@ -490,7 +490,7 @@ for required_package in \
   aqueous-core aqueous-session aqueous-integration-pearl aqueous-shell-pearl xdg-desktop-portal-aqueous \
   calamares ckbcomp devario-desktop rtkit sof-firmware alsa-ucm-conf \
   devario-system-integration devario-base devario-boot devario-dracut devario-keyring greetd systemd pearl pearl-greeter shelly fastfetch fish \
-  chafa imagemagick ghostty gnome-keyring seahorse scx-scheds upower power-profiles-daemon adw-gtk3 papirus-icon-theme vimix-cursors \
+  chafa imagemagick libzip ghostty gnome-keyring seahorse scx-scheds upower power-profiles-daemon adw-gtk3 papirus-icon-theme vimix-cursors \
   strace ripgrep vulkan-tools mesa-utils wayland-utils usbutils lsof nvme-cli netcat matugen \
   linux-devario linux-devario-headers bolt boltctl python-pyudev nvidia-open-dkms nvidia-utils \
   lib32-gcc-libs lib32-libglvnd lib32-zlib ocl-icd \

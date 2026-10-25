@@ -30,7 +30,8 @@ class EgpuTests(unittest.TestCase):
             with self.subTest(status=status), \
                     patch.object(graphics.Path, 'is_file', return_value=True), \
                     patch.object(graphics.subprocess, 'run', return_value=Mock(returncode=status)), \
-                    patch.object(graphics, 'virtio_only', return_value=False):
+                    patch.object(graphics, 'virtio_only', return_value=False), \
+                    patch.object(graphics, 'render_preference', return_value='auto'):
                 original = {'PATH': '/usr/bin'}
                 result = graphics.startup_environment(original)
                 self.assertEqual(original, {'PATH': '/usr/bin'})
@@ -38,7 +39,73 @@ class EgpuTests(unittest.TestCase):
                 self.assertEqual('__EGL_VENDOR_LIBRARY_FILENAMES' in result, status == 1)
                 overrides = {'VK_LOADER_DRIVERS_DISABLE': '*custom*',
                              '__EGL_VENDOR_LIBRARY_FILENAMES': '/custom.json'}
-                self.assertEqual(graphics.startup_environment(overrides), overrides)
+                self.assertEqual(graphics.startup_environment(overrides),
+                                 dict(overrides, AQUEOUS_RENDER_GPU_PREFERENCE='auto'))
+
+    def test_chassis_preference_and_virtualization(self):
+        graphics = load('graphics-session')
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with patch.object(graphics.subprocess, 'run', return_value=Mock(returncode=1)):
+                cases = {'laptop': (8, 9, 10, 14, 30, 31, 32),
+                         'desktop': (3, 4, 5, 6, 7, 13, 15, 16, 35, 36),
+                         'unknown': (0, 1, 2, 12, 17, 23, 255, 'invalid')}
+                for expected, chassis_types in cases.items():
+                    for chassis in chassis_types:
+                        with self.subTest(chassis=chassis):
+                            (root / 'chassis_type').write_text(str(chassis))
+                            self.assertEqual(graphics.machine_type(root), expected)
+                (root / 'chassis_type').unlink()
+                self.assertEqual(graphics.machine_type(root), 'unknown')
+            (root / 'chassis_type').write_text('3')
+            for status in (0, 2):
+                with patch.object(graphics.subprocess, 'run', return_value=Mock(returncode=status)):
+                    self.assertEqual(graphics.machine_type(root), 'unknown')
+            for error in (OSError('missing'), subprocess.TimeoutExpired('detect', 2)):
+                with patch.object(graphics.subprocess, 'run', side_effect=error):
+                    self.assertEqual(graphics.machine_type(root), 'unknown')
+            with patch.object(graphics.subprocess, 'run', return_value=Mock(returncode=1)), \
+                    patch.object(graphics.Path, 'read_text', side_effect=PermissionError):
+                self.assertEqual(graphics.machine_type(root), 'unknown')
+
+    def test_render_policy_precedence_and_safe_fallback(self):
+        graphics = load('graphics-session')
+        with tempfile.TemporaryDirectory() as temporary:
+            config = Path(temporary) / 'gpu-policy.json'
+            for chassis, expected in (('laptop', 'integrated'), ('desktop', 'discrete'),
+                                      ('unknown', 'auto')):
+                with patch.object(graphics, 'machine_type', return_value=chassis):
+                    self.assertEqual(graphics.render_preference({}, config), expected)
+            for preference in ('auto', 'integrated', 'discrete'):
+                config.write_text(json.dumps({'render_preference': preference}))
+                self.assertEqual(graphics.render_preference({}, config), preference)
+                with patch.object(graphics, 'machine_type') as detect:
+                    self.assertEqual(graphics.render_preference(
+                        {graphics.PREFERENCE_VARIABLE: 'auto'}, config), 'auto')
+                    detect.assert_not_called()
+            config.write_text('{"render_preference":"chassis"}')
+            with patch.object(graphics, 'machine_type', return_value='laptop'):
+                self.assertEqual(graphics.render_preference({}, config), 'integrated')
+            for invalid in ('broken JSON', '{}', '[]', 'null', '{"render_preference":1}',
+                            '{"render_preference":"nvidia"}'):
+                config.write_text(invalid)
+                self.assertEqual(graphics.render_preference({}, config), 'auto')
+            with patch.object(graphics.Path, 'read_text', side_effect=PermissionError):
+                self.assertEqual(graphics.render_preference({}, config), 'auto')
+            for invalid in ('', 'chassis', 'nvidia'):
+                self.assertEqual(graphics.render_preference(
+                    {graphics.PREFERENCE_VARIABLE: invalid}, config), 'auto')
+
+    def test_preference_keeps_manual_render_and_display_overrides(self):
+        graphics = load('graphics-session')
+        overrides = {'WLR_RENDER_DRM_DEVICE': '/dev/dri/by-path/pci-0000:01:00.0-render',
+                     'WLR_DRM_DEVICES': '/dev/dri/card2',
+                     'AQUEOUS_GPU_POLICY': 'inherit'}
+        with patch.object(graphics.Path, 'is_file', return_value=False), \
+                patch.object(graphics, 'virtio_only', return_value=False), \
+                patch.object(graphics, 'render_preference', return_value='integrated'):
+            self.assertEqual(graphics.startup_environment(overrides),
+                             dict(overrides, AQUEOUS_RENDER_GPU_PREFERENCE='integrated'))
 
     def test_app_launch_after_nvidia_is_attached_clears_inherited_filters(self):
         launcher = load('devario-gpu-run')

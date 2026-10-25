@@ -47,7 +47,9 @@ imagemagick
 intel-ucode
 lib32-gcc-libs
 lib32-libglvnd
+lib32-vulkan-mesa-layers
 lib32-zlib
+libzip
 linux-devario
 linux-devario-headers
 linux-firmware
@@ -108,6 +110,7 @@ upower
 usbutils
 vimix-cursors
 vulkan-intel
+vulkan-mesa-layers
 vulkan-radeon
 vulkan-swrast
 vulkan-tools
