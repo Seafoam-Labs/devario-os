@@ -81,6 +81,7 @@ required_files=(
   "$project_dir/scripts/stage-image-links.sh"
   "$project_dir/scripts/stage-iso-repositories.py"
   "$project_dir/scripts/stage-nvidia-payload.py"
+  "$project_dir/scripts/update-nvidia-supported-gpus.py"
   "$project_dir/tests/test-stage-nvidia-payload.py"
   "$profile_dir/profile.json"
   "$profile_dir/packages.x86_64"

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Bundle the 580 alternative from the already authenticated ISO repository."""
+"""Stage NVIDIA support metadata and the 580 alternative from the verified repository."""
 import argparse
 import hashlib
 import importlib.util
@@ -17,6 +17,9 @@ exec(compile(HELPER.read_text(), str(HELPER), "exec"), nvidia.__dict__)
 spec = importlib.util.spec_from_file_location("audit", PROJECT / "scripts/audit-iso-repositories.py")
 audit = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(audit)
+spec = importlib.util.spec_from_file_location("gpu_support", PROJECT / "scripts/update-nvidia-supported-gpus.py")
+gpu_support = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(gpu_support)
 
 
 def contents(archive, member):
@@ -28,9 +31,41 @@ def digest(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def open_support(repository, packages):
+    """Bind the installer's table to the exact open driver selected for the ISO."""
+    archives = {}
+    version = None
+    for name in nvidia.OPEN_PACKAGES:
+        matches = [package for package in packages if package["name"] == name]
+        if len(matches) != 1:
+            raise ValueError(f"Expected exactly one signed {name} package; restage ISO repositories")
+        package = matches[0]
+        filename = package["filename"]
+        if Path(filename).name != filename:
+            raise ValueError(f"Invalid NVIDIA archive filename: {filename}")
+        archive = repository / filename
+        # Signature verification is performed by build-iso.sh before staging.
+        if not Path(str(archive) + ".sig").is_file():
+            raise ValueError(f"Missing NVIDIA package signature: {archive}")
+        metadata = dict(line.split(" = ", 1) for line in contents(archive, ".PKGINFO").splitlines()
+                        if " = " in line)
+        if metadata["pkgname"] != name or metadata["pkgver"] != package["version"]:
+            raise ValueError(f"NVIDIA package metadata differs from repository: {archive}")
+        upstream = metadata["pkgver"].split(":")[-1].rsplit("-", 1)[0]
+        if version is not None and upstream != version:
+            raise ValueError("NVIDIA open DKMS and utilities versions differ")
+        version = upstream
+        archives[name] = archive
+    readme = subprocess.check_output(["bsdtar", "-xOf", str(archives["nvidia-open-dkms"]),
+                                      f"usr/src/nvidia-{version}/README.md"])
+    return gpu_support.extract(readme, version)
+
+
 def stage(repository, profile):
     # build-iso.sh verifies this entire repository before invoking us. Keep
     # detached signatures and hashes with the payload for target installation.
+    packages = audit.records(repository / "devario-core.db", "devario-core")
+    current_support = open_support(repository, packages)
     archives = {}
     records = {}
     version = None
@@ -64,7 +99,6 @@ def stage(repository, profile):
         if not any(path + suffix in utils_files for suffix in ("", ".zst", ".xz")):
             raise ValueError(f"NVIDIA 580 archive is missing {firmware}")
 
-    packages = audit.records(repository / "devario-core.db", "devario-core")
     requested = [line.strip() for line in (profile / "packages.x86_64").read_text().splitlines()
                  if line.strip() and not line.lstrip().startswith("#")]
     live, missing = audit.resolve(requested, packages)
@@ -83,6 +117,8 @@ def stage(repository, profile):
         shutil.copyfile(str(archive) + ".sig", destination / (archive.name + ".sig"))
     support["packages"] = records
     (destination / "manifest.json").write_text(json.dumps(support, indent=2) + "\n")
+    support_path = profile / "airootfs" / nvidia.SUPPORT.relative_to("/")
+    support_path.write_text(json.dumps(current_support, indent=2) + "\n")
 
 
 if __name__ == "__main__":

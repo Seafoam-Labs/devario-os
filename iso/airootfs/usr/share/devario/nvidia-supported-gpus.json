@@ -1,7 +1,7 @@
 {
-  "driverVersion": "615.71.09",
-  "source": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/615.71.09/README.md",
-  "sourceSha256": "c2ce63aedef8c6779e59fdc46596eaa4c4b97767dce888d85d99ce2790bfbb77",
+  "driverVersion": "615.78.08",
+  "source": "https://github.com/NVIDIA/open-gpu-kernel-modules/blob/615.78.08/README.md",
+  "sourceSha256": "55db91bbb78b84cc4810fa44daa1cd34eac9d4330fc854c7f1c60c59cb195177",
   "pciIds": [
     "1e02",
     "1e04",
@@ -835,6 +835,7 @@
     "2f58",
     "3182 10de 20e6",
     "31c2 10de 21f1",
-    "31c3 10de 22f8"
+    "31c3 10de 22f8",
+    "31c3 10de 23ab"
   ]
 }

@@ -73,9 +73,16 @@ Run `scripts/stage-iso-repositories.py` to include the signed 580 packages from
 the configured public repositories in the authenticated build snapshot.
 Publish `nvidia-580xx-utils` release 2 or later from the packaging workspace
 first; it includes the required upstream GPU feature metadata.
-`scripts/build-iso.sh` runs `stage-nvidia-payload.py` after repository verification
-to generate `/usr/share/devario/nvidia-580xx/manifest.json` and cache both signed
-archives in the staged profile. Missing packages, signatures, sources, firmware,
+`scripts/build-iso.sh` runs `stage-nvidia-payload.py` after repository verification.
+It generates `/usr/share/devario/nvidia-supported-gpus.json` from the README in
+the exact `nvidia-open-dkms` archive selected by the repository database, checking
+that its version matches `nvidia-utils` and the README. This replaces the
+checked-in reference table, so package updates cannot leave an obsolete version
+requirement in the ISO. Missing or inconsistent metadata fails the build;
+installer version and hardware checks remain strict.
+
+The same staging step generates `/usr/share/devario/nvidia-580xx/manifest.json`
+and caches both signed archives in the staged profile. Missing packages, signatures, sources, firmware,
 version mismatches or missing offline dependencies fail the build. Additional
 shared dependencies must be included in `iso/packages.x86_64` if future 580
 packages require them. Do not add the conflicting driver packages to that list.

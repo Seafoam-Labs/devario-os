@@ -20,7 +20,7 @@ nvidia = importlib.util.module_from_spec(spec)
 # Import without writing bytecode into the ISO filesystem overlay.
 exec(compile(HELPER.read_text(), str(HELPER), "exec"), nvidia.__dict__)
 SUPPORT = PROFILE / "airootfs/usr/share/devario/nvidia-supported-gpus.json"
-VERSION = "615.71.09"
+VERSION = json.loads(SUPPORT.read_text())["driverVersion"]
 KERNEL = "7.2.7-1-devario"
 DEVICE = {"address": "0000:01:00.0", "ids": ["1e04", "10de", "0000"]}
 LEGACY_VERSION = "580.196.07"
@@ -62,7 +62,7 @@ class NvidiaTests(unittest.TestCase):
         return path
 
     def test_support_table_and_subsystems(self):
-        self.assertEqual(self.support["driverVersion"], VERSION)
+        self.assertRegex(VERSION, r"^\d+\.\d+\.\d+$")
         nvidia.check_support([DEVICE], self.support)
         restricted = {"address": "0000:02:00.0", "ids": ["1e78", "10de", "13d8"]}
         nvidia.check_support([restricted], self.support)
@@ -282,7 +282,7 @@ class NvidiaTests(unittest.TestCase):
         with patch.object(nvidia, "output", side_effect=self.payload_output):
             self.assertEqual(nvidia.check_payload([DEVICE], self.root), (KERNEL, VERSION))
             self.packages["nvidia-utils"] = "580.95.05-1"
-            with self.assertRaisesRegex(RuntimeError, "must be 615"):
+            with self.assertRaisesRegex(RuntimeError, "must be " + VERSION.replace(".", r"\.")):
                 nvidia.check_payload([DEVICE], self.root)
             self.packages["nvidia-utils"] = f"{VERSION}-1"
             self.packages["linux-devario-headers"] = "7.2.7-2"
@@ -326,7 +326,7 @@ class NvidiaTests(unittest.TestCase):
             self.write(f"usr/lib/firmware/nvidia/{version}/{firmware}.zst", "firmware")
         with patch.object(nvidia, "output", side_effect=self.payload_output):
             self.assertEqual(nvidia.check_payload([DEVICE], self.root, updated=True), (KERNEL, version))
-            with self.assertRaisesRegex(RuntimeError, "must be 615"):
+            with self.assertRaisesRegex(RuntimeError, "must be " + VERSION.replace(".", r"\.")):
                 nvidia.check_payload([DEVICE], self.root)
             self.packages["nvidia-utils"] = f"{VERSION}-1"
             with self.assertRaisesRegex(RuntimeError, "must be 616"):
