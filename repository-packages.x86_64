@@ -29,6 +29,19 @@ pearl
 pearl-greeter
 shelly
 
+# NVIDIA 580 offline installer payload (cached, not installed in the live root).
+# Build and publish both nvidia-580xx-utils and lib32-nvidia-580xx-utils recipes.
+nvidia-580xx-dkms
+nvidia-580xx-utils
+opencl-nvidia-580xx
+lib32-nvidia-580xx-utils
+lib32-opencl-nvidia-580xx
+
+# Shared multilib runtime dependencies for the offline 580 stack.
+lib32-gcc-libs
+lib32-libglvnd
+lib32-zlib
+
 # Upstream packages formerly sourced from Arch core; retain source provenance.
 acl
 amd-ucode

@@ -45,6 +45,9 @@ gvfs
 hwinfo
 imagemagick
 intel-ucode
+lib32-gcc-libs
+lib32-libglvnd
+lib32-zlib
 linux-devario
 linux-devario-headers
 linux-firmware
@@ -65,6 +68,7 @@ ntfs-3g
 nvidia-open-dkms
 nvidia-utils
 nvme-cli
+ocl-icd
 openssh
 papirus-icon-theme
 parted

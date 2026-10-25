@@ -29,6 +29,7 @@ core = module("stage-core-repository.py", "stage_core")
 audit = module("audit-iso-repositories.py", "dependency_audit")
 paths = module("audit-iso-package-paths.py", "path_audit")
 builder = module("build-packages-core.py", "package_builder")
+nvidia = module("stage-nvidia-payload.py", "nvidia_payload").nvidia
 
 
 def repositories(path, core_url, signer):
@@ -180,7 +181,7 @@ def main():
         requested = [line.strip() for line in (PROJECT / 'iso/packages.x86_64').read_text().splitlines()
                      if line.strip() and not line.lstrip().startswith('#')]
         artifacts, selected, missing = select_packages(sources, requested, local, build_requirements,
-                                                       offline=("nvidia-580xx-dkms", "nvidia-580xx-utils"))
+                                                       offline=nvidia.LEGACY_PACKAGES)
         report = output.with_name(output.name + '-preflight.json')
         report.write_text(json.dumps(dict(complete=not missing, missing=missing,
                                          scope=audit.SCOPE,

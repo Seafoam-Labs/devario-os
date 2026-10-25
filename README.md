@@ -227,8 +227,8 @@ repository snapshot and requires matching driver/library versions. The
 checked-in table is a reference snapshot; staging replaces it on every build.
 Before partitioning, Calamares detects NVIDIA display controllers and verifies
 the selected payload and headers in the pristine installation image. Hardware
-outside the open driver's support table uses the cached proprietary 580 driver
-when it supports all detected controllers; otherwise installation stops with
+outside the open driver's support table uses the cached CachyOS-based proprietary
+580 driver when it supports all detected controllers; otherwise installation stops with
 a diagnostic. See [NVIDIA install policy](docs/nvidia-install-policy.md).
 
 After copying the offline image, Calamares verifies or builds the modules for
@@ -410,8 +410,10 @@ The desktop comes from `devario-core/devario-desktop`, with stable Aqueous and
 `devario-system-integration`, which owns GPU services, helpers and OS desktop
 configuration. The ISO obtains those files from the package. Existing ISO
 installations need the [one-time file ownership migration](packages/devario-system-integration/README.md#existing-installations-one-time-adoption)
-before their first upgrade. Publish integration 1-1 before Aqueous 1.0.5-2,
-then rebuild the ISO. Future integration changes update through Shelly.
+using integration 1-3 and Shelly CLI 3.1.9 or later with RLPM. Update Shelly
+first, then install integration normally to preserve unowned ISO files in place.
+Publish integration before Aqueous 1.0.5-2, then rebuild the ISO. Future integration
+changes update through Shelly.
 
 ### Intel onboard audio firmware
 

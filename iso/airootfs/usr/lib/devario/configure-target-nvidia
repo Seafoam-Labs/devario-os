@@ -15,7 +15,10 @@ HELPER = "/usr/lib/devario/configure-target-nvidia"
 SUPPORT = Path("/usr/share/devario/nvidia-supported-gpus.json")
 LEGACY_PAYLOAD = Path("/usr/share/devario/nvidia-580xx")
 OPEN_PACKAGES = ("nvidia-open-dkms", "nvidia-utils")
-LEGACY_PACKAGES = ("nvidia-580xx-dkms", "nvidia-580xx-utils")
+CURRENT_PACKAGES = OPEN_PACKAGES + ("opencl-nvidia", "lib32-nvidia-utils", "lib32-opencl-nvidia")
+LEGACY_PACKAGES = ("nvidia-580xx-dkms", "nvidia-580xx-utils", "opencl-nvidia-580xx",
+                   "lib32-nvidia-580xx-utils", "lib32-opencl-nvidia-580xx")
+LEGACY_OPEN_PACKAGES = ("nvidia-580xx-open-dkms", *LEGACY_PACKAGES[1:])
 MODULES = ("nvidia", "nvidia_modeset", "nvidia_uvm", "nvidia_drm")
 FIRMWARE = ("gsp_tu10x.bin", "gsp_ga10x.bin", "ucodes_tu10x.bin", "ucodes_ga10x.bin")
 
@@ -132,12 +135,13 @@ def install_legacy(support):
         (conf / "config.json").write_text('{"NativePackageBackend":"rlpm"}\n')
         env = dict(os.environ, XDG_CONFIG_HOME=directory)
         before = installed_packages(env=env)
-        if all(name in before for name in LEGACY_PACKAGES) and not any(name in before for name in OPEN_PACKAGES):
+        if all(name in before for name in LEGACY_PACKAGES) and not any(name in before for name in CURRENT_PACKAGES):
+            check_packages(support["driverVersion"], before, legacy=True)
             return
         # Shelly's safe noninteractive defaults decline conflict replacement.
         # Remove only the copied live driver, with dependency checks intact.
         disable_kms()
-        present = [name for name in OPEN_PACKAGES if name in before]
+        present = [name for name in CURRENT_PACKAGES if name in before]
         subprocess.run(["shelly", "keyring", "init"], env=env, check=True)
         try:
             subprocess.run(["shelly", "keyring", "populate", "devario-core"], env=env, check=True)
@@ -150,7 +154,7 @@ def install_legacy(support):
                            env=env, stdin=subprocess.DEVNULL, check=True)
             after = installed_packages(env=env)
             check_packages(support["driverVersion"], after, legacy=True)
-            if any(name in after for name in OPEN_PACKAGES):
+            if any(name in after for name in CURRENT_PACKAGES):
                 raise RuntimeError("The incompatible live NVIDIA driver remains installed")
         finally:
             subprocess.run(["gpgconf", "--homedir", "/etc/shelly.d/gnupg", "--kill", "all"],
@@ -170,6 +174,8 @@ def check_packages(version, packages=None, legacy=False):
     if packages is None:
         packages = installed_packages()
     names = LEGACY_PACKAGES if legacy else OPEN_PACKAGES
+    if legacy and "nvidia-580xx-open-dkms" in packages:
+        names = LEGACY_OPEN_PACKAGES
     for name in (*names, "dkms", "gcc", "make", "patch"):
         if name not in packages:
             raise RuntimeError(f"Offline installation payload is missing {name}")
@@ -182,15 +188,18 @@ def check_packages(version, packages=None, legacy=False):
 
 
 def updated_support(root, packages):
-    if "nvidia-580xx-dkms" in packages:
-        if any(name in packages for name in OPEN_PACKAGES):
+    legacy_modules = [name for name in ("nvidia-580xx-dkms", "nvidia-580xx-open-dkms") if name in packages]
+    if legacy_modules:
+        if len(legacy_modules) != 1 or any(name in packages for name in CURRENT_PACKAGES):
             raise RuntimeError("Conflicting NVIDIA driver branches are installed")
+    if "nvidia-580xx-dkms" in packages:
         version = packages["nvidia-580xx-dkms"].split(":")[-1].rsplit("-", 1)[0]
         return proprietary_support((root / "usr/share/doc/nvidia/html/supportedchips.html").read_text(), version,
                                    json.loads((root / "usr/share/doc/nvidia/supported-gpus.json").read_text()))
     # The signed nvidia-open-dkms package carries the upstream support table
     # with its source. Never apply the ISO's older table to a newer driver.
-    version = packages.get("nvidia-open-dkms", "").split(":")[-1].rsplit("-", 1)[0]
+    open_package = "nvidia-580xx-open-dkms" if legacy_modules else "nvidia-open-dkms"
+    version = packages.get(open_package, "").split(":")[-1].rsplit("-", 1)[0]
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise RuntimeError("Missing or invalid installed NVIDIA driver version")
     readme = (root / f"usr/src/nvidia-{version}/README.md").read_text()
@@ -259,14 +268,16 @@ def check_payload(devices, root=Path("/"), updated=False, install=False, preflig
     return kernel, version
 
 
-def modules_ready(kernel, version):
+def modules_ready(kernel, version, *, proprietary=None):
     try:
         for module in MODULES:
             if output("modinfo", "-k", kernel, "-F", "version", module) != version:
                 return False
             if output("modinfo", "-k", kernel, "-F", "vermagic", module).split()[0] != kernel:
                 return False
-        license_name = "NVIDIA" if version.startswith("580.") else "Dual MIT/GPL"
+        if proprietary is None:
+            proprietary = version.startswith("580.")
+        license_name = "NVIDIA" if proprietary else "Dual MIT/GPL"
         return output("modinfo", "-k", kernel, "-F", "license", "nvidia") == license_name
     except (subprocess.CalledProcessError, IndexError):
         return False
@@ -331,7 +342,7 @@ def disable_kms(config=Path("/etc/devario-dracut.conf"),
 def remove_unused_nvidia():
     # Installed files come from unpackfs. Use the native RLPM transaction,
     # never unlink package payloads or modify Shelly's database by hand.
-    names = OPEN_PACKAGES + LEGACY_PACKAGES
+    names = CURRENT_PACKAGES + LEGACY_PACKAGES + ("nvidia-580xx-open-dkms",)
     # Force the same native backend for BOTH inventories and the transaction.
     # Do not mutate the user's persistent Shelly configuration.
     with tempfile.TemporaryDirectory(prefix="devario-nvidia-rlpm-") as directory:
@@ -375,11 +386,14 @@ def configure(devices, updated=False):
         remove_unused_nvidia()
         return
     kernel, version = check_payload(devices, updated=True) if updated else check_payload(devices, install=True)
-    if not modules_ready(kernel, version):
+    module_options = {}
+    if updated and version.startswith("580.") and "nvidia-580xx-open-dkms" in installed_packages():
+        module_options["proprietary"] = False
+    if not modules_ready(kernel, version, **module_options):
         log(f"building NVIDIA {version} modules for {kernel}; DKMS logs are in /var/lib/dkms")
         subprocess.run(["dkms", "autoinstall", "-k", kernel], check=True)
     subprocess.run(["depmod", "-a", kernel], check=True)
-    if not modules_ready(kernel, version):
+    if not modules_ready(kernel, version, **module_options):
         raise RuntimeError(f"NVIDIA {version} modules are incomplete or incompatible with {kernel}")
     enable_kms()
     log(f"enabled NVIDIA_EARLY_KMS for {version} / {kernel}")

@@ -70,17 +70,23 @@ def stage(repository, profile):
     records = {}
     version = None
     for name in nvidia.LEGACY_PACKAGES:
-        matches = list(repository.glob(f"{name}-[0-9]*.pkg.tar.zst"))
+        matches = [package for package in packages if package["name"] == name]
         if len(matches) != 1:
-            raise ValueError(f"Expected exactly one signed {name} archive; restage ISO repositories")
-        archive = matches[0]
+            raise ValueError(f"Expected exactly one signed {name} package; restage ISO repositories")
+        package = matches[0]
+        filename = package["filename"]
+        if Path(filename).name != filename:
+            raise ValueError(f"Invalid NVIDIA archive filename: {filename}")
+        archive = repository / filename
         metadata = dict(line.split(" = ", 1) for line in contents(archive, ".PKGINFO").splitlines()
                         if " = " in line)
+        if metadata["pkgname"] != name or metadata["pkgver"] != package["version"]:
+            raise ValueError(f"NVIDIA package metadata differs from repository: {archive}")
         upstream = metadata["pkgver"].split(":")[-1].rsplit("-", 1)[0]
         if metadata["pkgname"] != name or not upstream.startswith("580."):
             raise ValueError(f"Invalid NVIDIA 580 package: {archive}")
         if version is not None and upstream != version:
-            raise ValueError("NVIDIA 580 DKMS and utilities versions differ")
+            raise ValueError("NVIDIA 580 driver, OpenCL and multilib versions differ")
         version = upstream
         signature = Path(str(archive) + ".sig")
         records[name] = dict(filename=archive.name, sha256=digest(archive), signatureSha256=digest(signature))
@@ -98,13 +104,22 @@ def stage(repository, profile):
         path = f"usr/lib/firmware/nvidia/{version}/{firmware}"
         if not any(path + suffix in utils_files for suffix in ("", ".zst", ".xz")):
             raise ValueError(f"NVIDIA 580 archive is missing {firmware}")
+    for name, required in {
+        "opencl-nvidia-580xx": (f"usr/lib/libnvidia-opencl.so.{version}", "etc/OpenCL/vendors/nvidia.icd"),
+        "lib32-nvidia-580xx-utils": (f"usr/lib32/libGLX_nvidia.so.{version}",
+                                    f"usr/lib32/libEGL_nvidia.so.{version}"),
+        "lib32-opencl-nvidia-580xx": (f"usr/lib32/libnvidia-opencl.so.{version}",),
+    }.items():
+        files = subprocess.check_output(["bsdtar", "-tf", str(archives[name])], text=True).splitlines()
+        if not set(required).issubset(files):
+            raise ValueError(f"NVIDIA 580 archive {name} is missing graphics/OpenCL libraries or ICD")
 
     requested = [line.strip() for line in (profile / "packages.x86_64").read_text().splitlines()
                  if line.strip() and not line.lstrip().startswith("#")]
     live, missing = audit.resolve(requested, packages)
     alternative, alternative_missing = audit.resolve(
-        [name for name in requested if name not in nvidia.OPEN_PACKAGES] + list(nvidia.LEGACY_PACKAGES),
-        [p for p in packages if p["name"] not in nvidia.OPEN_PACKAGES])
+        [name for name in requested if name not in nvidia.CURRENT_PACKAGES] + list(nvidia.LEGACY_PACKAGES),
+        [p for p in packages if p["name"] not in (*nvidia.CURRENT_PACKAGES, "nvidia-580xx-open-dkms")])
     extra = set(alternative) - set(live) - set(nvidia.LEGACY_PACKAGES)
     if missing or alternative_missing or extra:
         raise ValueError(f"NVIDIA 580 offline dependencies are incomplete: {missing}, {alternative_missing}, "

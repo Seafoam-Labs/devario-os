@@ -3,8 +3,11 @@
 This policy applies to the **installed target**. The live ISO deliberately
 keeps `nvidia-open-dkms` and `nvidia-utils` in `iso/packages.x86_64`, so
 supported newer NVIDIA computers can use the open driver in the live session.
-The ISO also carries signed `nvidia-580xx-dkms` and `nvidia-580xx-utils`
-archives for offline installation on Maxwell, Pascal and Volta hardware.
+The ISO also carries the signed CachyOS-based NVIDIA 580 stack for offline
+installation on Maxwell, Pascal and Volta hardware: `nvidia-580xx-dkms`,
+`nvidia-580xx-utils`, `opencl-nvidia-580xx`, `lib32-nvidia-580xx-utils`, and
+`lib32-opencl-nvidia-580xx`. The packaging baseline is 580.178.04 with epoch 1
+to migrate existing Devario 580.196.07 installations through normal updates.
 These mutually exclusive packages are cached, not installed in the live root.
 Live graphics on older hardware still depend on the available firmware/display
 fallback; this target policy does not switch the running live-session driver.
@@ -20,8 +23,8 @@ fallback; this target policy does not switch the running live-session driver.
   with the native RLPM backend explicitly configured. `--no-cascade`
   prevents cascade removal of orphan dependencies (including DKMS) and avoids
   the CLI's default `-Rns`-equivalent removal of modified configurations.
-* Only `nvidia-open-dkms`, `nvidia-utils`, `nvidia-580xx-dkms` and
-  `nvidia-580xx-utils` are removal targets. `dkms`, kernel headers, shared
+* Only the current and 580 NVIDIA driver, graphics and OpenCL packages are
+  removal targets, including either 580 DKMS variant. `dkms`, kernel headers, shared
   firmware and other packages are not explicitly removed; RLPM will reject
   the operation if another installed package requires an NVIDIA component.
 * The later `--configure-updated` phase is idempotent: it detects no NVIDIA
@@ -44,10 +47,17 @@ Before partitioning, preflight verifies the selected payload and matching
 kernel headers. For 580, it checks the cached archives and signatures against
 the build manifest; build staging validates the archived DKMS sources,
 firmware and dependency-name coverage. After `unpackfs`, the target helper
-disables early KMS, initializes package trust, removes the copied open driver
-with dependency checks enabled, and installs the signed 580 archives through
+disables early KMS, initializes package trust, removes the copied current driver
+and any current NVIDIA OpenCL/multilib packages with dependency checks enabled,
+and installs all five signed 580 archives through
 Shelly/RLPM. No network or AUR build is needed. A failed transaction aborts the
 installation. The live root is never modified by this transaction.
+
+All five 580 packages must match the NVIDIA upstream version, including the
+32-bit libraries and OpenCL implementations. Missing packages, mismatched
+repository/archive metadata, missing libraries or signatures fail staging.
+Shared `lib32-gcc-libs`, `lib32-libglvnd`, `lib32-zlib`, and `ocl-icd` (the OpenCL loader)
+dependencies are included in the live package closure so installation is offline.
 
 Both branches require matching driver/library versions, sources, firmware,
 kernel headers and DKMS modules before enabling early KMS. The 580 branch
@@ -57,7 +67,10 @@ table shipped by the installed driver: the open DKMS README, or the 580
 utilities' `supported-gpus.json`, with the version checked against
 `supportedchips.html`. NVIDIA's feature flags exclude older legacy branches
 and GPUs requiring open modules, such as Blackwell. Branch-specific package names
-keep subsequent upgrades on 580.
+keep subsequent upgrades on 580. Target update validation also supports a
+manually selected `nvidia-580xx-open-dkms`: it uses that package's README GPU
+table and requires the open module license. The installer still selects the
+current open driver or proprietary 580; it does not cache or select open 580.
 
 ## Required release/build ordering
 
@@ -71,8 +84,12 @@ need the [one-time adoption](../packages/devario-system-integration/README.md#ex
 
 Run `scripts/stage-iso-repositories.py` to include the signed 580 packages from
 the configured public repositories in the authenticated build snapshot.
-Publish `nvidia-580xx-utils` release 2 or later from the packaging workspace
-first; it includes the required upstream GPU feature metadata.
+Publish both `nvidia-580xx-utils` and `lib32-nvidia-580xx-utils` split recipes
+from the packaging workspace first (epoch 1, version 580.178.04 or a coordinated
+later 580 release). The Devario adaptation includes the required upstream GPU
+feature metadata; an unmodified CachyOS binary is not a substitute.
+`repository-packages.x86_64` lists all five offline packages, including native
+and 32-bit OpenCL, plus the shared multilib dependencies for repository builds.
 `scripts/build-iso.sh` runs `stage-nvidia-payload.py` after repository verification.
 It generates `/usr/share/devario/nvidia-supported-gpus.json` from the README in
 the exact `nvidia-open-dkms` archive selected by the repository database, checking
@@ -82,7 +99,7 @@ requirement in the ISO. Missing or inconsistent metadata fails the build;
 installer version and hardware checks remain strict.
 
 The same staging step generates `/usr/share/devario/nvidia-580xx/manifest.json`
-and caches both signed archives in the staged profile. Missing packages, signatures, sources, firmware,
+and caches all five signed archives in the staged profile. Missing packages, signatures, sources, firmware,
 version mismatches or missing offline dependencies fail the build. Additional
 shared dependencies must be included in `iso/packages.x86_64` if future 580
 packages require them. Do not add the conflicting driver packages to that list.

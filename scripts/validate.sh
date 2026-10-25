@@ -493,6 +493,7 @@ for required_package in \
   chafa imagemagick ghostty gnome-keyring seahorse scx-scheds upower power-profiles-daemon adw-gtk3 papirus-icon-theme vimix-cursors \
   strace ripgrep vulkan-tools mesa-utils wayland-utils usbutils lsof nvme-cli netcat matugen \
   linux-devario linux-devario-headers bolt boltctl python-pyudev nvidia-open-dkms nvidia-utils \
+  lib32-gcc-libs lib32-libglvnd lib32-zlib ocl-icd \
   vulkan-intel vulkan-radeon vulkan-swrast vulkan-virtio xorg-xwayland; do
   if ! package_is_listed "$required_package"; then
     fail "packages.x86_64 does not include $required_package"
@@ -502,6 +503,7 @@ done
 # scx-scheds now owns the scheduler tools and conflicts with the old scx-tools.
 for forbidden_package in \
   noctalia noctalia-greeter aqueous-noctalia aqueous-integration-noctalia aqueous-shell-noctalia \
+  nvidia-580xx-dkms nvidia-580xx-open-dkms nvidia-580xx-utils opencl-nvidia-580xx lib32-nvidia-580xx-utils lib32-opencl-nvidia-580xx \
   devario-alpm-runtime mkinitcpio mkinitcpio-archiso pacman base linux grub os-prober lightdm lightdm-gtk-greeter xfce4 xfce4-goodies \
   xorg-server xorg-xinit greetd-agreety greetd-tuigreet vulkan-nouveau scx-tools; do
   if package_is_listed "$forbidden_package"; then

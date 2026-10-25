@@ -23,7 +23,7 @@ SUPPORT = PROFILE / "airootfs/usr/share/devario/nvidia-supported-gpus.json"
 VERSION = json.loads(SUPPORT.read_text())["driverVersion"]
 KERNEL = "7.2.7-1-devario"
 DEVICE = {"address": "0000:01:00.0", "ids": ["1e04", "10de", "0000"]}
-LEGACY_VERSION = "580.196.07"
+LEGACY_VERSION = "580.178.04"
 PASCAL = {"address": "0000:02:00.0", "ids": ["1b80", "10de", "0000"]}
 LEGACY_HTML = f'''the {LEGACY_VERSION} driver
 <table><tr id="devid1340"><td>Maxwell</td></tr>
@@ -154,7 +154,7 @@ class NvidiaTests(unittest.TestCase):
     def installed_legacy(self):
         self.packages = {name: version for name, version in self.packages.items()
                          if name not in nvidia.OPEN_PACKAGES}
-        self.packages.update({name: f"{LEGACY_VERSION}-1" for name in nvidia.LEGACY_PACKAGES})
+        self.packages.update({name: f"1:{LEGACY_VERSION}-4" for name in nvidia.LEGACY_PACKAGES})
         self.write(f"usr/src/nvidia-{LEGACY_VERSION}/dkms.conf", "source")
         self.write("usr/share/doc/nvidia/html/supportedchips.html", LEGACY_HTML)
         self.write("usr/share/doc/nvidia/supported-gpus.json", json.dumps(LEGACY_METADATA))
@@ -211,7 +211,7 @@ class NvidiaTests(unittest.TestCase):
             for firmware in nvidia.FIRMWARE[:2]:
                 self.write(f"usr/lib/firmware/nvidia/{newer}/{firmware}", "firmware")
             self.assertEqual(nvidia.check_payload([PASCAL], self.root, updated=True), (KERNEL, newer))
-            self.packages["nvidia-580xx-utils"] = f"{LEGACY_VERSION}-1"
+            self.packages["nvidia-580xx-utils"] = f"1:{LEGACY_VERSION}-4"
             with self.assertRaisesRegex(RuntimeError, "must be 580.200.01"):
                 nvidia.check_payload([PASCAL], self.root, updated=True)
 
@@ -226,29 +226,75 @@ class NvidiaTests(unittest.TestCase):
     def test_580_install_removes_live_packages_then_installs_signed_archives(self):
         support = self.legacy_payload()
         before = self.packages.copy()
+        before.update({name: f"{VERSION}-1" for name in nvidia.CURRENT_PACKAGES[2:]})
         self.installed_legacy()
         after = self.packages.copy()
         events = []
+        archives = [f"/cache/{name}" for name in nvidia.LEGACY_PACKAGES]
 
         def run(args, **kwargs):
             conf = Path(kwargs["env"]["XDG_CONFIG_HOME"]) / "shelly/config.json"
             self.assertEqual(json.loads(conf.read_text()), {"NativePackageBackend": "rlpm"})
             events.append(args)
 
-        with patch.object(nvidia, "legacy_archives", return_value=["/cache/dkms", "/cache/utils"]), \
+        with patch.object(nvidia, "legacy_archives", return_value=archives), \
                 patch.object(nvidia, "installed_packages", side_effect=[before, after]), \
                 patch.object(nvidia, "disable_kms", side_effect=lambda: events.append("disable")), \
                 patch.object(nvidia.subprocess, "run", side_effect=run):
             nvidia.install_legacy(support)
         self.assertEqual(events[0], "disable")
-        self.assertEqual(events[3], ["shelly", "remove", "standard", *nvidia.OPEN_PACKAGES, "--no-cascade", "--no-confirm"])
-        self.assertEqual(events[4], ["shelly", "install", "standard", "/cache/dkms", "/cache/utils", "--no-confirm"])
+        self.assertEqual(events[3], ["shelly", "remove", "standard", *nvidia.CURRENT_PACKAGES, "--no-cascade", "--no-confirm"])
+        self.assertEqual(events[4], ["shelly", "install", "standard", *archives, "--no-confirm"])
         self.assertEqual(events[-1][0], "gpgconf")
         with patch.object(nvidia, "legacy_archives", return_value=[]), \
                 patch.object(nvidia, "installed_packages", return_value=after), \
                 patch.object(nvidia.subprocess, "run") as transaction:
             nvidia.install_legacy(support)
             transaction.assert_not_called()
+
+    def test_580_manifest_requires_all_five_packages(self):
+        support = self.legacy_payload()
+        support["packages"].pop("lib32-opencl-nvidia-580xx")
+        with self.assertRaisesRegex(RuntimeError, "Incomplete"):
+            nvidia.legacy_archives(self.root, support)
+
+    def test_580_installed_multilib_must_match(self):
+        self.legacy_payload()
+        self.installed_legacy()
+        for name in nvidia.LEGACY_PACKAGES[2:]:
+            with self.subTest(name=name):
+                saved = self.packages.pop(name)
+                with self.assertRaisesRegex(RuntimeError, f"missing {name}"):
+                    nvidia.check_packages(LEGACY_VERSION, self.packages, legacy=True)
+                self.packages[name] = "615.78.08-1"
+                with self.assertRaisesRegex(RuntimeError, f"{name} must be"):
+                    nvidia.check_packages(LEGACY_VERSION, self.packages, legacy=True)
+                self.packages[name] = saved
+
+    def test_580_open_variant_updates_use_its_readme_and_open_module_license(self):
+        self.legacy_payload()
+        self.installed_legacy()
+        self.packages["nvidia-580xx-open-dkms"] = self.packages.pop("nvidia-580xx-dkms")
+        self.write(f"usr/src/nvidia-{LEGACY_VERSION}/README.md",
+                   f"version {LEGACY_VERSION}.\n## Compatible GPUs\n| Turing | 1E04 |\n## Other\n")
+        with patch.object(nvidia, "output", side_effect=self.payload_output):
+            self.assertEqual(nvidia.check_payload([DEVICE], self.root, updated=True), (KERNEL, LEGACY_VERSION))
+            with self.assertRaisesRegex(RuntimeError, "Unsupported NVIDIA GPU"):
+                nvidia.check_payload([PASCAL], self.root, updated=True)
+        with patch.object(nvidia, "check_payload", return_value=(KERNEL, LEGACY_VERSION)), \
+                patch.object(nvidia, "installed_packages", return_value=self.packages), \
+                patch.object(nvidia, "modules_ready", return_value=True) as ready, \
+                patch.object(nvidia.subprocess, "run"), patch.object(nvidia, "enable_kms"):
+            nvidia.configure([DEVICE], updated=True)
+            self.assertEqual(ready.call_args.kwargs, {"proprietary": False})
+        def info(*args):
+            return {"version": LEGACY_VERSION, "vermagic": f"{KERNEL} SMP", "license": "Dual MIT/GPL"}[args[4]]
+        with patch.object(nvidia, "output", side_effect=info):
+            self.assertTrue(nvidia.modules_ready(KERNEL, LEGACY_VERSION, proprietary=False))
+            self.assertFalse(nvidia.modules_ready(KERNEL, LEGACY_VERSION, proprietary=True))
+        self.packages["nvidia-580xx-dkms"] = f"1:{LEGACY_VERSION}-4"
+        with self.assertRaisesRegex(RuntimeError, "Conflicting NVIDIA"):
+            nvidia.updated_support(self.root, self.packages)
 
     def test_580_failed_install_cannot_enable_kms(self):
         self.legacy_payload()
@@ -443,7 +489,7 @@ class NvidiaTests(unittest.TestCase):
             run.assert_not_called()
 
     def test_no_gpu_removes_580_packages_too(self):
-        before = {name: f"{LEGACY_VERSION}-1" for name in nvidia.LEGACY_PACKAGES}
+        before = {name: f"1:{LEGACY_VERSION}-4" for name in nvidia.LEGACY_PACKAGES}
         with patch.object(nvidia, "installed_packages", side_effect=[before, {}]), \
                 patch.object(nvidia.subprocess, "run") as run:
             nvidia.remove_unused_nvidia()

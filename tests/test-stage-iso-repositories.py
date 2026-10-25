@@ -25,15 +25,18 @@ def source(name, packages):
 
 class RepositorySelectionTests(unittest.TestCase):
     def test_offline_alternative_is_downloaded_without_entering_live_package_set(self):
+        legacy = [package(name, 'devario-libs', version='1:580.178.04-4')
+                  for name in stage.nvidia.LEGACY_PACKAGES]
+        legacy[0]['depends'] = ['nvidia-580xx-utils=1:580.178.04', 'dkms']
+        legacy[1]['depends'] = [*stage.nvidia.LEGACY_PACKAGES[2:], 'lib32-libglvnd']
         sources = [source('devario-core', [package('nvidia-open-dkms'), package('dkms')]),
-                   source('devario-libs', [package('nvidia-580xx-dkms', 'devario-libs',
-                                                   ['nvidia-580xx-utils', 'dkms']),
-                                          package('nvidia-580xx-utils', 'devario-libs')])]
+                   source('devario-libs', [*legacy, package('lib32-libglvnd', 'devario-libs')])]
         artifacts, selected, missing = stage.select_packages(sources, ['nvidia-open-dkms'], [], [],
-                                                              offline=['nvidia-580xx-dkms', 'nvidia-580xx-utils'])
+                                                              offline=stage.nvidia.LEGACY_PACKAGES)
         self.assertFalse(missing)
         self.assertEqual(set(selected), {'nvidia-open-dkms'})
-        self.assertEqual(set(artifacts), {'nvidia-open-dkms', 'dkms', 'nvidia-580xx-dkms', 'nvidia-580xx-utils'})
+        self.assertEqual(set(artifacts), {'nvidia-open-dkms', 'dkms', 'lib32-libglvnd',
+                                         *stage.nvidia.LEGACY_PACKAGES})
 
     def test_resolves_recursive_runtime_and_build_dependencies_across_repositories(self):
         sources = [source('devario-core', [package('app', depends=['images']), package('bootstrap')]),
