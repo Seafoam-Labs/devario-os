@@ -68,16 +68,21 @@ printf '%s\n' "${TEST_PASTE_URL:-https://paste.c-net.org/TestReport}"
     def test_local_report_redaction_and_partial_diagnostics(self):
         self.run_report('--no-upload')
         report = self.log.read_text()
-        for secret in (socket.gethostname(), '192.0.2.123', '2001:db8::123',
+        for secret in ('192.0.2.123', '2001:db8::123',
                        '::1', 'aa:bb:cc:dd:ee:ff', 'someone@example.com'):
             self.assertNotIn(secret, report)
+        # The live hostname is asserted in its collected context: a host named
+        # after the product would otherwise collide with the mandatory
+        # 'devario-base' inventory entry below.
+        self.assertNotIn(f'{socket.gethostname()} scheduler test', report)
         for account in pwd.getpwall():
             if 1000 <= account.pw_uid < 65534:
                 self.assertNotIn(account.pw_dir + '/test', report)
                 self.assertIn(account.pw_name + 'suffix', report)
-        for expected in ('<ipv4-redacted>', '<ipv6-redacted>', '12:34:56',
-                         '0000:01:00.0', 'devario-base', 'No previous boot',
-                         '[Unavailable or incomplete:', 'Hardware information', 'dmesg'):
+        for expected in ('<hostname-redacted>', '<ipv4-redacted>', '<ipv6-redacted>',
+                         '12:34:56', '0000:01:00.0', 'devario-base',
+                         'No previous boot', '[Unavailable or incomplete:',
+                         'Hardware information', 'dmesg'):
             self.assertIn(expected, report)
         self.assertEqual(self.log.stat().st_mode & 0o777, 0o600)
         self.assertFalse((self.root / 'upload').exists())
