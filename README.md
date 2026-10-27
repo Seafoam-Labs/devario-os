@@ -417,17 +417,22 @@ changes update through Shelly.
 
 ### Failed-password account lockout
 
-Devario's `pam` 1.7.3-3 ships `/etc/security/faillock.conf` with `deny = 0`,
+Devario's `pam` 1.7.3-4 ships `/etc/security/faillock.conf` with `deny = 0`,
 disabling account lockout after mistyped passwords, including sudo attempts
 ([issue #22](https://github.com/Seafoam-Labs/devario-os/issues/22)). Password
 authentication still applies. The upstream PAM stack is unchanged.
-`devario-base` 3-19 requires this PAM release or newer, so both the live ISO
+`devario-base` 3-20 requires this PAM release or newer, so both the live ISO
 and installed systems receive the same packaged default.
 
-Build and publish `devario-core/pam` 1.7.3-3 from the custom packaging repository,
-then `devario-base` 3-19, and rebuild the ISO with those packages in its staged
+First build and publish `devario-core/docbook5-xml` 5.1-6 and
+`devario-utilities/w3m` 0.5.6-3 from the custom packaging repository, then refresh
+the worker's repository metadata. Build and publish `devario-core/pam` 1.7.3-4,
+then `devario-base` 3-20, and rebuild the ISO with those packages in its staged
 repository. Existing installations receive the change through
 `sudo shelly upgrade standard`; no reboot is needed for this setting.
+
+PAM 1.7.3-4 keeps its man pages, HTML and text documentation while dropping
+the optional `fop` build dependency for PDFs that the package already discarded.
 
 PAM retains ownership and backup handling of `faillock.conf`. An unmodified file
 updates automatically. If it was edited locally, merge the `.pacnew` or set
