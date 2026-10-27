@@ -70,7 +70,7 @@ management, supplied by these Devario packages:
   Aqueous input configurations retain precedence over the system default
 - Offline installation by unpacking the tested live SquashFS
 - systemd-boot installation for 64-bit UEFI targets, with a FAT EFI partition at `/boot`
-- Btrfs as the default filesystem, with Btrfs, XFS, and F2FS available
+- ext4 as the default filesystem, with Btrfs, XFS, and F2FS available
 - Shelly-backed repository search, installation, removal, upgrades, and keyring initialization
 - Persistent first-boot initialization of the Devario signing keyring
 

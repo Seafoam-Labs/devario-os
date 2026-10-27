@@ -1071,8 +1071,8 @@ done
 if ! grep -Fqx 'efiSystemPartition: "/boot"' "$partition_config" \
   || ! grep -Fqx 'efiSystemPartitionSize: 4096M' "$partition_config" \
   || ! grep -Fqx 'createHybridBootloaderLayout: false' "$partition_config" \
-  || ! grep -Fqx 'defaultFileSystemType: "btrfs"' "$partition_config"; then
-  fail "Calamares must use Btrfs with the 4096M FAT /boot for UEFI systemd-boot"
+  || ! grep -Fqx 'defaultFileSystemType: "ext4"' "$partition_config"; then
+  fail "Calamares must default to ext4 with the 4096M FAT /boot for UEFI systemd-boot"
 fi
 if ! grep -Fqx '  - "/usr/lib/devario/boot-update --install"' "$systemd_boot_config"; then
   fail "the systemd-boot Calamares job does not invoke the target installer"
