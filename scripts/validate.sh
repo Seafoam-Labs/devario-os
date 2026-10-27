@@ -954,6 +954,14 @@ if ! grep -Fqx '  shell: /usr/bin/fish' "$profile_dir/airootfs/etc/calamares/mod
   fail "Calamares must create user accounts with Fish as their login shell"
 fi
 base_hard_dependencies="$(sed -n '/^[[:space:]]*depends=(/,/^[[:space:]]*)/p' "$project_dir/packages/devario-base/PKGBUILD")"
+if ! grep -Fqx "  'pam>=1.7.3-3'" <<< "$base_hard_dependencies"; then
+  fail "devario-base must require PAM with Devario's disabled faillock default"
+fi
+for overlay in airootfs late-airootfs; do
+  if [[ -e "$profile_dir/$overlay/etc/security/faillock.conf" ]]; then
+    fail "faillock.conf must come from the pam package, not an ISO overlay"
+  fi
+done
 for audio_dependency in sof-firmware alsa-ucm-conf; do
   if ! grep -Fqx "  '$audio_dependency'" <<< "$base_hard_dependencies"; then
     fail "devario-base must require $audio_dependency for onboard audio on existing installations"

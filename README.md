@@ -415,6 +415,26 @@ first, then install integration normally to preserve unowned ISO files in place.
 Publish integration before Aqueous 1.0.5-2, then rebuild the ISO. Future integration
 changes update through Shelly.
 
+### Failed-password account lockout
+
+Devario's `pam` 1.7.3-3 ships `/etc/security/faillock.conf` with `deny = 0`,
+disabling account lockout after mistyped passwords, including sudo attempts
+([issue #22](https://github.com/Seafoam-Labs/devario-os/issues/22)). Password
+authentication still applies. The upstream PAM stack is unchanged.
+`devario-base` 3-19 requires this PAM release or newer, so both the live ISO
+and installed systems receive the same packaged default.
+
+Build and publish `devario-core/pam` 1.7.3-3 from the custom packaging repository,
+then `devario-base` 3-19, and rebuild the ISO with those packages in its staged
+repository. Existing installations receive the change through
+`sudo shelly upgrade standard`; no reboot is needed for this setting.
+
+PAM retains ownership and backup handling of `faillock.conf`. An unmodified file
+updates automatically. If it was edited locally, merge the `.pacnew` or set
+`deny = 0` in `/etc/security/faillock.conf` to adopt the new default. To restore
+lockout, set a positive `deny` value. Existing failure records can be cleared
+with `sudo faillock --user "$(id -un)" --reset`.
+
 ### Intel onboard audio firmware
 
 The ISO and `devario-base` 3-18 require `sof-firmware` and `alsa-ucm-conf`.
