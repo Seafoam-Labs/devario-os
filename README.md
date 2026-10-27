@@ -209,6 +209,14 @@ as signed packages from the external package build. Their recipes are maintained
 outside this OS repository. The Devario builder transaction also compares its requested package
 list with Shelly's installed inventory and refuses a partial root filesystem.
 
+Runtime package versions come from the selected, signed repository snapshot.
+The ISO checks do not pin a kernel release or external kernel recipe: they verify
+that the repository kernel and headers agree, identify the same module tree,
+and provide the features needed for live boot. After verifying a snapshot, run
+`./scripts/validate-kernel-package.sh /path/to/repository` to check it separately.
+Shelly enforces the dependencies declared by packages, including compatibility
+minimums. Controlled releases retain their exact snapshot locks for reproducibility.
+
 UFW is included and enabled on both the live ISO and installed system. The
 late image overlay sets `ENABLED=yes`, enables IPv6 filtering, denies incoming
 and forwarded connections by default, and allows outgoing connections, using
@@ -699,18 +707,16 @@ shared with managed-edition artifacts.
 Kernel and dracut updates belong in the external package repository.
 Build them in its controlled baseline
 environment and supply signed artifacts to the staged `devario-core` repository
-before constructing the ISO. To check the pinned 7.2.7-1 kernel recipe in that
-source checkout:
+before constructing the ISO. To check the kernel and headers selected by a
+verified repository snapshot:
 
 ```sh
-./scripts/validate-kernel-package.sh /path/to/linux-devario
+./scripts/validate-kernel-package.sh /path/to/repository
 ```
 
-The kernel recipe pins Seafoam Labs' signed `devario-7.2.7-1` release archive
-and configuration with SHA-256 checksums. The kernel targets x86-64-v3 while
-host build tools target baseline x86-64. Updating it is a maintainer operation
-documented in [Kernel packaging](docs/KERNEL-PACKAGING.md); installed systems receive
-the resulting binary exclusively from the signed Devario repository.
+Kernel source pins and build configuration belong to the external package
+repository. The ISO consumes its signed binaries and checks their boot support
+and matching headers, without requiring a particular source revision or release.
 
 Validate package, profile, Calamares, service, and Shelly package-management invariants:
 

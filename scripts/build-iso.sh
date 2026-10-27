@@ -300,6 +300,9 @@ while IFS= read -r package_name || [[ -n "$package_name" ]]; do
   fi
 done < "$staged_profile/packages.x86_64"
 
+# Check the selected repository kernel, without pinning a source recipe/version.
+bash "$script_dir/validate-kernel-package.sh" "$staged_core_repo"
+
 # Generate the open-driver GPU table from the selected package and cache the
 # mutually exclusive legacy driver. Both use the verified repository's trust boundary.
 python3 "$script_dir/stage-nvidia-payload.py" "$staged_core_repo" "$staged_profile"

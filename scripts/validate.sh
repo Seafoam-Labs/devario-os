@@ -189,6 +189,8 @@ required_files=(
   "$project_dir/scripts/build-packages-nspawn.sh"
   "$project_dir/scripts/build-packages.sh"
   "$project_dir/scripts/validate-kernel-package.sh"
+  "$project_dir/scripts/validate-kernel-packages.py"
+  "$project_dir/tests/test-kernel-repository.py"
   "$project_dir/scripts/build-iso-nspawn.sh"
   "$project_dir/scripts/build-iso.sh"
   "$project_dir/scripts/makepkg-shelly-adapter.sh"
@@ -530,8 +532,10 @@ for package_dir_name in "${!expected_pkgnames[@]}"; do
   fi
 done
 
-# validate-kernel-package.sh checks an explicit external recipe directory.
-# OS validation checks the selected kernel, boot integration, and supplied artifacts.
+# Kernel compatibility is checked against the verified repository during assembly.
+if ! python3 "$project_dir/tests/test-kernel-repository.py"; then
+  fail "repository kernel compatibility tests failed"
+fi
 
 for ckbcomp_dependency in perl xkeyboard-config; do
   if ! grep -Eq "['\"]${ckbcomp_dependency}([<>=][^'\"]*)?['\"]" \
@@ -663,7 +667,29 @@ for required_repository_cleanup_text in \
   fi
 done
 
-if command -v makepkg >/dev/null 2>&1; then
+if command -v shelly >/dev/null 2>&1; then
+  shelly_metadata_root="$(mktemp -d /tmp/devario-shelly-metadata.XXXXXX)"
+  for package_dir_name in "${!expected_pkgnames[@]}"; do
+    # --makesrcinfo writes beside the recipe; keep validation out of the checkout.
+    python3 - "$project_dir/packages/$package_dir_name" "$shelly_metadata_root/$package_dir_name" <<'PY'
+import shutil
+import sys
+shutil.copytree(sys.argv[1], sys.argv[2],
+                ignore=shutil.ignore_patterns('src', 'pkg', '*.pkg.tar.*', '*.log'))
+PY
+    if ! XDG_CONFIG_HOME="$shelly_metadata_root/config" \
+      XDG_CACHE_HOME="$shelly_metadata_root/cache" \
+      XDG_DATA_HOME="$shelly_metadata_root/data" \
+      XDG_STATE_HOME="$shelly_metadata_root/state" \
+      shelly build --makesrcinfo --reviewed \
+        "$shelly_metadata_root/$package_dir_name/PKGBUILD" \
+        >"$shelly_metadata_root/metadata.log" 2>&1; then
+      cat "$shelly_metadata_root/metadata.log" >&2
+      fail "$package_dir_name/PKGBUILD failed Shelly metadata validation"
+    fi
+  done
+  rm -rf -- "$shelly_metadata_root"
+elif command -v makepkg >/dev/null 2>&1; then
   makepkg_metadata_root="$(mktemp -d /tmp/devario-makepkg-metadata.XXXXXX)"
   mkdir -p "$makepkg_metadata_root/packages" "$makepkg_metadata_root/sources" "$makepkg_metadata_root/build"
   for package_dir_name in "${!expected_pkgnames[@]}"; do
@@ -679,7 +705,11 @@ if command -v makepkg >/dev/null 2>&1; then
     fi
   done
   rm -rf -- "$makepkg_metadata_root"
+else
+  note "Shelly and makepkg are unavailable; PKGBUILD metadata linting was skipped."
+fi
 
+if command -v makepkg >/dev/null 2>&1; then
   if command -v strace >/dev/null 2>&1; then
     makepkg_trace_dir="$(mktemp -d /tmp/devario-makepkg-trace.XXXXXX)"
     makepkg_trace="$makepkg_trace_dir/execve.log"
@@ -712,11 +742,10 @@ if command -v makepkg >/dev/null 2>&1; then
   else
     note "strace is unavailable; the makepkg execve regression probe was skipped."
   fi
-else
-  note "makepkg is unavailable; PKGBUILD metadata linting was skipped."
 fi
 
-if ! grep -Fq "'shelly>=3.1.6-2'" "$project_dir/packages/devario-base/PKGBUILD"; then
+if ! grep -Eq "['\"]shelly([<>=][^'\"]*)?['\"]" \
+  <(sed -n '/^[[:space:]]*depends=(/,/^[[:space:]]*)/p' "$project_dir/packages/devario-base/PKGBUILD"); then
   fail "devario-base must require repository Shelly with the native RLPM backend"
 fi
 if grep -Eq "['\"](devario-alpm-runtime|libalpm(\.so)?)([<>=][^'\"]*)?['\"]" \
@@ -954,8 +983,8 @@ if ! grep -Fqx '  shell: /usr/bin/fish' "$profile_dir/airootfs/etc/calamares/mod
   fail "Calamares must create user accounts with Fish as their login shell"
 fi
 base_hard_dependencies="$(sed -n '/^[[:space:]]*depends=(/,/^[[:space:]]*)/p' "$project_dir/packages/devario-base/PKGBUILD")"
-if ! grep -Fqx "  'pam>=1.7.3-4'" <<< "$base_hard_dependencies"; then
-  fail "devario-base must require PAM with the corrected documentation build and disabled faillock default"
+if ! grep -Eq "['\"]pam([<>=][^'\"]*)?['\"]" <<< "$base_hard_dependencies"; then
+  fail "devario-base must require repository PAM"
 fi
 for overlay in airootfs late-airootfs; do
   if [[ -e "$profile_dir/$overlay/etc/security/faillock.conf" ]]; then
@@ -970,8 +999,8 @@ for audio_dependency in sof-firmware alsa-ucm-conf; do
     fail "the repository package checklist must include $audio_dependency"
   fi
 done
-for shell_dependency in fish 'shadow>=4.20.0.arch1-3'; do
-  if ! grep -Fqx "  '$shell_dependency'" "$project_dir/packages/devario-base/PKGBUILD"; then
+for shell_dependency in fish shadow; do
+  if ! grep -Eq "['\"]${shell_dependency}([<>=][^'\"]*)?['\"]" <<< "$base_hard_dependencies"; then
     fail "devario-base must require $shell_dependency for the default user shell"
   fi
 done
