@@ -1,7 +1,7 @@
 pkgbase = calamares
 	pkgdesc = Distribution-independent installer framework
 	pkgver = 3.4.2
-	pkgrel = 8
+	pkgrel = 9
 	url = https://codeberg.org/Calamares/calamares
 	arch = x86_64
 	license = GPL-3.0-or-later
@@ -29,6 +29,7 @@ pkgbase = calamares
 	depends = qt6-svg
 	depends = inter-font
 	depends = noto-fonts
+	depends = noto-fonts-emoji
 	depends = yaml-cpp
 	source = calamares-3.4.2.tar.gz::https://codeberg.org/Calamares/calamares/releases/download/v3.4.2/calamares-3.4.2.tar.gz
 	source = 0001-devario-wayland-runtime.patch

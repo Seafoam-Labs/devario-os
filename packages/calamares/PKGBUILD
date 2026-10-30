@@ -2,7 +2,7 @@
 
 pkgname=calamares
 pkgver=3.4.2
-pkgrel=8
+pkgrel=9
 pkgdesc="Distribution-independent installer framework"
 arch=('x86_64')
 url="https://codeberg.org/Calamares/calamares"
@@ -25,6 +25,7 @@ depends=(
   'qt6-svg'
   'inter-font'
   'noto-fonts'
+  'noto-fonts-emoji'
   'yaml-cpp'
 )
 makedepends=(
