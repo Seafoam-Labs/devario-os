@@ -1,7 +1,7 @@
 pkgbase = devario-boot
 	pkgdesc = Devario kernel, dracut and systemd-boot lifecycle
 	pkgver = 1
-	pkgrel = 15
+	pkgrel = 16
 	url = https://github.com/Seafoam-Labs/devario-os
 	arch = any
 	license = GPL-3.0-or-later
@@ -45,7 +45,7 @@ pkgbase = devario-boot
 	sha256sums = f4c600489e7fc94519dc66f902a863280ce6eb7d108568bc8f35a423d5d56a43
 	sha256sums = fef72a77838a03d0aadbf800d55e25f5f6b8c570abe112eab8427598a20d9f27
 	sha256sums = 025547188bed99ddb3d6d58f1f725744c4f4ab555aea855182c60fa0d06695a7
-	sha256sums = 1925f644dce416d17122ae02b24875ea10d506fc10e173982f0e0c3d36a460db
+	sha256sums = bd9d51e03d3e90650a59cea8e950aacc0cffc25ba8298d50ea0fe38d9a4509e1
 	sha256sums = 900ffc7f0b4835fa9fec3c57f6c8d215d022b109d5baf43065380bf67b58ea42
 
 pkgname = devario-boot

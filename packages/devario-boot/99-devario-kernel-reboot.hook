@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 [Trigger]
+# A new kernel version installs a new vmlinuz path instead of upgrading the old path.
+Operation = Install
 Operation = Upgrade
 Type = Path
 Target = usr/lib/modules/*/vmlinuz

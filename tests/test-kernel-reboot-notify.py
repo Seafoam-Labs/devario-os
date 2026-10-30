@@ -133,7 +133,10 @@ srcdir=$1 pkgdir=$2 package
         self.assertTrue(os.access(helper, os.X_OK))
         hook = destination / 'usr/share/rlpm/hooks/99-devario-kernel-reboot.hook'
         self.assertIn('Operation = Upgrade', hook.read_text())
-        self.assertNotIn('Operation = Install', hook.read_text())
+        # Versioned kernel paths change (e.g. 7.3.0-8.1 -> 7.3.0-8.2).
+        # Shelly reports the incoming vmlinuz as Install, even on package upgrades.
+        self.assertIn('Operation = Install', hook.read_text(),
+                      'Kernel updates that introduce a new vmlinuz path must notify')
         self.assertNotIn('Operation = Remove', hook.read_text())
         self.assertIn('Target = usr/lib/modules/*/vmlinuz', hook.read_text())
         self.assertIn('When = PostTransaction', hook.read_text())
