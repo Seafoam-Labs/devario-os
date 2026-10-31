@@ -181,9 +181,11 @@ cflags = ["-march=x86-64-v3", "-mtune=generic", "-O2", "-pipe"]
 cxxflags = ["-march=x86-64-v3", "-mtune=generic", "-O2", "-pipe"]
 ldflags = ["-Wl,-O1,--sort-common,--as-needed,-z,relro,-z,now"]
 extra_path = []
-env = {{}}
 ccache = false
 distcc = false
+
+# Shelly's typed TOML parser requires a table section for an empty environment.
+[build.env]
 
 [package]
 packager = {json.dumps(PACKAGER)}

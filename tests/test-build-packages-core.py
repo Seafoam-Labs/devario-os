@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -25,6 +26,31 @@ class CoreBuilderTests(unittest.TestCase):
         self.args = argparse.Namespace(repo=self.directory / "repo", work=self.directory / "work",
                                        keyring=PROJECT / "packages/devario-keyring", prepare_only=False)
         self.packages = [{"name": name, "version": "1-1"} for name in ("gcc", "glibc", "binutils")]
+
+    @unittest.skipUnless(shutil.which("shelly"), "Shelly is required to check its build configuration parser")
+    def test_generated_build_config_is_accepted_by_shelly(self):
+        config_home = self.directory / "config"
+        builder.write(config_home / "shelly/config.json", '{"NativePackageBackend":"rlpm"}\n')
+        # Keep all destinations writable without requiring the container's /build.
+        config = builder.build_config().replace("/build/", str(self.directory) + "/")
+        builder.write(config_home / "shelly/shellybuild.conf", config)
+        for name in ("work", "sources", "artifacts", "logs"):
+            (self.directory / name).mkdir()
+        recipe = self.directory / "recipe/PKGBUILD"
+        builder.write(recipe, '''pkgname=config-probe
+pkgver=1
+pkgrel=1
+arch=('any')
+pkgdesc="Shelly configuration probe"
+package() { return 0; }
+''')
+        result = subprocess.run(
+            ["shelly", "build", "--makesrcinfo", "--reviewed", "--no-confirm", str(recipe)],
+            env=dict(os.environ, XDG_CONFIG_HOME=str(config_home)),
+            capture_output=True, text=True, timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("pkgname = config-probe", result.stdout)
 
     def test_dependencies_include_compiler_runtime_and_arch_specific_build_inputs(self):
         result = builder.dependencies({
