@@ -32,6 +32,33 @@ def wait_for(description, predicate, seconds=180):
     raise RuntimeError(f'timed out waiting for {description}')
 
 
+def live_session_environment(account, runtime, display, environment):
+    # This system service does not inherit the live user's compositor session.
+    # Read the user's exported environment as JSON, not shell-escaped text, and
+    # accept only the two variables needed by Pearl from the matching display.
+    reply = run('runuser', '-u', account.pw_name, '--', 'env', *environment,
+                'busctl', '--user', '--json=short', 'get-property',
+                'org.freedesktop.systemd1', '/org/freedesktop/systemd1',
+                'org.freedesktop.systemd1.Manager', 'Environment', check=False)
+    try:
+        property_value = json.loads(reply)
+        if property_value['type'] != 'as' or not isinstance(property_value['data'], list):
+            return None
+        values = dict(item.split('=', 1) for item in property_value['data'])
+        desktop, endpoint = values.get('XDG_CURRENT_DESKTOP'), values.get('AQUEOUS_SOCKET')
+        if values.get('WAYLAND_DISPLAY') not in (display.name, str(display)) or not desktop or not endpoint:
+            return None
+        path = Path(endpoint)
+        info = path.stat()
+        if (not path.is_absolute() or not path.resolve().is_relative_to(runtime.resolve())
+                or runtime.stat().st_uid != account.pw_uid
+                or not stat.S_ISSOCK(info.st_mode) or info.st_uid != account.pw_uid):
+            return None
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
+    return [f'XDG_CURRENT_DESKTOP={desktop}', f'AQUEOUS_SOCKET={endpoint}']
+
+
 def main():
     if not REQUEST.is_file():
         return
@@ -60,6 +87,9 @@ def main():
     socket = wait_for(f'{account.pw_name} Wayland display', display_socket)
     environment = [f'XDG_RUNTIME_DIR={runtime}', f'WAYLAND_DISPLAY={socket.name}',
                    f'DBUS_SESSION_BUS_ADDRESS=unix:path={runtime}/bus']
+    if phase == 'live':
+        environment += wait_for('live Aqueous session environment', lambda:
+            live_session_environment(account, runtime, socket, environment), seconds=90)
 
     def client(*args, **kwargs):
         return run('runuser', '-u', account.pw_name, '--', 'env', *environment, *args, **kwargs)
