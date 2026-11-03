@@ -1182,6 +1182,9 @@ if ! grep -Fq 'rm -f /usr/local/bin/devario-aqueous-live-session' \
   "$prepare_target"; then
   fail "Calamares does not remove the live-only Aqueous autologin wrapper"
 fi
+if ! grep -Fq 'rm -f /etc/motd' "$prepare_target"; then
+  fail "Calamares does not remove the live-only login message"
+fi
 for required_live_user_cleanup in \
   'rm -f /usr/lib/sysusers.d/devario-live.conf' \
   'rm -f /usr/lib/tmpfiles.d/devario-live.conf' \
