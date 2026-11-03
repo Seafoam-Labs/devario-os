@@ -361,6 +361,9 @@ fi
 if ! DEVARIO_PROFILE_DIR="$profile_dir" python3 "$project_dir/tests/test-start-installer.py"; then
   fail "the live installer privilege and Wayland handoff tests failed"
 fi
+if ! DEVARIO_PROFILE_DIR="$profile_dir" python3 "$project_dir/tests/test-desktop-self-check.py"; then
+  fail "the desktop self-check session handoff tests failed"
+fi
 if ! python3 "$project_dir/tests/test-devario-report.py"; then
   fail "Devario report behavior and packaging tests failed"
 fi

@@ -47,11 +47,12 @@ class LauncherTests(unittest.TestCase):
         environment = {'WAYLAND_DISPLAY': 'wayland-2', 'XDG_RUNTIME_DIR': '/run/user/1000'}
         with patch.dict(os.environ, environment, clear=True), \
              patch.object(launcher, 'validate_socket', return_value='/run/user/1000/wayland-2') as validate, \
-             patch.object(launcher.os, 'execv') as execute:
-            launcher.main([])
+             patch.object(launcher.subprocess, 'run', return_value=SimpleNamespace(returncode=17)) as execute:
+            self.assertEqual(launcher.main([]), 17)
             validate.assert_called_once_with(Path('/run/user/1000/wayland-2'), 1000, Path('/run/user/1000'))
-            execute.assert_called_once_with('/usr/bin/pkexec',
-                ['pkexec', '--disable-internal-agent', launcher.HELPER, '/run/user/1000/wayland-2'])
+            execute.assert_called_once_with(
+                ['/usr/bin/pkexec', '--disable-internal-agent', launcher.HELPER, '/run/user/1000/wayland-2'],
+                check=False)
             for args in [['--debug'], ['/tmp/other']]:
                 with self.assertRaises(ValueError):
                     launcher.main(args)

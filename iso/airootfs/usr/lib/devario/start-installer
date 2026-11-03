@@ -41,7 +41,11 @@ def main(args):
         socket = validate_socket(socket, live_uid, runtime)
         # Arguments survive pkexec's environment reset. Never elevate env, a
         # shell, arbitrary Calamares arguments, or a caller-selected executable.
-        os.execv("/usr/bin/pkexec", ["pkexec", "--disable-internal-agent", HELPER, socket])
+        # A desktop launcher such as gio may already have exited. Keep this
+        # live-user process as pkexec's parent until authorization/Calamares
+        # finishes; pkexec rejects a caller whose parent has died.
+        return subprocess.run(["/usr/bin/pkexec", "--disable-internal-agent", HELPER, socket],
+                              check=False).returncode
     else:
         if os.environ.get("PKEXEC_UID") != str(live_uid) or len(args) != 1:
             raise ValueError("the elevated launcher requires a live-user pkexec request")
