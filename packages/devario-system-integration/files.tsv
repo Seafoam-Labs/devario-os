@@ -13,3 +13,4 @@
 644	61-devario-virtio.sh	etc/xdg/uwsm/env.d/61-devario-virtio.sh
 644	greetd-config.toml	usr/share/devario/greetd/config.toml
 644	gpu-policy.json	etc/devario/gpu-policy.json
+644	mimeapps.list	usr/share/applications/mimeapps.list

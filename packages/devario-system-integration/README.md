@@ -67,7 +67,7 @@ To restore tmpfs afterward, run `sudo systemctl unmask tmp.mount` and reboot.
 ## Build and release
 
 1. Deploy Shelly CLI 3.1.9 or later with `shelly_migrate` support and the RLPM backend.
-2. Build with that Shelly, sign, and publish `devario-system-integration` 1-5 in `devario-core`.
+2. Build with that Shelly, sign, and publish `devario-system-integration` 1-6 in `devario-core`.
 3. Build a new Aqueous source release through its normal packaging workflow and
    publish all six desktop outputs together. The older v1.0.5 tag predates the GPU
    preference implementation; advance the existing recipes to the new release.
