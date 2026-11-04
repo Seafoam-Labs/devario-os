@@ -43,10 +43,31 @@ user compositor journal for `graphics-session`, `Vulkan render preference`,
 candidate attempts and `gpu-selection` identity messages. Physical hybrid and
 desktop testing is still required before publishing a release.
 
+## Disk-backed temporary files
+
+Release 1-5 runs a one-time migration from both `post_install` and
+`post_upgrade`. It masks `tmp.mount` for the next boot so `/tmp` uses the
+underlying root filesystem. It never unmounts the active `/tmp`, deletes its
+contents, or reboots. The update prints a reminder to copy needed files out of
+RAM-backed `/tmp` before rebooting. Live media still has RAM-backed storage.
+
+The migration records its outcome in
+`/var/lib/devario/migrations/disk-tmp-v1`. Later package updates leave this
+policy alone, including if an administrator subsequently unmasks `tmp.mount`.
+An explicit `/tmp` entry in `fstab`, a symlinked `/tmp`, or a custom local mount
+unit/drop-in is preserved and recorded as skipped. Failed migrations do not
+write the marker and can retry on the next package update. The mask and marker
+are local state, not package-owned payload files.
+
+Build, sign, and publish version 1-5 through the normal `devario-core` release
+workflow. Existing users receive the migration with
+`sudo shelly upgrade standard`; it takes effect after their next reboot.
+To restore tmpfs afterward, run `sudo systemctl unmask tmp.mount` and reboot.
+
 ## Build and release
 
 1. Deploy Shelly CLI 3.1.9 or later with `shelly_migrate` support and the RLPM backend.
-2. Build with that Shelly, sign, and publish `devario-system-integration` 1-4 in `devario-core`.
+2. Build with that Shelly, sign, and publish `devario-system-integration` 1-5 in `devario-core`.
 3. Build a new Aqueous source release through its normal packaging workflow and
    publish all six desktop outputs together. The older v1.0.5 tag predates the GPU
    preference implementation; advance the existing recipes to the new release.

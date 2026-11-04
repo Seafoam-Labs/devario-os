@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -72,17 +73,109 @@ class PackageTests(unittest.TestCase):
     def test_install_enables_hotplug_without_restarting_the_session(self):
         hook = PACKAGE / 'devario-system-integration.install'
         for phase, expected in (
-            ('post_install', ['daemon-reload', 'enable devario-gpu-hotplug.service']),
-            ('post_upgrade', ['daemon-reload']),
+            ('post_install', ['disk-tmp', 'daemon-reload', 'enable devario-gpu-hotplug.service']),
+            ('post_upgrade', ['disk-tmp', 'daemon-reload']),
         ):
             with self.subTest(phase=phase), tempfile.TemporaryDirectory() as temporary:
                 log = Path(temporary) / 'systemctl.log'
                 subprocess.run(['bash', '-eu', '-c', '''
                     log=$3
                     systemctl() { printf '%s\n' "$*" >> "$log"; }
-                    source "$1"; "$2"
+                    source "$1"
+                    _devario_configure_disk_tmp() { printf 'disk-tmp\n' >> "$log"; }
+                    "$2"
                     ''', 'hook', str(hook), phase, str(log)], check=True)
                 self.assertEqual(log.read_text().splitlines(), expected)
+
+
+class DiskTmpMigrationTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix='devario-package-tmp-')
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.unit = self.root / 'etc/systemd/system/tmp.mount'
+        self.unit.parent.mkdir(parents=True)
+        vendor = self.root / 'usr/lib/systemd/system/tmp.mount'
+        vendor.parent.mkdir(parents=True)
+        vendor.write_text('[Mount]\nWhat=tmpfs\nWhere=/tmp\nType=tmpfs\n')
+        self.fstab = self.root / 'etc/fstab'
+        self.fstab.write_text('/dev/root / ext4 defaults 0 1\n')
+        self.marker = self.root / 'var/lib/devario/migrations/disk-tmp-v1'
+        self.sentinel = self.root / 'tmp/keep-build'
+        self.sentinel.parent.mkdir()
+        self.sentinel.write_text('keep')
+
+    def migrate(self, fail_mask=False):
+        return subprocess.run(['bash', '-eu', '-c', '''
+            source "$1"
+            if [ "$3" = fail ]; then systemctl() { return 1; }; fi
+            _devario_configure_disk_tmp "$2"
+            ''', 'migration', str(PACKAGE / 'devario-system-integration.install'),
+            str(self.root), 'fail' if fail_mask else 'ok'],
+            capture_output=True, text=True, timeout=10)
+
+    def test_applies_offline_without_touching_tmp_and_does_not_reapply(self):
+        result = self.migrate()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(os.readlink(self.unit), '/dev/null')
+        self.assertEqual(self.marker.read_text(), 'applied\n')
+        self.assertEqual(self.sentinel.read_text(), 'keep')
+        self.assertIn('after reboot', result.stdout)
+        # An administrator later restores tmpfs: the next update must honor it.
+        self.unit.unlink()
+        result = self.migrate()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.unit.is_symlink())
+
+    def test_fstab_override_is_preserved_and_skip_is_remembered(self):
+        self.fstab.write_text('tmpfs /tmp tmpfs defaults 0 0\n')
+        result = self.migrate()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('skipped:', self.marker.read_text())
+        self.assertFalse(self.unit.is_symlink())
+        self.fstab.write_text('')
+        self.assertEqual(self.migrate().returncode, 0)
+        self.assertFalse(self.unit.is_symlink())
+
+    def test_custom_unit_and_dropins_are_preserved(self):
+        self.unit.write_text('# custom administrator unit\n')
+        self.assertEqual(self.migrate().returncode, 0)
+        self.assertEqual(self.unit.read_text(), '# custom administrator unit\n')
+        self.unit.unlink()
+        self.marker.unlink()
+        dropin = self.unit.with_name('tmp.mount.d')
+        dropin.mkdir()
+        self.assertEqual(self.migrate().returncode, 0)
+        self.assertIn('overrides', self.marker.read_text())
+        self.assertFalse(self.unit.is_symlink())
+
+    def test_existing_manual_mask_is_accepted(self):
+        self.unit.symlink_to('/dev/null')
+        self.assertEqual(self.migrate().returncode, 0)
+        self.assertEqual(self.marker.read_text(), 'applied\n')
+
+    def test_symlinked_tmp_is_preserved(self):
+        shutil.rmtree(self.sentinel.parent)
+        self.sentinel.parent.symlink_to('/var/tmp')
+        self.assertEqual(self.migrate().returncode, 0)
+        self.assertIn('symlink', self.marker.read_text())
+        self.assertFalse(self.unit.is_symlink())
+
+    def test_failure_is_retried_and_missing_fstab_is_not_ignored(self):
+        self.assertNotEqual(self.migrate(fail_mask=True).returncode, 0)
+        self.assertFalse(self.marker.exists())
+        self.assertEqual(self.migrate().returncode, 0)
+        self.marker.unlink()
+        self.unit.unlink()
+        self.fstab.unlink()
+        self.assertNotEqual(self.migrate().returncode, 0)
+        self.assertFalse(self.marker.exists())
+        self.assertFalse(self.unit.is_symlink())
+
+    def test_empty_fstab_is_supported(self):
+        self.fstab.write_text('')
+        self.assertEqual(self.migrate().returncode, 0)
+        self.assertEqual(os.readlink(self.unit), '/dev/null')
 
 
 class MigrationTests(unittest.TestCase):

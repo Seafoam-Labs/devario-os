@@ -1,10 +1,70 @@
+_devario_configure_disk_tmp() {
+  # The optional root is for offline verification; package hooks use /.
+  local root="${1:-/}" marker unit mounts status mountpoint reason=''
+  root="${root%/}"
+  marker="$root/var/lib/devario/migrations/disk-tmp-v1"
+  unit="$root/etc/systemd/system/tmp.mount"
+  [ ! -e "$marker" ] || return 0
+
+  if [ -L "$root/tmp" ]; then
+    reason='/tmp is a symlink'
+  elif { [ -e "$unit" ] || [ -L "$unit" ]; } &&
+       [ "$(readlink "$unit")" != /dev/null ]; then
+    reason='a custom tmp.mount exists'
+  elif [ -d "$root/etc/systemd/system/tmp.mount.d" ] ||
+       [ -e "$root/run/systemd/system/tmp.mount" ] ||
+       [ -L "$root/run/systemd/system/tmp.mount" ] ||
+       [ -d "$root/run/systemd/system/tmp.mount.d" ]; then
+    reason='local tmp.mount overrides exist'
+  fi
+
+  if [ -z "$reason" ]; then
+    if mounts=$(findmnt --fstab --tab-file "$root/etc/fstab" --raw --noheadings --output TARGET); then
+      while IFS= read -r mountpoint; do
+        if [ "$mountpoint" = /tmp ]; then
+          reason='/etc/fstab explicitly mounts /tmp'
+          break
+        fi
+      done <<EOF
+$mounts
+EOF
+    else
+      status=$?
+      # findmnt returns 1 for an empty table.
+      if [ "$status" -ne 1 ] || [ ! -r "$root/etc/fstab" ]; then
+        echo 'Devario: cannot inspect fstab; /tmp migration will retry on the next package update.' >&2
+        return 1
+      fi
+    fi
+  fi
+
+  install -dm755 "${marker%/*}" || return 1
+  if [ -n "$reason" ]; then
+    printf 'skipped: %s\n' "$reason" > "$marker" || return 1
+    printf 'Devario: preserving /tmp configuration (%s).\n' "$reason"
+    return 0
+  fi
+
+  # Offline masking also works in a package-install chroot. Never stop the mount.
+  if ! systemctl --root="${root:-/}" mask tmp.mount; then
+    echo 'Devario: /tmp migration failed; it will retry on the next package update.' >&2
+    return 1
+  fi
+  printf 'applied\n' > "$marker" || return 1
+  echo 'Devario: /tmp will use the root filesystem after reboot.'
+  echo 'Save needed files from the current RAM-backed /tmp before rebooting; they will be lost.'
+  echo 'The current mount is unchanged. No files were deleted and no reboot was requested.'
+}
+
 post_install() {
+  _devario_configure_disk_tmp || return 1
   # Enable for the next boot; never restart the active graphical session.
   systemctl daemon-reload >/dev/null 2>&1 || true
   systemctl enable devario-gpu-hotplug.service
 }
 
 post_upgrade() {
+  _devario_configure_disk_tmp || return 1
   # Preserve an administrator's enable/disable choice on later upgrades.
   systemctl daemon-reload >/dev/null 2>&1 || true
 }

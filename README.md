@@ -201,11 +201,16 @@ filesystem, and the remaining modules configure that copy for the target machine
 Installed systems use the root disk filesystem for `/tmp`, so large temporary
 build trees do not consume RAM as tmpfs files. Calamares leaves `/tmp` out of
 `fstab` and masks systemd's vendor `tmp.mount` in the installed target. The live
-ISO retains its temporary storage behavior. Rebuild the ISO to apply this
+ISO still uses RAM-backed storage. Rebuild the ISO to apply this
 default to new installations.
 
-For an existing installation, run `sudo bash scripts/use-disk-tmp.sh` from this
-repository. It configures the next boot without unmounting `/tmp`, deleting
+The `devario-system-integration` 1-5 package applies the same default once on
+installation or upgrade, preserving explicit local `/tmp` configurations and
+remembering the result so later updates honor administrator changes. It takes
+effect on the next boot.
+
+To apply it manually on an existing installation, run
+`sudo bash scripts/use-disk-tmp.sh` from this repository. It configures the next boot without unmounting `/tmp`, deleting
 files, or rebooting. Copy any needed files from the current RAM-backed `/tmp`
 to disk before rebooting; those contents will be lost. After reboot, verify
 with `findmnt -T /tmp`: it should report the root disk filesystem, not tmpfs.
