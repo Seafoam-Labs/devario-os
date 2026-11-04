@@ -198,6 +198,20 @@ repository before rebuilding the ISO with these power defaults.
 Calamares does not invoke a package manager during installation. Its `unpackfs` module copies the prepared live root
 filesystem, and the remaining modules configure that copy for the target machine.
 
+Installed systems use the root disk filesystem for `/tmp`, so large temporary
+build trees do not consume RAM as tmpfs files. Calamares leaves `/tmp` out of
+`fstab` and masks systemd's vendor `tmp.mount` in the installed target. The live
+ISO retains its temporary storage behavior. Rebuild the ISO to apply this
+default to new installations.
+
+For an existing installation, run `sudo bash scripts/use-disk-tmp.sh` from this
+repository. It configures the next boot without unmounting `/tmp`, deleting
+files, or rebooting. Copy any needed files from the current RAM-backed `/tmp`
+to disk before rebooting; those contents will be lost. After reboot, verify
+with `findmnt -T /tmp`: it should report the root disk filesystem, not tmpfs.
+An explicit `/tmp` entry in `/etc/fstab` must be resolved separately. To restore
+the systemd default, run `sudo systemctl unmask tmp.mount` and reboot.
+
 The ISO build stages `/etc/localtime` as a link to the packaged UTC timezone,
 preventing systemd's initial setup service from prompting for a timezone at boot.
 Calamares applies the user's selected timezone to the installed system.

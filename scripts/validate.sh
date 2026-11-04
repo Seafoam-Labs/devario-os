@@ -94,6 +94,8 @@ required_files=(
   "$profile_dir/airootfs/etc/calamares/modules/systemd_boot.conf"
   "$profile_dir/airootfs/etc/calamares/modules/boot_preflight.conf"
   "$profile_dir/airootfs/etc/calamares/modules/prepare_target.conf"
+  "$project_dir/scripts/use-disk-tmp.sh"
+  "$project_dir/tests/test-disk-tmp.py"
   "$profile_dir/airootfs/etc/calamares/modules/nvidia_preflight.conf"
   "$profile_dir/airootfs/etc/calamares/modules/nvidia.conf"
   "$profile_dir/airootfs/etc/calamares/modules/update_preflight.conf"
@@ -339,6 +341,9 @@ if ! python3 "$project_dir/tests/test-kernel-reboot-notify.py"; then
 fi
 if ! python3 "$project_dir/tests/test-filesystem-profile.py"; then
   fail "Filesystem login profile tests failed"
+fi
+if ! DEVARIO_PROFILE_DIR="$profile_dir" python3 "$project_dir/tests/test-disk-tmp.py"; then
+  fail "Disk-backed temporary directory tests failed"
 fi
 if ! DEVARIO_PROFILE_DIR="$profile_dir" python3 "$project_dir/tests/test-locales.py"; then
   fail "Live and installed locale tests failed"
