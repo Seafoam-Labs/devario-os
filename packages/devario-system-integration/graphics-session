@@ -90,6 +90,9 @@ def startup_environment(environment):
             environment.setdefault('VK_LOADER_DRIVERS_DISABLE', '*nvidia*')
     if virtio_only():
         environment.setdefault('MESA_LOADER_DRIVER_OVERRIDE', 'zink')
+        if environment['MESA_LOADER_DRIVER_OVERRIDE'] == 'zink':
+            # Allow Zink X11 clients when Xwayland lacks DRM modifiers.
+            environment.setdefault('LIBGL_KOPPER_DRI2', 'true')
     return environment
 
 

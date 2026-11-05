@@ -24,6 +24,39 @@ def load(name):
 
 
 class EgpuTests(unittest.TestCase):
+    def test_virtio_zink_supports_x11_without_overriding_user_choices(self):
+        graphics = load('graphics-session')
+        with patch.object(graphics.Path, 'is_file', return_value=False), \
+                patch.object(graphics, 'render_preference', return_value='auto'), \
+                patch.object(graphics, 'virtio_only', return_value=True):
+            original = {'PATH': '/usr/bin'}
+            result = graphics.startup_environment(original)
+            self.assertEqual(result['MESA_LOADER_DRIVER_OVERRIDE'], 'zink')
+            self.assertEqual(result['LIBGL_KOPPER_DRI2'], 'true')
+            self.assertEqual(original, {'PATH': '/usr/bin'})
+            self.assertEqual(graphics.startup_environment({'LIBGL_KOPPER_DRI2': 'false'})['LIBGL_KOPPER_DRI2'], 'false')
+            self.assertNotIn('LIBGL_KOPPER_DRI2', graphics.startup_environment({'MESA_LOADER_DRIVER_OVERRIDE': 'virgl'}))
+        with patch.object(graphics.Path, 'is_file', return_value=False), \
+                patch.object(graphics, 'render_preference', return_value='auto'), \
+                patch.object(graphics, 'virtio_only', return_value=False):
+            self.assertNotIn('LIBGL_KOPPER_DRI2', graphics.startup_environment({}))
+
+    def test_virtio_env_script_preserves_x11_and_driver_overrides(self):
+        script = helper('61-devario-virtio.sh').read_text().replace(
+            '/usr/lib/devario/graphics-session', 'detect_virtio')
+        harness = 'detect_virtio() { return "$DETECT_STATUS"; }\n' + script + '''
+python3 -c 'import json,os; print(json.dumps({k:os.environ.get(k) for k in ("MESA_LOADER_DRIVER_OVERRIDE","LIBGL_KOPPER_DRI2")}))'
+'''
+        for status, overrides, expected in (
+            ('0', {}, {'MESA_LOADER_DRIVER_OVERRIDE': 'zink', 'LIBGL_KOPPER_DRI2': 'true'}),
+            ('0', {'LIBGL_KOPPER_DRI2': 'false'}, {'MESA_LOADER_DRIVER_OVERRIDE': 'zink', 'LIBGL_KOPPER_DRI2': 'false'}),
+            ('0', {'MESA_LOADER_DRIVER_OVERRIDE': 'virgl'}, {'MESA_LOADER_DRIVER_OVERRIDE': 'virgl', 'LIBGL_KOPPER_DRI2': None}),
+            ('1', {}, {'MESA_LOADER_DRIVER_OVERRIDE': None, 'LIBGL_KOPPER_DRI2': None}),
+        ):
+            env = dict(overrides, PATH=os.environ['PATH'], DETECT_STATUS=status)
+            reply = subprocess.check_output(['sh', '-c', harness], text=True, env=env)
+            self.assertEqual(json.loads(reply), expected)
+
     def test_startup_filter_is_scoped_and_preserves_user_overrides(self):
         graphics = load('graphics-session')
         for status in (0, 1, 2):
