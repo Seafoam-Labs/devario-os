@@ -34,7 +34,7 @@ if [[ -n "$swap" ]]; then
     if [[ "$(findmnt -nro FSTYPE --target "$swap")" == btrfs ]]; then
       offset="$(btrfs inspect-internal map-swapfile -r "$swap")"
     else
-      offset="$(filefrag -v -b "$(getconf PAGESIZE)" "$swap" | awk '$1 == "0:" {sub(/\.\..*/, "", $4); print $4; exit}')"
+      offset="$(filefrag -v -b"$(getconf PAGESIZE)" "$swap" | awk '$1 == "0:" {sub(/\.\..*/, "", $4); print $4; exit}')"
     fi
     [[ -n "$uuid" && "$offset" =~ ^[0-9]+$ ]] || { echo 'Cannot determine swapfile resume offset.' >&2; exit 1; }
     args+=("resume=UUID=$uuid" "resume_offset=$offset")
