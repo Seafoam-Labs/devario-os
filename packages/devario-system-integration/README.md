@@ -34,6 +34,14 @@ if the preferred GPU is absent or fails initialization, and retains explicit
 controlled by `AQUEOUS_GPU_POLICY=follow|inherit`, with `follow` using the actual
 successful renderer. `devario-gpu-run` still selects another GPU per application.
 
+For NVIDIA offload from Aqueous, use `devario-gpu-run nvidia -- COMMAND [ARG ...]`.
+For Steam launch options, use `devario-gpu-run nvidia -- %command%`.
+The helper clears inherited GPU selectors and driver filters before selecting
+NVIDIA, including the restrictive Mesa selector exported by `follow` policy
+that can conflict with `prime-run`. No session-policy change or logout is needed.
+Use `devario-gpu-run --list` to list available GPUs; Mesa GPUs are selected by
+PCI address instead of `nvidia`.
+
 Neither helper nor compositor automatically sets `WLR_DRM_DEVICES`: doing so
 would restrict display discovery and disable wlroots GPU hotplug monitoring.
 Explicit user device lists remain supported. External monitors on another GPU
@@ -67,7 +75,7 @@ To restore tmpfs afterward, run `sudo systemctl unmask tmp.mount` and reboot.
 ## Build and release
 
 1. Deploy Shelly CLI 3.1.9 or later with `shelly_migrate` support and the RLPM backend.
-2. Build with that Shelly, sign, and publish `devario-system-integration` 1-5 in `devario-core`.
+2. Build with that Shelly, sign, and publish `devario-system-integration` 1-6 in `devario-core`.
 3. Build a new Aqueous source release through its normal packaging workflow and
    publish all six desktop outputs together. The older v1.0.5 tag predates the GPU
    preference implementation; advance the existing recipes to the new release.

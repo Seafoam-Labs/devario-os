@@ -1,0 +1,29 @@
+version = 1
+
+[[annotations]]
+path = [
+    ".SRCINFO",
+    "20-devario-gpu.conf",
+    "30-plymouth.conf",
+    "55-devario-user-dirs.sh",
+    "60-devario-gpu.sh",
+    "61-devario-virtio.sh",
+    "PKGBUILD",
+    "README.md",
+    "devario-egpu.conf",
+    "devario-gpu-driver.service",
+    "devario-gpu-hotplug.service",
+    "devario-gpu-run",
+    "devario-system-integration.install",
+    "files.tsv",
+    "gpu-driver-setup",
+    "gpu-hotplug",
+    "gpu-policy.json",
+    "graphics-session",
+    "greetd-config.toml",
+    "greetd-gpu-driver.conf",
+    "migrate-overlay.py",
+    "mimeapps.list",
+]
+SPDX-FileCopyrightText = "Devario maintainers"
+SPDX-License-Identifier = "0BSD"
