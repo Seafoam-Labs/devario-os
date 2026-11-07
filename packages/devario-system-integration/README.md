@@ -72,10 +72,14 @@ workflow. Existing users receive the migration with
 `sudo shelly upgrade standard`; it takes effect after their next reboot.
 To restore tmpfs afterward, run `sudo systemctl unmask tmp.mount` and reboot.
 
+## default applications
+
+release 1-7 uses Coral for text, config, source and build files, falling back to Coral Git; matching desktop associations are required.
+
 ## Build and release
 
 1. Deploy Shelly CLI 3.1.9 or later with `shelly_migrate` support and the RLPM backend.
-2. Build with that Shelly, sign, and publish `devario-system-integration` 1-6 in `devario-core`.
+2. Build with that Shelly, sign, and publish `devario-system-integration` 1-7 in `devario-core`.
 3. Build a new Aqueous source release through its normal packaging workflow and
    publish all six desktop outputs together. The older v1.0.5 tag predates the GPU
    preference implementation; advance the existing recipes to the new release.
