@@ -375,8 +375,9 @@ devario_gpgv_active_signature() {
   local status valid_count=0 signing_fingerprint primary_fingerprint
 
   if ! status="$(gpgv --status-fd 1 --keyring "$DEVARIO_KEYRING_PUBLIC" \
-    "$signature" "$artifact" 2>/dev/null)"; then
-    devario_repository_error "signature verification failed: $(basename -- "$artifact")"
+    "$signature" "$artifact" 2>&1)"; then
+    printf '%s\n' "$status" >&2
+    devario_repository_error "signature verification failed: $artifact"
     return 1
   fi
   while IFS= read -r line; do
@@ -405,11 +406,14 @@ devario_gpgv_active_signature() {
 devario_inventory_packages() {
   local output_name="$1"
   shift
-  local package metadata name version architecture filename size digest
+  local package metadata name version architecture filename size digest sorted
   declare -n output_ref="$output_name"
   output_ref=()
   for package in "$@"; do
-    metadata="$(bsdtar -xOf "$package" .PKGINFO)" || return 1
+    if ! metadata="$(bsdtar -xOf "$package" .PKGINFO)"; then
+      devario_repository_error "cannot read .PKGINFO from package: $package"
+      return 1
+    fi
     name="$(awk -F ' = ' '$1 == "pkgname" {print $2; exit}' <<< "$metadata")"
     version="$(awk -F ' = ' '$1 == "pkgver" {print $2; exit}' <<< "$metadata")"
     architecture="$(awk -F ' = ' '$1 == "arch" {print $2; exit}' <<< "$metadata")"
@@ -424,24 +428,37 @@ devario_inventory_packages() {
     fi
     output_ref+=("$name"$'\t'"$version"$'\t'"$architecture"$'\t'"$filename"$'\t'"$size"$'\t'"$digest")
   done
-  mapfile -t output_ref < <(printf '%s\n' "${output_ref[@]}" | LC_ALL=C sort)
+  if ! sorted="$(set -o pipefail; printf '%s\n' "${output_ref[@]}" | LC_ALL=C sort)"; then
+    devario_repository_error 'cannot sort package inventory'
+    return 1
+  fi
+  mapfile -t output_ref <<< "$sorted"
 }
 
 devario_inventory_database() {
   local database="$1"
   local output_name="$2"
-  local member metadata name version architecture filename size digest
+  local member metadata name version architecture filename size digest listing sorted
   local -a members=()
   declare -n output_ref="$output_name"
   output_ref=()
-  mapfile -t members < <(bsdtar -tf "$database") || return 1
+  # mapfile cannot report a failed process substitution. Capture and check the
+  # producer before accepting its output, including a partially read archive.
+  if ! listing="$(bsdtar -tf "$database")"; then
+    devario_repository_error "cannot list repository database: $database"
+    return 1
+  fi
+  mapfile -t members <<< "$listing"
   for member in "${members[@]}"; do
     [[ "$member" == */desc ]] || continue
     if [[ ! "$member" =~ ^[A-Za-z0-9@._+:-]+/desc$ ]]; then
       devario_repository_error "unsafe repository database member: $member"
       return 1
     fi
-    metadata="$(bsdtar -xOf "$database" "$member")" || return 1
+    if ! metadata="$(bsdtar -xOf "$database" "$member")"; then
+      devario_repository_error "cannot read $member from repository database: $database"
+      return 1
+    fi
     name="$(awk '$0 == "%NAME%" {getline; print; exit}' <<< "$metadata")"
     version="$(awk '$0 == "%VERSION%" {getline; print; exit}' <<< "$metadata")"
     architecture="$(awk '$0 == "%ARCH%" {getline; print; exit}' <<< "$metadata")"
@@ -461,7 +478,59 @@ devario_inventory_database() {
     devario_repository_error "repository database contains no package records: $database"
     return 1
   }
-  mapfile -t output_ref < <(printf '%s\n' "${output_ref[@]}" | LC_ALL=C sort)
+  if ! sorted="$(set -o pipefail; printf '%s\n' "${output_ref[@]}" | LC_ALL=C sort)"; then
+    devario_repository_error "cannot sort repository database inventory: $database"
+    return 1
+  fi
+  mapfile -t output_ref <<< "$sorted"
+}
+
+devario_compare_repository_inventory() {
+  local database="$1"
+  declare -n expected_ref="$2" actual_ref="$3"
+  local record name index
+  local -a expected_fields=() actual_fields=()
+  local -a fields=(name version architecture filename size sha256)
+  local -A expected_records=() seen=()
+
+  for record in "${expected_ref[@]}"; do
+    expected_records["${record%%$'\t'*}"]="$record"
+  done
+  for record in "${actual_ref[@]}"; do
+    name="${record%%$'\t'*}"
+    if [[ -n "${seen[$name]:-}" ]]; then
+      devario_repository_error "$database: duplicate package record: $name"
+      return 1
+    fi
+    seen["$name"]=1
+    if [[ -z "${expected_records[$name]:-}" ]]; then
+      devario_repository_error "$database: package record has no archive: $name"
+      return 1
+    fi
+    if [[ "$record" != "${expected_records[$name]}" ]]; then
+      IFS=$'\t' read -r -a expected_fields <<< "${expected_records[$name]}"
+      IFS=$'\t' read -r -a actual_fields <<< "$record"
+      if (( ${#expected_fields[@]} != 6 || ${#actual_fields[@]} != 6 )); then
+        devario_repository_error "$database: malformed inventory record: $name"
+        return 1
+      fi
+      for index in "${!fields[@]}"; do
+        if [[ "${expected_fields[$index]}" != "${actual_fields[$index]}" ]]; then
+          devario_repository_error "$database: $name ${fields[$index]} mismatch (archive: ${expected_fields[$index]}; database: ${actual_fields[$index]})"
+          return 1
+        fi
+      done
+      devario_repository_error "$database: package record mismatch: $name"
+      return 1
+    fi
+  done
+  for record in "${expected_ref[@]}"; do
+    name="${record%%$'\t'*}"
+    if [[ -z "${seen[$name]:-}" ]]; then
+      devario_repository_error "$database: archive has no package record: $name"
+      return 1
+    fi
+  done
 }
 
 devario_is_local_installer_package() {
@@ -479,7 +548,7 @@ devario_verify_repository() {
   local package_policy="${5:-strict}"
   local database="$repo_dir/$repository_name.db.tar.zst"
   local files_database="$repo_dir/$repository_name.files.tar.zst"
-  local path basename target package_name repository_is_signed=0
+  local path basename target package_name metadata repository_is_signed=0
   declare -A package_names=()
   local -a packages=() expected_inventory=() database_inventory=() files_inventory=()
 
@@ -568,8 +637,11 @@ devario_verify_repository() {
   done < <(find -P "$repo_dir" -mindepth 1 -maxdepth 1 -print0)
 
   for path in "${packages[@]}"; do
-    package_name="$(bsdtar -xOf "$path" .PKGINFO \
-      | awk -F ' = ' '$1 == "pkgname" { print $2; exit }')"
+    if ! metadata="$(bsdtar -xOf "$path" .PKGINFO)"; then
+      devario_repository_error "cannot read .PKGINFO from package: $path"
+      return 1
+    fi
+    package_name="$(awk -F ' = ' '$1 == "pkgname" { print $2; exit }' <<< "$metadata")"
     if [[ -z "$package_name" || -n "${package_names[$package_name]:-}" ]]; then
       devario_repository_error "repository package names are missing or ambiguous: $(basename -- "$path")"
       return 1
@@ -592,13 +664,8 @@ devario_verify_repository() {
   devario_inventory_packages expected_inventory "${packages[@]}" || return 1
   devario_inventory_database "$database" database_inventory || return 1
   devario_inventory_database "$files_database" files_inventory || return 1
-  if [[ "$(printf '%s\n' "${expected_inventory[@]}")" \
-    != "$(printf '%s\n' "${database_inventory[@]}")" \
-    || "$(printf '%s\n' "${expected_inventory[@]}")" \
-    != "$(printf '%s\n' "${files_inventory[@]}")" ]]; then
-    devario_repository_error 'repository databases do not exactly describe the package artifact closure'
-    return 1
-  fi
+  devario_compare_repository_inventory "$database" expected_inventory database_inventory || return 1
+  devario_compare_repository_inventory "$files_database" expected_inventory files_inventory || return 1
   if (( repository_is_signed )); then
     devario_gpgv_active_signature "$database.sig" "$database" || return 1
     devario_gpgv_active_signature "$files_database.sig" "$files_database" || return 1

@@ -38,4 +38,14 @@ fi
 grep -Fq 'not signed by active-signer' "$test_root/stderr" \
   || fail 'retired-signer rejection did not identify the active-signer mismatch'
 
+gpgv() { printf '%s\n' 'gpgv: diagnostic fixture' >&2; return 1; }
+if devario_gpgv_active_signature "$test_root/artifact.sig" "$test_root/artifact" \
+    >"$test_root/stdout" 2>"$test_root/stderr"; then
+  fail 'a failed signature check was accepted'
+fi
+grep -Fq 'gpgv: diagnostic fixture' "$test_root/stderr" \
+  || fail 'signature failure discarded the verifier diagnostic'
+grep -Fq "signature verification failed: $test_root/artifact" "$test_root/stderr" \
+  || fail 'signature failure omitted the artifact path'
+
 echo 'Active-signer trust tests passed.'

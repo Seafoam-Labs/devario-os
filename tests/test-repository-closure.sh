@@ -44,6 +44,65 @@ source "$project_dir/scripts/lib/repository.sh"
 devario_verify_repository "$repository" devario-core \
   "$project_dir/packages/devario-keyring" development
 
+# A producer may emit usable-looking partial output before failing. Its status
+# must survive capture, even when the caller tests the verifier in an if clause.
+(
+  bsdtar() {
+    command bsdtar "$@" || return
+    if [[ "$1" == -tf ]]; then return 1; fi
+  }
+  broken_inventory=()
+  if devario_inventory_database "$repository/devario-core.db.tar.zst" broken_inventory \
+      >"$test_root/stdout" 2>"$test_root/stderr"; then
+    fail 'a failed database listing with partial output was accepted'
+  fi
+  grep -Fq 'cannot list repository database:' "$test_root/stderr" \
+    || fail 'database listing failure omitted its context'
+)
+(
+  sort() { command sort "$@"; return 1; }
+  broken_inventory=()
+  if devario_inventory_packages broken_inventory "$package" \
+      >"$test_root/stdout" 2>"$test_root/stderr"; then
+    fail 'a failed package inventory sort was accepted'
+  fi
+  if devario_inventory_database "$repository/devario-core.db.tar.zst" broken_inventory \
+      >"$test_root/stdout" 2>"$test_root/stderr"; then
+    fail 'a failed database inventory sort was accepted'
+  fi
+)
+(
+  bsdtar() {
+    command bsdtar "$@" || return
+    if [[ "$1" == -xOf && "$3" == .PKGINFO ]]; then return 1; fi
+  }
+  if devario_verify_repository "$repository" devario-core \
+      "$project_dir/packages/devario-keyring" development \
+      >"$test_root/stdout" 2>"$test_root/stderr"; then
+    fail 'a failed .PKGINFO read with partial output was accepted'
+  fi
+  grep -Fq "cannot read .PKGINFO from package: $package" "$test_root/stderr" \
+    || fail 'package metadata failure omitted the archive path'
+)
+
+# Compare by package identity, and distinguish missing, extra and duplicate
+# records. A field mismatch must identify the actual differing field.
+devario_inventory_packages fixture_inventory "$package"
+for problem in missing extra duplicate size; do
+  actual_inventory=("${fixture_inventory[@]}")
+  case "$problem" in
+    missing) actual_inventory=(); message='archive has no package record: fixture' ;;
+    extra) actual_inventory+=("extra${fixture_inventory[0]#fixture}"); message='package record has no archive: extra' ;;
+    duplicate) actual_inventory+=("${fixture_inventory[0]}"); message='duplicate package record: fixture' ;;
+    size) actual_inventory=("${fixture_inventory[0]/$'\t'$size$'\t'/$'\t'0$'\t'}"); message='fixture size mismatch' ;;
+  esac
+  if devario_compare_repository_inventory fixture.db fixture_inventory actual_inventory \
+      >"$test_root/stdout" 2>"$test_root/stderr"; then
+    fail "$problem inventory was accepted"
+  fi
+  grep -Fq "$message" "$test_root/stderr" || fail "$problem inventory diagnosis was missing"
+done
+
 # Match repo-add --sign's actual four compatibility links. A signed
 # development fixture uses a stubbed verifier; production exercises the same
 # structural closure before invoking the real active-signer verifier.
@@ -69,6 +128,8 @@ if devario_verify_repository "$repository" devario-core \
     >"$test_root/stdout" 2>"$test_root/stderr"; then
   fail 'a repository database with a substituted package digest was accepted'
 fi
+grep -Fq 'fixture sha256 mismatch' "$test_root/stderr" \
+  || fail 'digest mismatch did not identify the package and field'
 
 # Local ISO mode accepts only the seven OS-owned names without signatures.
 write_desc "$digest"
