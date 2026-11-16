@@ -355,6 +355,13 @@ must provide the same mount and EFI partition type. Calamares checks UEFI
 before partitioning. The live USB can still boot through legacy BIOS for live
 use, but must be rebooted in UEFI mode before installing.
 
+The live ISO also boots through Ventoy. Ventoy exposes the ISO as a
+device-mapper disk created by its injected runtime with a pre-udev-cookie
+dmsetup, so udev never publishes the `by-uuid`/`by-label` symlinks the boot
+entries wait for. The `devario-live` dracut module detects the Ventoy runtime
+and overrides label/UUID live roots with `root=live:/dev/mapper/ventoy`
+(`ventoy-compat.sh`); directly written media keep the UUID-based entries.
+
 The native ISO build prerequisites and pending full-image verification are
 documented in [ISO construction](docs/ISO-BUILDER.md). Snapshot and bootstrap
 URLs in release examples must be provisioned before use.

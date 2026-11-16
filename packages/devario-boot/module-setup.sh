@@ -11,6 +11,7 @@ install() {
   mv "$initdir/sbin/dmsquash-live-root" "$initdir/sbin/devario-dmsquash-live-root"
   inst_script "$moddir/live-root.sh" /sbin/dmsquash-live-root
   inst_script "$moddir/verify-live-image" /sbin/devario-verify-live-image
+  inst_hook cmdline 20 "$moddir/ventoy-compat.sh"
   inst_hook pre-pivot 90 "$moddir/install-root.sh"
   [[ ! -f /etc/devario/live-signing.pem ]] || inst_simple /etc/devario/live-signing.pem
 }

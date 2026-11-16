@@ -218,6 +218,32 @@ echo tampered >> "$test_root/image"
 expect_failure "$boot_package/verify-live-image" "$test_root/image" "$test_root/image.sig" "$test_root/cert"
 expect_failure "$boot_package/verify-live-image" "$test_root/image" "$test_root/missing.sig" "$test_root/cert"
 
+# Ventoy's cookie-less dm device never gets by-uuid symlinks; the live root
+# must be retargeted at the mapper node, and only for label/UUID live roots.
+sed -e "s|/ventoy/ventoy_os_param|$test_root/ventoy/ventoy_os_param|" \
+  -e "s|/run/initramfs/cmdline.d|$test_root/cmdline.d|g" \
+  "$boot_package/ventoy-compat.sh" > "$test_root/helpers/ventoy-compat.sh"
+getarg() { printf '%s' "$VENTOY_ROOT_ARG"; }
+ventoy_root() {
+  rm -rf -- "$test_root/cmdline.d"
+  ( root=; . "$test_root/helpers/ventoy-compat.sh"; printf '%s' "$root" )
+}
+VENTOY_ROOT_ARG=live:UUID=2026-11-15-17-28-16-00
+[[ "$(ventoy_root)" == '' && ! -e "$test_root/cmdline.d/99-ventoy.conf" ]] || fail 'ventoy override without Ventoy runtime'
+mkdir -p "$test_root/ventoy"
+: > "$test_root/ventoy/ventoy_os_param"
+for spec in live:UUID=2026-11-15-17-28-16-00 live:LABEL=DEVARIO live:CDLABEL=DEVARIO live:PARTUUID=abc live:PARTLABEL=dev; do
+  VENTOY_ROOT_ARG="$spec"
+  [[ "$(ventoy_root)" == live:/dev/mapper/ventoy ]] || fail "ventoy override missing for $spec"
+  grep -qx 'root=live:/dev/mapper/ventoy' "$test_root/cmdline.d/99-ventoy.conf" || fail "ventoy cmdline.d override for $spec"
+done
+for spec in 'UUID=real-root' 'live:/dev/sr0' 'live:nfs://server/devario' 'live:http://server/airootfs.sfs'; do
+  VENTOY_ROOT_ARG="$spec"
+  [[ "$(ventoy_root)" == '' && ! -e "$test_root/cmdline.d/99-ventoy.conf" ]] || fail "ventoy override leaked into $spec"
+done
+unset -f getarg
+unset VENTOY_ROOT_ARG
+
 # Exercise the real orchestration with failing/succeeding generator executables.
 cp "$boot_package/kernel.sh" "$test_root/helpers/"
 sed -e "s|modules_root=/usr/lib/modules|modules_root=$test_root/modules|" \
@@ -263,6 +289,7 @@ cmdline="$("$boot_package/kernel-command-line" "$test_root/fstab" "$test_root/cr
   package
 )
 [[ -x "$test_root/package/usr/lib/devario/initramfs-update" ]] || fail 'package omits generator'
+[[ -x "$test_root/package/usr/lib/dracut/modules.d/91devario-live/ventoy-compat.sh" ]] || fail 'package omits ventoy hook'
 for hook in 60-dracut-remove 90-dracut-install 60-mkinitcpio-remove 90-mkinitcpio-install 95-devario-limine; do
   [[ "$(readlink "$test_root/package/etc/shelly.d/hooks/$hook.hook")" == /dev/null ]] || fail "competing hook: $hook"
 done

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 pkgname=devario-boot
 pkgver=1
-pkgrel=17
+pkgrel=18
 pkgdesc="Devario kernel, dracut and systemd-boot lifecycle"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -22,6 +22,7 @@ source=(
   'live.conf'
   'module-setup.sh'
   'verify-live-image'
+  'ventoy-compat.sh'
   '99-devario-kernel-reboot.hook'
   'kernel-reboot-notify'
 )
@@ -35,8 +36,9 @@ sha256sums=('ea69934c66b58783dc18f18a33787f5c93f70accd049c7ee611db6b875d3119a'
             '04b447e3c7129b1d50557102c0c264a528079861ed158e35c8ce14f93decfb99'
             '8eb5bf879dd79a24aedfa868ba820f8c3593068e668e5188be2f495ddeb6db5b'
             'f4c600489e7fc94519dc66f902a863280ce6eb7d108568bc8f35a423d5d56a43'
-            'fef72a77838a03d0aadbf800d55e25f5f6b8c570abe112eab8427598a20d9f27'
+            '0f6767883c686ba8963294f1c482838b9abb3143b07ea786db5b29958ee149df'
             '025547188bed99ddb3d6d58f1f725744c4f4ab555aea855182c60fa0d06695a7'
+            '628f4060bcb98e40fd15b3738ffba509c28acb331d6b4e69aa1912a7f280e4fd'
             'bd9d51e03d3e90650a59cea8e950aacc0cffc25ba8298d50ea0fe38d9a4509e1'
             '900ffc7f0b4835fa9fec3c57f6c8d215d022b109d5baf43065380bf67b58ea42')
 
@@ -48,7 +50,7 @@ package() {
   for file in live.conf installed.conf; do
     install -Dm644 "$srcdir/$file" "$pkgdir/usr/share/devario/dracut/$file"
   done
-  for file in module-setup.sh live-root.sh install-root.sh verify-live-image; do
+  for file in module-setup.sh live-root.sh install-root.sh verify-live-image ventoy-compat.sh; do
     install -Dm755 "$srcdir/$file" "$pkgdir/usr/lib/dracut/modules.d/91devario-live/$file"
   done
   install -Dm644 "$srcdir/95-devario-boot.hook" "$pkgdir/usr/share/rlpm/hooks/95-devario-boot.hook"
