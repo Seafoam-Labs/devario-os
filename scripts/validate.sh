@@ -962,7 +962,7 @@ fastfetch_config="$profile_dir/late-airootfs/usr/share/devario/fastfetch/config.
 live_sysusers="$profile_dir/late-airootfs/usr/lib/sysusers.d/devario-live.conf"
 live_tmpfiles="$profile_dir/late-airootfs/usr/lib/tmpfiles.d/devario-live.conf"
 
-for boot_service in bluetooth.service upower.service power-profiles-daemon.service scx.service; do
+for boot_service in bluetooth.service upower.service power-profiles-daemon.service; do
   if ! grep -F 'Wants=' "$live_target" | grep -Fwq "$boot_service" \
     || ! grep -F 'After=' "$live_target" | grep -Fwq "$boot_service"; then
     fail "the live readiness target must start and order $boot_service"
@@ -972,6 +972,16 @@ for boot_service in bluetooth.service upower.service power-profiles-daemon.servi
     fail "Calamares must enable $boot_service as a mandatory installed service"
   fi
 done
+
+# sched_ext schedulers are off by default: scx ships /etc/default/scx naming
+# a scheduler, so an enabled scx.service would start it at every boot.
+# Choosing one is the user's (Pearl's CPU Scheduler, scxcli or scxtui).
+if grep -Fw 'scx.service' "$live_target" >/dev/null \
+  || grep -F 'name: scx.service' "$services_systemd" >/dev/null \
+  || [[ -e "$profile_dir/late-airootfs/etc/systemd/system/multi-user.target.wants/scx.service" ]] \
+  || grep -F 'multi-user.target.wants/scx.service' "$project_dir/scripts/stage-image-links.sh" >/dev/null; then
+  fail "scx.service must stay disabled by default; users choose a scheduler themselves"
+fi
 
 if [[ -e "$profile_dir/airootfs/usr/lib/sysusers.d/devario-live.conf" \
   || -e "$profile_dir/airootfs/usr/lib/tmpfiles.d/devario-live.conf" ]]; then
