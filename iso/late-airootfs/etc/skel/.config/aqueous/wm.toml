@@ -213,7 +213,7 @@ right  = 0
 # window and layer-shell content with masks controlled by rules.toml.
 # -----------------------------------------------------------------------------
 [blur]
-enabled            = true  # set true to enable compositor backdrop blur
+enabled            = false # set true to enable compositor backdrop blur
 radius             = 10    # blur radius in pixels
 passes             = 8     # number of blur passes (higher = blurrier, costlier)
 noise              = 0.0   # stable screen-space noise, 0.0–1.0
@@ -224,12 +224,12 @@ vibrancy_darkness  = 0.0   # vibrancy applied to dark colors, 0.0–1.0
 
 # Default window-content opacity (requires Aqueous with opacity support).
 # Per-window overrides live in rules.toml as `opacity = 0.85`.
-#[opacity]
-#enabled         = false   # set true to apply opacity to window content
-#value           = 1.0   # stable opacity when focus_sensitive = false
-#focus_sensitive = false  # true = use focused/unfocused below per window focus
-#focused         = 1.0    # focused-window opacity when focus_sensitive = true
-#unfocused       = 1.0    # unfocused-window opacity when focus_sensitive = true
+[opacity]
+enabled         = false   # set true to apply opacity to window content
+value           = 0.95   # stable opacity when focus_sensitive = false
+focus_sensitive = false  # true = use focused/unfocused below per window focus
+focused         = 1.0    # focused-window opacity when focus_sensitive = true
+unfocused       = 1.0    # unfocused-window opacity when focus_sensitive = true
 
 # Client buffer scaling. `native` advertises the exact fractional output scale
 # and is the default. `integer-ceil` asks fractional-aware clients for the next
