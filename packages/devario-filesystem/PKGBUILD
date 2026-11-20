@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 pkgname=devario-filesystem
 pkgver=1
-pkgrel=3
+pkgrel=4
 pkgdesc="Devario filesystem hierarchy and distribution identity"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
@@ -13,8 +13,9 @@ backup=('etc/os-release' 'etc/issue' 'etc/hosts' 'etc/fstab' 'etc/crypttab'
         'etc/passwd' 'etc/group' 'etc/shadow' 'etc/gshadow' 'etc/nsswitch.conf'
         'etc/profile' 'etc/shells' 'etc/ld.so.conf' 'etc/resolv.conf'
         'etc/subuid' 'etc/subgid')
-source=('profile')
-sha256sums=('f7ced3aa3910abcb439a5e4cdf6d87602a6b4d4c4594f8470f403aa7e11b2e0f')
+source=('profile' 'sysctl')
+sha256sums=('f7ced3aa3910abcb439a5e4cdf6d87602a6b4d4c4594f8470f403aa7e11b2e0f'
+            '3c89c201db78414ad04621c1b2adc3df6e63be6a3046f155d741bcb8436b5a84')
 
 package() {
   local dir
@@ -53,6 +54,7 @@ package() {
   printf '/bin/sh\n/bin/bash\n/usr/bin/sh\n/usr/bin/bash\n' > "$pkgdir/etc/shells"
   printf 'include /etc/ld.so.conf.d/*.conf\ninclude /usr/lib/ld.so.conf.d/*.conf\n' > "$pkgdir/etc/ld.so.conf"
   install -Dm644 "$srcdir/profile" "$pkgdir/etc/profile"
+  install -Dm644 "$srcdir/sysctl" "$pkgdir/usr/lib/sysctl.d/10-devario.conf"
   for dir in fstab crypttab resolv.conf subuid subgid; do
     : > "$pkgdir/etc/$dir"
   done
