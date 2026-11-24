@@ -323,6 +323,15 @@ which Calamares carries into the installed filesystem. Both dracut profiles
 include Plymouth, live and installed boot entries use `quiet splash`, and
 Pearl waits for Plymouth to release the display. Plymouth and theme package
 updates regenerate installed initramfs images through the Devario boot hook.
+Installed images are built from the pinned Devario profile plus administrator
+overrides: `/etc/dracut.conf` is appended to the profile and
+`/etc/dracut.conf.d/*.conf` drop-ins are sourced after it, so standard dracut
+customizations reach both normal and fallback images. Absent or untouched
+admin configuration leaves the pinned profile unchanged, and live ISO images
+always use the pinned profile alone. Regenerate installed images through the
+boot hook or `sudo /usr/lib/devario/boot-update`; plain
+`dracut --regenerate-all` writes `/boot/initramfs-<kver>.img`, which no
+Devario boot entry references.
 Publish `devario-boot` 1-10 or newer along with `plymouth` and
 `devario-plymouth-theme` before rebuilding the ISO. Visual splash, greeter
 handoff, and encrypted-root unlock still need BIOS/UEFI and installed boot

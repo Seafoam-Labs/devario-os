@@ -24,6 +24,15 @@ cat > "$test_root/bin/dracut" <<'EOF'
 #!/bin/bash
 set -euo pipefail
 printf '%s\n' "$*" >> "$TEST_ROOT/dracut.calls"
+(
+  while (( $# )); do
+    case "$1" in
+      --conf) cat "$2" >> "$TEST_ROOT/conf.dump" ;;
+      --confdir) printf '%s\n' "$2" >> "$TEST_ROOT/confdirs" ;;
+    esac
+    shift
+  done
+)
 if [[ "${FAIL_DRACUT:-}" == yes || ( "${FAIL_DRACUT:-}" == fallback && "${*: -1}" == *fallback.img ) ]]; then exit 1; fi
 echo generated-image > "${*: -1}"
 image="${*: -1}"
@@ -98,7 +107,8 @@ export PATH="$test_root/bin:$PATH"
 generate() {
   "$boot_package/initramfs-update" --modules-root "$test_root/modules" \
     --boot-dir "$test_root/boot" --config-dir "$boot_package" \
-    --automation-config "$test_root/automation.conf" "$@"
+    --automation-config "$test_root/automation.conf" \
+    --admin-conf "$test_root/etc/dracut.conf" --admin-confdir "$test_root/etc/dracut.conf.d" "$@"
 }
 generate --mode live
 [[ -s "$test_root/boot/initramfs-linux-devario.img" ]] || fail 'live image absent'
@@ -190,6 +200,39 @@ generate --mode installed
 echo 'NVIDIA_EARLY_KMS="invalid"' > "$test_root/automation.conf"
 expect_failure generate --mode installed
 rm "$test_root/automation.conf"
+
+# Admin dracut configuration layers over the pinned profile for installed
+# images only; live images and absent or untouched admin config stay pinned.
+mkdir -p "$test_root/etc/dracut.conf.d"
+printf 'compress="xz"\n' > "$test_root/etc/dracut.conf.d/99-admin.conf"
+printf 'admin_marker="yes"\n' > "$test_root/etc/dracut.conf"
+: > "$test_root/dracut.calls"
+: > "$test_root/conf.dump"
+generate --mode installed
+grep -q -- "--confdir $test_root/etc/dracut.conf.d" "$test_root/dracut.calls" || fail 'admin drop-in directory not applied'
+grep -q 'admin_marker="yes"' "$test_root/conf.dump" || fail 'admin conf not merged over the profile'
+awk '/compress="zstd"/ && !p {p=NR} /admin_marker="yes"/ && !a {a=NR} END {exit !(p && a && p < a)}' \
+  "$test_root/conf.dump" || fail 'admin conf must be sourced after the pinned profile'
+: > "$test_root/dracut.calls"
+: > "$test_root/conf.dump"
+generate --mode live
+if grep -q 'admin_marker' "$test_root/conf.dump"; then fail 'live image inherited admin configuration'; fi
+grep -Eq -- "--confdir $test_root/boot/\.devario-initramfs\.[A-Za-z0-9]+/empty" "$test_root/dracut.calls" \
+  || fail 'live image must keep the empty staging confdir'
+printf '# PUT YOUR CONFIG IN separate files\n' > "$test_root/etc/dracut.conf"
+rm "$test_root/etc/dracut.conf.d/99-admin.conf"
+: > "$test_root/conf.dump"
+generate --mode installed
+grep -v '^#' "$test_root/conf.dump" | grep -v '^$' > "$test_root/stripped"
+grep -v '^#' "$boot_package/installed.conf" | grep -v '^$' > "$test_root/profile.stripped"
+head -n "$(wc -l < "$test_root/profile.stripped")" "$test_root/stripped" | diff - "$test_root/profile.stripped" \
+  || fail 'untouched admin config changed the pinned profile'
+rm "$test_root/etc/dracut.conf"
+rm -rf "$test_root/etc/dracut.conf.d"
+: > "$test_root/dracut.calls"
+generate --mode installed
+grep -Eq -- "--confdir $test_root/boot/\.devario-initramfs\.[A-Za-z0-9]+/empty" "$test_root/dracut.calls" \
+  || fail 'absent admin confdir must fall back to the empty staging dir'
 
 # LTS generation/upgrade must not overwrite the regular kernel or its recovery.
 mkdir -p "$test_root/modules/6.18-lts"

@@ -201,12 +201,26 @@ color_pipeline = "auto"
 #workspace = 2
 #layout    = "monocle"
 
+# Default layout and server-side decoration policy. Per-output and
+# per-workspace mappings above override the default layout.
+[layout]
+default = "stacking" # floating/stacking windows; tiling layouts live in layout.toml
+force_ssd = false    # true forces SSD on every capable app; false only decorates apps that request it
+
 # Reserve additional fixed space after layer-shell exclusive zones are applied.
 [struts]
 top    = 0   # Bar height; adjust to match yours
 bottom = 0
 left   = 0
 right  = 0
+
+# -----------------------------------------------------------------------------
+# Server-side decorations. Pearl draws themed titlebars for SSD windows when
+# renderer = "shell"; "compositor" keeps the built-in border-only rendering.
+# -----------------------------------------------------------------------------
+[decoration]
+renderer = "shell"
+corner_radius = 15 # logical pixels, 0–128; 0 disables compositor rounding
 
 # -----------------------------------------------------------------------------
 # Backdrop blur (available in the default Vulkan-effects build). Applied behind

@@ -11,15 +11,18 @@ config_dir=/usr/share/devario/dracut
 kernel_id=linux-devario
 kernel_version=
 automation_config=/etc/devario-dracut.conf
+admin_conf=/etc/dracut.conf
+admin_confdir=/etc/dracut.conf.d
 while (( $# )); do
   case "$1" in
-    --mode|--modules-root|--boot-dir|--config-dir|--kernel-id|--kver|--automation-config)
+    --mode|--modules-root|--boot-dir|--config-dir|--kernel-id|--kver|--automation-config|--admin-conf|--admin-confdir)
       (( $# >= 2 )) || exit 64
       case "$1" in
         --mode) mode="$2" ;; --modules-root) modules_root="$2" ;;
         --boot-dir) boot_dir="$2" ;; --config-dir) config_dir="$2" ;;
         --kernel-id) kernel_id="$2" ;; --kver) kernel_version="$2" ;;
         --automation-config) automation_config="$2" ;;
+        --admin-conf) admin_conf="$2" ;; --admin-confdir) admin_confdir="$2" ;;
       esac
       shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 64 ;;
@@ -100,8 +103,20 @@ trap cleanup EXIT
 install -d "$stage/empty" "$stage/old"
 install -m644 "$DEVARIO_KERNEL_IMAGE" "$stage/vmlinuz-$kernel_id"
 depmod -a -m "$modules_root" "$DEVARIO_KERNEL_VERSION"
+conf="$config_dir/$mode.conf"
+confdir="$stage/empty"
+if [[ "$mode" == installed ]]; then
+  # Admin dracut configuration layers over the pinned profile so standard
+  # /etc/dracut.conf{,.d} customizations reach the boot images. Live images
+  # stay pinned: ISO assembly must never inherit host or target overrides.
+  # Like the automation config, admin configuration is root-owned shell syntax.
+  conf="$stage/base.conf"
+  cat "$config_dir/$mode.conf" > "$conf"
+  [[ ! -f "$admin_conf" ]] || cat "$admin_conf" >> "$conf"
+  [[ ! -d "$admin_confdir" ]] || confdir="$admin_confdir"
+fi
 args=(--force --kver "$DEVARIO_KERNEL_VERSION" --kmoddir "$modules_root/$DEVARIO_KERNEL_VERSION"
-  --conf "$config_dir/$mode.conf" --confdir "$stage/empty"
+  --conf "$conf" --confdir "$confdir"
   --no-hostonly-cmdline --no-uefi --reproducible)
 if [[ "$mode" == live ]]; then
   args+=(--no-hostonly)
