@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 pkgname=devario-boot
 pkgver=1
-pkgrel=19
+pkgrel=20
 pkgdesc="Devario kernel, dracut and systemd-boot lifecycle"
 arch=('any')
 url="https://github.com/Seafoam-Labs/devario-os"
 license=('GPL-3.0-or-later')
-depends=('devario-dracut=112' 'bash' 'coreutils' 'util-linux' 'kmod' 'systemd>=258'
+depends=('devario-dracut>=112' 'bash' 'coreutils' 'util-linux' 'kmod' 'systemd>=258'
          'cryptsetup' 'lvm2' 'btrfs-progs' 'e2fsprogs' 'glibc' 'gawk' 'grep' 'findutils')
 source=(
   '95-devario-boot.hook'

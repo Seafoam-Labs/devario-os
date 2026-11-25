@@ -222,8 +222,7 @@ xfsprogs
 xz
 zlib
 zstd
-
-# Upstream packages formerly sourced from Arch extra; retain source provenance.
+aalib
 abseil-cpp
 accountsservice
 adw-gtk3
@@ -266,6 +265,7 @@ egl-x11
 eglexternalplatform
 exempi
 exfatprogs
+exiv2
 f2fs-tools
 fastfetch
 ffmpeg
@@ -307,10 +307,13 @@ gsettings-desktop-schemas
 gsettings-system-schemas
 gsm
 gssdp
+gst-plugin-gtk4
 gst-plugins-bad-libs
 gst-plugins-base-libs
+gst-plugins-good
 gstreamer
 gtest
+gthumb
 gtk-update-icon-cache
 gtk3
 gtk4
@@ -327,6 +330,7 @@ highway
 hwinfo
 hwloc
 imath
+imlib2
 intel-ucode
 inxi
 inter-font
@@ -365,6 +369,7 @@ libbluray
 libbs2b
 libbsd
 libbytesize
+libcaca
 libcdio
 libcdio-paranoia
 libcgif
@@ -380,6 +385,7 @@ libdeflate
 libdisplay-info
 libdovi
 libdrm
+libdv
 libdvdnav
 libdvdread
 libebur128
@@ -428,6 +434,8 @@ libpipewire
 libplacebo
 libplist
 libpng
+libportal
+libportal-gtk4
 libproxy
 libpulse
 libpwquality
@@ -436,7 +444,9 @@ libraw
 libraw1394
 librsvg
 libsamplerate
+libshout
 libsigc++
+libsixel
 libsm
 libsndfile
 libsodium
@@ -484,6 +494,7 @@ libxkbcommon-x11
 libxkbfile
 libxklavier
 libxmlb
+libxpresent
 libxrandr
 libxrender
 libxshmfence
@@ -500,6 +511,7 @@ lmdb
 lsof
 lua
 lua54
+luajit
 lv2
 mailcap
 md4c
@@ -508,7 +520,9 @@ mesa
 mesa-utils
 mobile-broadband-provider-info
 mpg123
+mpv-full
 mtdev
+mujs
 nemo
 netcat
 networkmanager
@@ -523,6 +537,7 @@ nvme-cli
 ocl-icd
 onetbb
 oniguruma
+openal
 opencore-amr
 openexr
 openjpeg2
@@ -614,11 +629,14 @@ sratom
 srt
 strace
 svt-av1
+taglib
 terminus-font
 tinysparql
 tomlplusplus
 tslib
 ttf-dejavu
+twolame
+uchardet
 udisks2
 ufw
 upower
@@ -635,6 +653,7 @@ vulkan-mesa-implicit-layers
 vulkan-radeon
 vulkan-swrast
 vulkan-tools
+wavpack
 wayland
 wayland-protocols
 wayland-utils

@@ -40,6 +40,7 @@ ghostty
 gnome-keyring
 gptfdisk
 greetd
+gthumb
 gvfs
 hwinfo
 imagemagick
@@ -58,6 +59,7 @@ man-db
 matugen
 mesa
 mesa-utils
+mpv-full
 nano
 nbd
 netcat
